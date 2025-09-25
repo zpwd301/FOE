@@ -248,16 +248,11 @@ def product_goods_info(prod: dict) -> Tuple[Dict[str, int], bool]:
         return gmap, is_rand
     return {}, False
 
-def entity_goods_info(entity: dict, age_key: str | None) -> Tuple[Dict[str, int], bool]:
-    if not age_key:
+def _collect_goods_from_component(comp: dict) -> Tuple[Dict[str, int], bool]:
+    """Helper: collect goods info from a single component node that may hold 'production'."""
+    if not isinstance(comp, dict):
         return {}, False
-    comps = entity.get("components")
-    if not isinstance(comps, dict):
-        return {}, False
-    era = comps.get(age_key)
-    if not isinstance(era, dict):
-        return {}, False
-    production = era.get("production")
+    production = comp.get("production")
     if not isinstance(production, dict):
         return {}, False
     options = production.get("options")
@@ -274,6 +269,34 @@ def entity_goods_info(entity: dict, age_key: str | None) -> Tuple[Dict[str, int]
         if is_rand:
             any_random = True
     return agg, any_random
+
+def entity_goods_info(entity: dict, age_key: str | None) -> Tuple[Dict[str, int], bool]:
+    """
+    Aggregate goods across *both* the era-specific component (if present)
+    and the AllAge component. Era-specific is checked first, then AllAge.
+    """
+    comps = entity.get("components")
+    if not isinstance(comps, dict):
+        return {}, False
+
+    total: Dict[str, int] = {}
+    any_random = False
+
+    # 1) Era-specific (e.g., "ColonialAge")
+    if age_key and isinstance(comps.get(age_key), dict):
+        g1, r1 = _collect_goods_from_component(comps[age_key])
+        for k, v in g1.items():
+            total[k] = total.get(k, 0) + v
+        any_random = any_random or r1
+
+    # 2) AllAge fallback/additive
+    if isinstance(comps.get("AllAge"), dict):
+        g2, r2 = _collect_goods_from_component(comps["AllAge"])
+        for k, v in g2.items():
+            total[k] = total.get(k, 0) + v
+        any_random = any_random or r2
+
+    return total, any_random
 
 # ========= Categorize generic buildings (single pass) =========
 time_limited: List[Tuple[str, Any, str]] = []
