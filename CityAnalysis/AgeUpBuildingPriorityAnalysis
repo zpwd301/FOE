@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+import os
+import json
+from glob import glob
+from collections import Counter, defaultdict
+from datetime import date
+from typing import Any, Dict, Tuple, Iterable, List
+
+DIR = os.path.expanduser("~/Documents/FOE/city")
+CONFIG_FILE = os.path.join(DIR, "script_config")
+
+# ========= Constants (precomputed) =========
+GOODS_KEYS = {
+    "all_goods_of_age",
+    "all_goods_of_next_age",
+    "all_goods_of_previous_age",
+    "random_good_of_age",
+    "random_goods_of_next_age",
+    "random_goods_of_previous_age",
+}
+
+ERA_LABELS = {
+    "CurrentEra": "Current Era",
+    "NextEra": "Next Era",
+    "PreviousEra": "Previous Era",
+}
+ERA_SORT_RANK = {
+    "Next Era": 0,
+    "Current Era": 1,
+    "Previous Era": 2,
+}
+CLASS_REPLACEMENTS = {"Short Ranged": "Short Range", "Long Ranged": "Long Range"}
+
+# ========= Config loader (level -> (abbr, name)) =========
+age_map: Dict[int, Tuple[str, str]] = {}
+if not os.path.isfile(CONFIG_FILE):
+    raise SystemExit(f"Config file not found: {CONFIG_FILE}")
+
+with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+    lvl = 0
+    for line in f:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        parts = s.split("\t")
+        if len(parts) >= 2:
+            age_map[lvl] = (parts[0], parts[1])
+            lvl += 1
+
+# Reverse map for Townhall parsing: "ColonialAge" -> (level, "Colonial Age")
+name_no_space_to_level = {name.replace(" ", ""): (lv, name) for lv, (_, name) in age_map.items()}
+
+# Display config mapping (console)
+print("# Age Config (level -> abbreviation, name)")
+for lv, (abbr, name) in age_map.items():
+    print(f"Level {lv}: {abbr} = {name}")
+print()
+
+# ========= Load latest city JSON =========
+files = glob(os.path.join(DIR, "city_*.json"))
+if not files:
+    raise SystemExit(f"No city JSON file found in {DIR}")
+latest_file = max(files, key=os.path.getmtime)
+
+with open(latest_file, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+city_map = data.get("CityMapData")
+city_entities = data.get("CityEntities")
+if not isinstance(city_map, (dict, list)):
+    raise SystemExit("CityMapData not found in JSON")
+if not isinstance(city_entities, dict):
+    raise SystemExit("CityEntities not found in JSON")
+
+def iter_city_map_items(cm: Any) -> Iterable[Tuple[str, dict]]:
+    if isinstance(cm, dict):
+        return cm.items()
+    if isinstance(cm, list):
+        return ((str(i), v) for i, v in enumerate(cm))
+    return []
+
+# ========= Determine current city age from Townhall =========
+def extract_age_from_townhall_id(cityentity_id: str) -> str | None:
+    # Expected: H_ColonialAge_Townhall
+    if not isinstance(cityentity_id, str) or not cityentity_id.endswith("Townhall"):
+        return None
+    parts = cityentity_id.split("_")
+    return parts[1] if len(parts) >= 3 else None
+
+current_age_line = "Current age of city: Unknown"
+current_age_no_space: str | None = None
+
+for _, element in iter_city_map_items(city_map):
+    if isinstance(element, dict) and element.get("type") == "main_building":
+        ceid = element.get("cityentity_id")
+        token = extract_age_from_townhall_id(ceid) if isinstance(ceid, str) else None
+        if token and token in name_no_space_to_level:
+            lv, proper = name_no_space_to_level[token]
+            current_age_line = f"Current age of city: {proper} (level {lv})"
+            current_age_no_space = token
+        else:
+            current_age_line = f"Current age of city: Unknown" + (f" (parsed token: {token})" if token else "")
+        break
+
+# ========= Collect & print filtered list =========
+records: List[Tuple[str, str, str, Any]] = []
+for key, element in iter_city_map_items(city_map):
+    if not isinstance(element, dict):
+        continue
+    _type = element.get("type", "")
+    entity_id = element.get("cityentity_id", "")
+    level = element.get("level")
+    records.append((key, _type, entity_id, level))
+
+records.sort(key=lambda x: (x[1], x[2]))  # by type then cityentity_id
+
+print(f"File: {latest_file}")
+print("Filtered CityMapData (sorted by type, cityentity_id):\n")
+for key, _type, entity_id, level in records:
+    print(f"ID {key}: type={_type}, cityentity_id={entity_id}")
+
+# ========= Summary by type =========
+counter = Counter(r[1] for r in records)
+summary_lines = [f"{t}: {count}" for t, count in sorted(counter.items())]
+
+# ========= Helpers (tight, branchy instead of try/except) =========
+def is_time_limited(entity: dict) -> bool:
+    comps = entity.get("components")
+    if not isinstance(comps, dict):
+        return False
+    all_age = comps.get("AllAge")
+    if not isinstance(all_age, dict):
+        return False
+    limited = all_age.get("limited")
+    return isinstance(limited, dict) and limited.get("type") == "limited"
+
+def ensure_iterable_rewards(rewards: Any) -> Iterable[dict]:
+    if isinstance(rewards, dict):
+        return rewards.values()
+    if isinstance(rewards, list):
+        return rewards
+    return ()
+
+def classify_unit_class(token: str) -> str:
+    s = token.replace("_", " ").strip().title()
+    return CLASS_REPLACEMENTS.get(s, s)
+
+def add_unit_reward_to_map(reward: dict, out_map: Dict[Tuple[str, str], int]) -> None:
+    if reward.get("type") != "unit":
+        return
+    amt = reward.get("amount")
+    rid = reward.get("id")
+    # Parse era/class from id if present
+    era_label = "Current Era"
+    unit_class = None
+    if isinstance(rid, str):
+        parts = rid.split("#")
+        if len(parts) >= 3:
+            unit_class = parts[1]
+            era_label = ERA_LABELS.get(parts[2], parts[2].replace("_", " ").title())
+    if not unit_class:
+        unit_class = reward.get("subType") or reward.get("unit", {}).get("unitTypeId", "")
+    unit_class = classify_unit_class(str(unit_class))
+    if isinstance(amt, (int, float)):
+        out_map[(era_label, unit_class)] = out_map.get((era_label, unit_class), 0) + int(amt)
+
+def entity_troop_info(entity: dict, age_key: str | None) -> Tuple[Dict[Tuple[str, str], int], bool]:
+    troop_map: Dict[Tuple[str, str], int] = {}
+    is_random = False
+    if not age_key:
+        return troop_map, is_random
+    comps = entity.get("components")
+    if not isinstance(comps, dict):
+        return troop_map, is_random
+    era = comps.get(age_key)
+    if not isinstance(era, dict):
+        return troop_map, is_random
+    lookup = era.get("lookup")
+    if not isinstance(lookup, dict):
+        return troop_map, is_random
+    rewards = lookup.get("rewards")
+
+    for r in ensure_iterable_rewards(rewards):
+        if not isinstance(r, dict):
+            continue
+        rtype = r.get("type")
+        if rtype == "unit":
+            add_unit_reward_to_map(r, troop_map)
+        elif rtype == "chest":
+            possibles = r.get("possible_rewards")
+            if isinstance(possibles, list):
+                for pr in possibles:
+                    reward = pr.get("reward") if isinstance(pr, dict) else None
+                    if isinstance(reward, dict) and reward.get("type") == "unit":
+                        add_unit_reward_to_map(reward, troop_map)
+                        is_random = True
+
+    return troop_map, is_random
+
+def option_products_iter(options: Any) -> Iterable[dict]:
+    if isinstance(options, list):
+        for opt in options:
+            if isinstance(opt, dict):
+                prods = opt.get("products")
+                if isinstance(prods, list):
+                    for p in prods:
+                        if isinstance(p, dict):
+                            yield p
+    elif isinstance(options, dict):
+        for opt in options.values():
+            if isinstance(opt, dict):
+                prods = opt.get("products")
+                if isinstance(prods, list):
+                    for p in prods:
+                        if isinstance(p, dict):
+                            yield p
+
+def extract_goods_from_resources_obj(resources: Any) -> Dict[str, int]:
+    if not isinstance(resources, dict):
+        return {}
+    out: Dict[str, int] = {}
+    for k in GOODS_KEYS:
+        v = resources.get(k)
+        if isinstance(v, (int, float)):
+            out[k] = out.get(k, 0) + int(v)
+    return out
+
+def product_goods_info(prod: dict) -> Tuple[Dict[str, int], bool]:
+    """Return (goods_map, is_random_goods). Handles `resources` and `random` (list of product entries)."""
+    ptype = prod.get("type")
+    if ptype == "resources":
+        pr = prod.get("playerResources", {})
+        return extract_goods_from_resources_obj(pr.get("resources")), False
+    if ptype == "random":
+        items = prod.get("products")
+        gmap: Dict[str, int] = {}
+        is_rand = False
+        if isinstance(items, list):
+            for it in items:
+                product = it.get("product") if isinstance(it, dict) else None
+                if isinstance(product, dict):
+                    pr = product.get("playerResources", {})
+                    res = extract_goods_from_resources_obj(pr.get("resources"))
+                    if res:
+                        is_rand = True
+                        for k, v in res.items():
+                            gmap[k] = gmap.get(k, 0) + v
+        return gmap, is_rand
+    return {}, False
+
+def entity_goods_info(entity: dict, age_key: str | None) -> Tuple[Dict[str, int], bool]:
+    if not age_key:
+        return {}, False
+    comps = entity.get("components")
+    if not isinstance(comps, dict):
+        return {}, False
+    era = comps.get(age_key)
+    if not isinstance(era, dict):
+        return {}, False
+    production = era.get("production")
+    if not isinstance(production, dict):
+        return {}, False
+    options = production.get("options")
+    if options is None:
+        return {}, False
+
+    agg: Dict[str, int] = {}
+    any_random = False
+    for prod in option_products_iter(options):
+        gmap, is_rand = product_goods_info(prod)
+        if gmap:
+            for k, v in gmap.items():
+                agg[k] = agg.get(k, 0) + v
+        if is_rand:
+            any_random = True
+    return agg, any_random
+
+# ========= Categorize generic buildings (single pass) =========
+time_limited: List[Tuple[str, Any, str]] = []
+troop_producers: List[Tuple[str, Any, str, str, int, int, bool]] = []   # name,lvl,age_str,summary,best_rank,max_units,is_rand_units
+goods_producers: List[Tuple[str, Any, str, Dict[str, int], bool, int]] = []  # name,lvl,age_str,gmap,is_rand,max_goods
+other_generic: List[Tuple[str, Any, str]] = []
+
+for _, _type, entity_id, lvl in records:
+    if _type != "generic_building":
+        continue
+    ent = city_entities.get(entity_id, {})
+    if not isinstance(ent, dict):
+        continue
+    name = ent.get("name", f"UnknownName({entity_id})")
+
+    # Precompute age_str once
+    if isinstance(lvl, int) and lvl in age_map:
+        abbr, fullname = age_map[lvl]
+        age_str = f" ({abbr}, {fullname})"
+    else:
+        age_str = ""
+
+    # Time-limited?
+    if is_time_limited(ent):
+        time_limited.append((name, lvl if lvl is not None else "", age_str))
+        continue
+
+    # Troops (supports chest/possible_rewards)
+    troop_map, is_random_units = entity_troop_info(ent, current_age_no_space)
+    if troop_map:
+        eras_present = {era for (era, _cls) in troop_map.keys()}
+        best_rank = min((ERA_SORT_RANK.get(e, 3) for e in eras_present), default=3)
+        max_units = max(troop_map.values())
+        # Build summary once (sorted by era rank then class)
+        troop_summary = ", ".join(
+            f"{era}: {uclass}={amt}"
+            for (era, uclass), amt in sorted(
+                troop_map.items(),
+                key=lambda x: (ERA_SORT_RANK.get(x[0][0], 3), x[0][1])
+            )
+        )
+        troop_producers.append((name, lvl if lvl is not None else "", age_str, troop_summary, best_rank, max_units, is_random_units))
+        continue
+
+    # Goods (resources or random list)
+    gmap, is_rand_goods = entity_goods_info(ent, current_age_no_space)
+    if gmap:
+        max_goods = max(gmap.values())
+        goods_producers.append((name, lvl if lvl is not None else "", age_str, gmap, is_rand_goods, max_goods))
+    else:
+        other_generic.append((name, lvl if lvl is not None else "", age_str))
+
+# ========= Sorting (precompute keys) =========
+# Troops: Next Era first, then Current, Previous, others; then by max units DESC, then name
+troop_producers.sort(key=lambda x: (x[4], -x[5], x[0]))
+# Goods: by max goods DESC, then name
+goods_producers.sort(key=lambda x: (-x[5], x[0]))
+# Others: alphabetical, stable
+time_limited.sort(key=lambda x: (x[0], str(x[1])))
+other_generic.sort(key=lambda x: (x[0], str(x[1])))
+
+# ========= Save summary file =========
+today = date.today().strftime("%Y-%m-%d")
+summary_file = os.path.join(DIR, f"city_summary_{today}.txt")
+
+with open(summary_file, "w", encoding="utf-8") as f:
+    f.write(current_age_line + "\n\n")
+    f.write("Summary of CityMapData by type:\n\n")
+    for line in summary_lines:
+        f.write(line + "\n")
+
+    f.write("\n************\n")
+    f.write("Time limited generic buildings:\n")
+    if time_limited:
+        for name, lvl, age in time_limited:
+            f.write(f"{name}, level:{lvl}{age}\n")
+    else:
+        f.write("(none)\n")
+
+    f.write("\n************\n")
+    f.write("Generic buildings producing troop units:\n")
+    if troop_producers:
+        for name, lvl, age, tsummary, _rank, _maxu, is_rand_units in troop_producers:
+            label = "units by chance" if is_rand_units else "units"
+            f.write(f"{name}, level:{lvl}{age} | {label}: {tsummary}\n")
+    else:
+        f.write("(none)\n")
+
+    f.write("\n************\n")
+    f.write("Generic buildings producing goods:\n")
+    if goods_producers:
+        for name, lvl, age, gmap, is_rand_goods, _maxg in goods_producers:
+            goods_summary = ", ".join(f"{k}={v}" for k, v in sorted(gmap.items()))
+            label = "goods by chance" if is_rand_goods else "goods"
+            f.write(f"{name}, level:{lvl}{age} | {label}: {goods_summary}\n")
+    else:
+        f.write("(none)\n")
+
+    f.write("\n************\n")
+    f.write("Other generic buildings:\n")
+    if other_generic:
+        for name, lvl, age in other_generic:
+            f.write(f"{name}, level:{lvl}{age}\n")
+    else:
+        f.write("(none)\n")
+
+print("\nSummary saved to:", summary_file)
