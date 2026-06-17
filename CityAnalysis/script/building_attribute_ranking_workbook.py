@@ -64,6 +64,7 @@ RAW_START_COLUMN = 7
 FIGHTING_TOP_N = 100
 REQUIRE_ROAD_HEADER = "Require Road Connection"
 OVERALL_RANKING_SHEET = "Overall Ranking"
+OVERALL_SOURCE_SHEET = "Overall Ranking Source"
 OVERALL_SCORE_SHEET = "Overall Scores"
 OVERALL_EFFICIENCY_SHEET = "Overall Efficiency Ranking"
 FIGHTING_SCORE_SHEET = "Fighting Scores"
@@ -77,6 +78,7 @@ QI_EFFICIENCY_SHEET = "QI Efficiency Ranking"
 CONTROLS_SHEET = "Main Controls"
 ADVANCED_CONTROLS_SHEET = "Advanced Controls"
 AGE_OPTIONS_SHEET = "Age Options"
+CATEGORY_OPTIONS_SHEET = "Category Options"
 AGE_DATA_SHEET = "Age Data"
 CONTROLS_SHEET_REF = f"'{CONTROLS_SHEET}'"
 ADVANCED_CONTROLS_SHEET_REF = f"'{ADVANCED_CONTROLS_SHEET}'"
@@ -103,6 +105,9 @@ ESTIMATED_GUILD_GOODS_PRODUCTION_CELL = "$B$8"
 ESTIMATED_MEDAL_PRODUCTION_CELL = "$B$9"
 CITY_AGE_CELL = "$B$3"
 CITY_AGE_LIST_NAME = "CityAgeList"
+BUILDING_CATEGORY_FILTER_CELL = "$B$5"
+BUILDING_CATEGORY_LIST_NAME = "BuildingCategoryList"
+ALL_BUILDING_CATEGORIES = "All Building Categories"
 FIGHTING_GBG_GE_FOCUS_CELL = "$B$11"
 FIGHTING_RED_BLUE_FOCUS_CELL = "$B$13"
 FIGHTING_ATTACK_DEFENSE_FOCUS_CELL = "$B$15"
@@ -156,6 +161,7 @@ TAB_COLORS = {
     QI_RANKING_SHEET: "B4A7D6",
     QI_EFFICIENCY_SHEET: "7030A0",
     AGE_OPTIONS_SHEET: "A6A6A6",
+    CATEGORY_OPTIONS_SHEET: "A6A6A6",
     AGE_DATA_SHEET: "A6A6A6",
     "About": "A6A6A6",
 }
@@ -339,6 +345,46 @@ def event_reward_abbreviations(records: Sequence[Dict[str, Any]]) -> List[str]:
         if (abbreviation := event_reward_abbreviation(str(record.get("entity_id", "")), year_suffix))
     }
     return sorted(abbreviations)
+
+
+def event_reward_category_label(entity_id: str) -> Optional[str]:
+    match = re.match(rf"^{re.escape(MULTI_AGE_PREFIX)}([A-Za-z]+)([0-9]{{2}})[A-Za-z].*", entity_id)
+    if not match:
+        return None
+    abbreviation = match.group(1).upper()
+    year = 2000 + int(match.group(2))
+    return f"{abbreviation} {year} Event Rewards"
+
+
+def building_category_label(entity_id: str) -> str:
+    if entity_id.startswith(GBG_REWARD_PREFIX):
+        return "GBG Rewards"
+    if entity_id.startswith(QI_REWARD_PREFIX):
+        return "QI Rewards"
+    if entity_id.startswith(GE_REWARD_PREFIXES):
+        return "GE Rewards"
+    if event_label := event_reward_category_label(entity_id):
+        return event_label
+    return "Other Buildings"
+
+
+def building_category_sort_key(label: str) -> Tuple[int, int, str]:
+    priority = {
+        ALL_BUILDING_CATEGORIES: 0,
+        "QI Rewards": 1,
+        "GBG Rewards": 2,
+        "GE Rewards": 3,
+        "Other Buildings": 99,
+    }
+    if event_match := re.match(r"^(.+) ([0-9]{4}) Event Rewards$", label):
+        abbreviation, year = event_match.groups()
+        return (10, -int(year), abbreviation)
+    return (priority.get(label, 90), 0, label)
+
+
+def building_category_options(records: Sequence[Dict[str, Any]]) -> List[str]:
+    categories = {building_category_label(str(record.get("entity_id", ""))) for record in records}
+    return [ALL_BUILDING_CATEGORIES, *sorted(categories, key=building_category_sort_key)]
 
 
 def generated_event_color(index: int) -> str:
@@ -2136,6 +2182,13 @@ def adjusted_area(record: Dict[str, Any]) -> float:
     return area
 
 
+def building_category_match_formula(category_cell: str) -> str:
+    return (
+        f'=--OR({CONTROLS_SHEET_REF}!{BUILDING_CATEGORY_FILTER_CELL}={excel_string(ALL_BUILDING_CATEGORIES)},'
+        f'{category_cell}={CONTROLS_SHEET_REF}!{BUILDING_CATEGORY_FILTER_CELL})'
+    )
+
+
 def build_age_records(
     entities: Dict[str, Any],
     ages: Sequence[str],
@@ -2310,7 +2363,7 @@ def populate_formula_caches(
                             set_formula_cache(root, f"L{row}", stats[key]["min"])
                             set_formula_cache(root, f"M{row}", stats[key]["max"])
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-                elif item.filename == sheet_files.get(OVERALL_RANKING_SHEET):
+                elif item.filename == sheet_files.get(OVERALL_SOURCE_SHEET):
                     root = ET.fromstring(data)
                     raw_start = RAW_START_COLUMN
                     for idx, value in enumerate(coefficients):
@@ -2565,6 +2618,7 @@ def write_controls_sheet(
     era: str,
     available_only: bool,
     all_ages: bool = False,
+    category_options: Sequence[str] = (),
 ) -> None:
     sheet = workbook.active
     sheet.title = CONTROLS_SHEET
@@ -2591,10 +2645,11 @@ def write_controls_sheet(
         (
             2,
             "How to use",
-            "Start here: enter your city's estimated total FP, goods, guild goods, and medal production in the yellow cells. Then choose the fighting and QI settings that match what you care about. On each 1-5 scale, 1 favors the left label, 3 is balanced, and 5 favors the right label. Then review the ranking sheets.",
+            "Start here: choose a building category filter, then enter your city's estimated total FP, goods, guild goods, and medal production in the yellow cells. Choose the fighting and QI settings that match what you care about. On each 1-5 scale, 1 favors the left label, 3 is balanced, and 5 favors the right label. Then review the ranking sheets.",
             PatternFill(fill_type=None),
         ),
         (3, "Select Your City Age" if all_ages else "Assumed age", selected_age_display(era, all_ages), editable_fill if all_ages else context_fill),
+        (5, "Building category filter", ALL_BUILDING_CATEGORIES, editable_fill),
         (6, "Estimated total FP production", DEFAULT_ESTIMATED_FP_PRODUCTION, editable_fill),
         (7, "Estimated total goods production", DEFAULT_ESTIMATED_GOODS_PRODUCTION, editable_fill),
         (8, "Estimated total guild goods production", DEFAULT_ESTIMATED_GUILD_GOODS_PRODUCTION, editable_fill),
@@ -2632,6 +2687,24 @@ def write_controls_sheet(
         age_dv.error = "Choose a city age from the dropdown list."
         sheet.add_data_validation(age_dv)
         age_dv.add(CITY_AGE_CELL)
+    if category_options:
+        category_start_row = 1
+        category_end_row = len(category_options)
+        category_list_range = f"'{CATEGORY_OPTIONS_SHEET}'!$A${category_start_row}:$A${category_end_row}"
+        workbook.defined_names.add(
+            DefinedName(BUILDING_CATEGORY_LIST_NAME, attr_text=category_list_range)
+        )
+        category_dv = DataValidation(type="list", formula1=category_list_range, allow_blank=False)
+        category_dv.showDropDown = False
+        category_dv.showInputMessage = True
+        category_dv.showErrorMessage = True
+        category_dv.errorStyle = "stop"
+        category_dv.promptTitle = "Building category filter"
+        category_dv.prompt = "Pick a category to show in the ranking sheets."
+        category_dv.errorTitle = "Use the dropdown"
+        category_dv.error = "Choose a building category from the dropdown list."
+        sheet.add_data_validation(category_dv)
+        category_dv.add(BUILDING_CATEGORY_FILTER_CELL)
 
     def add_focus_selector(
         row_idx: int,
@@ -2816,8 +2889,8 @@ def write_advanced_controls_sheet(
         sheet.cell(row_idx, 10, f"=ABS(I{row_idx})")
         sheet.cell(row_idx, 11, direction_for_attr(key))
         if (all_ages or key in {PROD_FP_ATTR, PROD_GOODS_ATTR, PROD_GUILD_GOODS_ATTR, PROD_MEDALS_ATTR}) and record_count:
-            sheet.cell(row_idx, 12, f"=MIN('{OVERALL_RANKING_SHEET}'!${raw_col}${BUILDING_DATA_START_ROW}:${raw_col}${data_end})")
-            sheet.cell(row_idx, 13, f"=MAX('{OVERALL_RANKING_SHEET}'!${raw_col}${BUILDING_DATA_START_ROW}:${raw_col}${data_end})")
+            sheet.cell(row_idx, 12, f"=MIN('{OVERALL_SOURCE_SHEET}'!${raw_col}${BUILDING_DATA_START_ROW}:${raw_col}${data_end})")
+            sheet.cell(row_idx, 13, f"=MAX('{OVERALL_SOURCE_SHEET}'!${raw_col}${BUILDING_DATA_START_ROW}:${raw_col}${data_end})")
         else:
             sheet.cell(row_idx, 12, numeric_cell(stats[key]["min"]))
             sheet.cell(row_idx, 13, numeric_cell(stats[key]["max"]))
@@ -2941,6 +3014,14 @@ def write_age_options_sheet(workbook: Workbook) -> None:
     sheet.column_dimensions["A"].width = 28
 
 
+def write_category_options_sheet(workbook: Workbook, category_options: Sequence[str]) -> None:
+    sheet = workbook.create_sheet(CATEGORY_OPTIONS_SHEET)
+    sheet.sheet_state = "hidden"
+    for row_idx, category in enumerate(category_options, start=1):
+        sheet.cell(row_idx, 1, category)
+    sheet.column_dimensions["A"].width = 36
+
+
 def write_buildings_sheet(
     workbook: Workbook,
     records: List[Dict[str, Any]],
@@ -2948,7 +3029,8 @@ def write_buildings_sheet(
     stats: Dict[str, Dict[str, float]],
     age_data_context: Optional[Dict[str, Any]] = None,
 ) -> None:
-    sheet = workbook.create_sheet(OVERALL_RANKING_SHEET)
+    sheet = workbook.create_sheet(OVERALL_SOURCE_SHEET)
+    sheet.sheet_state = "hidden"
     sheet.sheet_view.showGridLines = False
 
     base_headers = [
@@ -2963,6 +3045,7 @@ def write_buildings_sheet(
         "Type",
         "Selected Age",
         "Available By Age",
+        "Building Category",
         "Environment Effect",
         "Entity ID",
         "Fragment / Reward Production",
@@ -3121,6 +3204,7 @@ def write_buildings_sheet(
                 if age_data_context
                 else record["available"]
             ),
+            building_category_label(str(record["entity_id"])),
             (
                 f"={age_data_lookup_formula(entity_id, age_data_context['environment_col'], age_data_context['max_row'], '\"\"')}"
                 if age_data_context
@@ -3140,10 +3224,15 @@ def write_buildings_sheet(
             raw_range = f"{get_column_letter(raw_start)}{row_idx}:{get_column_letter(raw_end)}{row_idx}"
             coefficient_range = f"${get_column_letter(raw_start)}${coefficient_row}:${get_column_letter(raw_end)}${coefficient_row}"
             offset_range = f"${get_column_letter(raw_start)}${offset_row}:${get_column_letter(raw_end)}${offset_row}"
+            category_cell = f"{get_column_letter(metadata_start + 3)}{row_idx}"
+            score_formula = (
+                f"IF({ADVANCED_CONTROLS_SHEET_REF}!{OVERALL_TOTAL_WEIGHT_CELL}=0,0,"
+                f"(SUMPRODUCT({raw_range},{coefficient_range})+SUM({offset_range}))/{ADVANCED_CONTROLS_SHEET_REF}!{OVERALL_TOTAL_WEIGHT_CELL})"
+            )
             sheet.cell(
                 row_idx,
                 3,
-                f"=IF({ADVANCED_CONTROLS_SHEET_REF}!{OVERALL_TOTAL_WEIGHT_CELL}=0,0,(SUMPRODUCT({raw_range},{coefficient_range})+SUM({offset_range}))/{ADVANCED_CONTROLS_SHEET_REF}!{OVERALL_TOTAL_WEIGHT_CELL})",
+                f"=IF(OR({CONTROLS_SHEET_REF}!{BUILDING_CATEGORY_FILTER_CELL}={excel_string(ALL_BUILDING_CATEGORIES)},{category_cell}={CONTROLS_SHEET_REF}!{BUILDING_CATEGORY_FILTER_CELL}),{score_formula},\"\")",
             )
         else:
             sheet.cell(row_idx, 3, 0)
@@ -3152,7 +3241,7 @@ def write_buildings_sheet(
     for row in sheet.iter_rows(min_row=data_start, max_row=data_end, min_col=1, max_col=len(all_headers)):
         for cell in row:
             cell.border = border
-            cell.alignment = Alignment(vertical="top", wrap_text=cell.column == metadata_start + 5)
+            cell.alignment = Alignment(vertical="top", wrap_text=cell.column == metadata_start + 6)
             if cell.column in (2, 3) or raw_start <= cell.column <= raw_end:
                 cell.number_format = "0.00"
 
@@ -3182,17 +3271,17 @@ def write_buildings_sheet(
         sheet.column_dimensions[column_letter].width = 18
         if is_road_connection_attr_key(attr_keys[col_idx - raw_start]):
             sheet.column_dimensions[column_letter].hidden = True
-    metadata_widths = [18, 18, 17, 48, 28, 92]
+    metadata_widths = [18, 18, 17, 24, 48, 28, 92]
     for offset, width in enumerate(metadata_widths):
         sheet.column_dimensions[get_column_letter(metadata_start + offset)].width = width
     sheet.column_dimensions[get_column_letter(metadata_start)].hidden = True
     sheet.column_dimensions[get_column_letter(metadata_start + 2)].hidden = True
-    sheet.column_dimensions[get_column_letter(metadata_start + 4)].hidden = True
+    sheet.column_dimensions[get_column_letter(metadata_start + 5)].hidden = True
     apply_building_name_color_rules(
         sheet,
         data_start,
         data_end,
-        metadata_start + 4,
+        metadata_start + 5,
         event_reward_abbreviations(records),
     )
 
@@ -3200,6 +3289,157 @@ def write_buildings_sheet(
         score_range = f"C{data_start}:C{data_end}"
         sheet.conditional_formatting.add(
             score_range,
+            ColorScaleRule(
+                start_type="min",
+                start_color="F8696B",
+                mid_type="percentile",
+                mid_value=50,
+                mid_color="FFEB84",
+                end_type="max",
+                end_color="63BE7B",
+            ),
+        )
+
+
+def write_overall_ranking_view_sheet(
+    workbook: Workbook,
+    records: Sequence[Dict[str, Any]],
+    attr_keys: Sequence[str],
+) -> None:
+    sheet = workbook.create_sheet(OVERALL_RANKING_SHEET)
+    sheet.sheet_view.showGridLines = False
+
+    base_headers = [
+        "Building",
+        "Overall Rank",
+        "Overall Score",
+        "Size",
+        REQUIRE_ROAD_HEADER,
+        "Area",
+    ]
+    metadata_headers = [
+        "Type",
+        "Selected Age",
+        "Available By Age",
+        "Building Category",
+        "Environment Effect",
+        "Entity ID",
+        "Fragment / Reward Production",
+        "Source Row",
+    ]
+    raw_headers = [attr_label(key) for key in attr_keys]
+    all_headers = base_headers + raw_headers + metadata_headers
+
+    title_fill = PatternFill("solid", fgColor="1F4E78")
+    header_fill = PatternFill("solid", fgColor="D9EAF7")
+    thin = Side(style="thin", color="D9E2F3")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    sheet["A1"] = OVERALL_RANKING_SHEET
+    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].fill = title_fill
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(all_headers)))
+
+    header_row = BUILDING_HEADER_ROW
+    data_start = header_row + 1
+    data_end = data_start + len(records) - 1
+    raw_start = len(base_headers) + 1
+    raw_end = raw_start + len(attr_keys) - 1
+    metadata_start = raw_start + len(attr_keys)
+    source_metadata_start = RAW_START_COLUMN + len(attr_keys)
+    source_row_col = metadata_start + len(metadata_headers) - 1
+    source_row_cell_col = get_column_letter(source_row_col)
+
+    for col_idx, header in enumerate(all_headers, start=1):
+        cell = sheet.cell(header_row, col_idx, header)
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+        cell.border = border
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    score_data_start = 2
+    score_data_end = score_data_start + len(records) - 1
+    score_range = f"'{OVERALL_SCORE_SHEET}'!$B${score_data_start}:$B${score_data_end}"
+    match_range = f"'{OVERALL_SCORE_SHEET}'!$H${score_data_start}:$H${score_data_end}"
+    source_row_range = f"'{OVERALL_SCORE_SHEET}'!$A${score_data_start}:$A${score_data_end}"
+    source_mapping = {
+        1: "A",
+        4: "D",
+        5: "E",
+        6: "F",
+        metadata_start: get_column_letter(source_metadata_start),
+        metadata_start + 1: get_column_letter(source_metadata_start + 1),
+        metadata_start + 2: get_column_letter(source_metadata_start + 2),
+        metadata_start + 3: get_column_letter(source_metadata_start + 3),
+        metadata_start + 4: get_column_letter(source_metadata_start + 4),
+        metadata_start + 5: get_column_letter(source_metadata_start + 5),
+        metadata_start + 6: get_column_letter(source_metadata_start + 6),
+    }
+
+    for row_idx in range(data_start, data_end + 1):
+        relative_rank = row_idx - data_start + 1
+        score_cell = f"C{row_idx}"
+        source_row_cell = f"{source_row_cell_col}{row_idx}"
+        sheet.cell(row_idx, 2, f'=IF({score_cell}="","",ROWS($B${data_start}:B{row_idx}))')
+        sheet.cell(row_idx, 3, f'=IFERROR(LARGE(FILTER({score_range},{match_range}=1),{relative_rank}),"")')
+        sheet.cell(
+            row_idx,
+            source_row_col,
+            f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},({score_range}={score_cell})*({match_range}=1)),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
+        )
+        for output_col, source_col in source_mapping.items():
+            if output_col == metadata_start + 6:
+                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell})&"")')
+            else:
+                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+        for attr_idx, key in enumerate(attr_keys, start=raw_start):
+            source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+
+    for row in sheet.iter_rows(min_row=data_start, max_row=data_end, min_col=1, max_col=len(all_headers)):
+        for cell in row:
+            cell.border = border
+            cell.alignment = Alignment(vertical="top", wrap_text=cell.column == metadata_start + 6)
+            if cell.column in (2, 3, 6) or raw_start <= cell.column <= raw_end:
+                cell.number_format = "0.00"
+
+    sheet.freeze_panes = f"B{header_row + 1}"
+    sheet.auto_filter.ref = f"A{header_row}:{get_column_letter(len(all_headers))}{data_end}"
+    for row_idx in range(2, header_row):
+        sheet.row_dimensions[row_idx].hidden = True
+    widths = {
+        "A": 34,
+        "B": 10,
+        "C": 12,
+        "D": 10,
+        "E": 20,
+        "F": 10,
+    }
+    for col, width in widths.items():
+        sheet.column_dimensions[col].width = width
+    for col_idx in range(raw_start, raw_end + 1):
+        column_letter = get_column_letter(col_idx)
+        sheet.column_dimensions[column_letter].width = 18
+        if is_road_connection_attr_key(attr_keys[col_idx - raw_start]):
+            sheet.column_dimensions[column_letter].hidden = True
+    metadata_widths = [18, 18, 17, 24, 48, 28, 92, 10]
+    for offset, width in enumerate(metadata_widths):
+        sheet.column_dimensions[get_column_letter(metadata_start + offset)].width = width
+    sheet.column_dimensions[get_column_letter(metadata_start)].hidden = True
+    sheet.column_dimensions[get_column_letter(metadata_start + 2)].hidden = True
+    sheet.column_dimensions[get_column_letter(metadata_start + 5)].hidden = True
+    sheet.column_dimensions[get_column_letter(source_row_col)].hidden = True
+    apply_building_name_color_rules(
+        sheet,
+        data_start,
+        data_end,
+        metadata_start + 5,
+        event_reward_abbreviations(records),
+    )
+
+    if records:
+        sheet.conditional_formatting.add(
+            f"C{data_start}:C{data_end}",
             ColorScaleRule(
                 start_type="min",
                 start_color="F8696B",
@@ -3227,6 +3467,8 @@ def write_overall_scores_sheet(
         "Adjusted Area",
         "Overall Efficiency Score",
         "Overall Efficiency Rank",
+        "Building Category",
+        "Category Match",
     ]
     for col_idx, header in enumerate(headers, start=1):
         cell = sheet.cell(1, col_idx, header)
@@ -3240,14 +3482,15 @@ def write_overall_scores_sheet(
     all_buildings_raw_end = get_column_letter(raw_end)
     score_range = f"$B${data_start}:$B${data_end}"
     efficiency_score_range = f"$E${data_start}:$E${data_end}"
-    for idx, _record in enumerate(records):
+    match_range = f"$H${data_start}:$H${data_end}"
+    for idx, record in enumerate(records):
         row_idx = data_start + idx
         source_row = BUILDING_DATA_START_ROW + idx
         sheet.cell(row_idx, 1, source_row)
         if attr_keys:
-            raw_range = f"'{OVERALL_RANKING_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
-            coefficient_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$2:${all_buildings_raw_end}$2"
-            offset_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$3:${all_buildings_raw_end}$3"
+            raw_range = f"'{OVERALL_SOURCE_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
+            coefficient_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$2:${all_buildings_raw_end}$2"
+            offset_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$3:${all_buildings_raw_end}$3"
             sheet.cell(
                 row_idx,
                 2,
@@ -3255,13 +3498,15 @@ def write_overall_scores_sheet(
             )
         else:
             sheet.cell(row_idx, 2, 0)
-        sheet.cell(row_idx, 3, f'=IF(B{row_idx}="","",1+COUNTIF({score_range},">"&B{row_idx}))')
-        area_formula = f"'{OVERALL_RANKING_SHEET}'!$F${source_row}+IF('{OVERALL_RANKING_SHEET}'!$E${source_row}=\"Y\",1,0)"
+        sheet.cell(row_idx, 3, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({score_range}>B{row_idx})*({match_range}=1)))')
+        area_formula = f"'{OVERALL_SOURCE_SHEET}'!$F${source_row}+IF('{OVERALL_SOURCE_SHEET}'!$E${source_row}=\"Y\",1,0)"
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
-        sheet.cell(row_idx, 6, f'=IF(E{row_idx}="","",1+COUNTIF({efficiency_score_range},">"&E{row_idx}))')
+        sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
+        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
-    for col_idx in range(1, 7):
+    for col_idx in range(1, 9):
         sheet.column_dimensions[get_column_letter(col_idx)].width = 16
 
 
@@ -3280,6 +3525,8 @@ def write_fighting_scores_sheet(
         "Adjusted Area",
         "Fighting Efficiency Score",
         "Fighting Efficiency Rank",
+        "Building Category",
+        "Category Match",
     ]
     for col_idx, header in enumerate(headers, start=1):
         cell = sheet.cell(1, col_idx, header)
@@ -3293,14 +3540,15 @@ def write_fighting_scores_sheet(
     all_buildings_raw_end = get_column_letter(raw_end)
     score_range = f"$B${data_start}:$B${data_end}"
     efficiency_score_range = f"$E${data_start}:$E${data_end}"
-    for idx, _record in enumerate(records):
+    match_range = f"$H${data_start}:$H${data_end}"
+    for idx, record in enumerate(records):
         row_idx = data_start + idx
         source_row = BUILDING_DATA_START_ROW + idx
         sheet.cell(row_idx, 1, source_row)
         if attr_keys:
-            raw_range = f"'{OVERALL_RANKING_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
-            coefficient_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$4:${all_buildings_raw_end}$4"
-            offset_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$5:${all_buildings_raw_end}$5"
+            raw_range = f"'{OVERALL_SOURCE_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
+            coefficient_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$4:${all_buildings_raw_end}$4"
+            offset_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$5:${all_buildings_raw_end}$5"
             sheet.cell(
                 row_idx,
                 2,
@@ -3308,13 +3556,15 @@ def write_fighting_scores_sheet(
             )
         else:
             sheet.cell(row_idx, 2, 0)
-        sheet.cell(row_idx, 3, f'=IF(B{row_idx}="","",1+COUNTIF({score_range},">"&B{row_idx}))')
-        area_formula = f"'{OVERALL_RANKING_SHEET}'!$F${source_row}+IF('{OVERALL_RANKING_SHEET}'!$E${source_row}=\"Y\",1,0)"
+        sheet.cell(row_idx, 3, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({score_range}>B{row_idx})*({match_range}=1)))')
+        area_formula = f"'{OVERALL_SOURCE_SHEET}'!$F${source_row}+IF('{OVERALL_SOURCE_SHEET}'!$E${source_row}=\"Y\",1,0)"
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
-        sheet.cell(row_idx, 6, f'=IF(E{row_idx}="","",1+COUNTIF({efficiency_score_range},">"&E{row_idx}))')
+        sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
+        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
-    for col_idx in range(1, 7):
+    for col_idx in range(1, 9):
         sheet.column_dimensions[get_column_letter(col_idx)].width = 16
 
 
@@ -3394,10 +3644,10 @@ def write_fighting_sheet(
             f'=IF({score_cell}="","",INDEX(FILTER({fighting_source_row_range},{fighting_score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
-            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(fighting_attr_keys, start=12):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -3523,10 +3773,10 @@ def write_fighting_efficiency_sheet(
             f'=IF({score_cell}="","",INDEX(FILTER({fighting_source_row_range},{efficiency_score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
-            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(fighting_attr_keys, start=14):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -3675,6 +3925,7 @@ def write_ranked_score_sheet(
     score_data_start = 2
     score_data_end = score_data_start + len(records) - 1
     score_range = f"'{score_sheet_name}'!$B${score_data_start}:$B${score_data_end}"
+    match_range = f"'{score_sheet_name}'!$H${score_data_start}:$H${score_data_end}"
     source_row_range = f"'{score_sheet_name}'!$A${score_data_start}:$A${score_data_end}"
     source_row_cell_col = get_column_letter(source_row_col)
 
@@ -3686,8 +3937,8 @@ def write_ranked_score_sheet(
         type_col: get_column_letter(all_buildings_metadata_start),
         selected_age_col: get_column_letter(all_buildings_metadata_start + 1),
         available_col: get_column_letter(all_buildings_metadata_start + 2),
-        entity_col: get_column_letter(all_buildings_metadata_start + 4),
-        fragment_col: get_column_letter(all_buildings_metadata_start + 5),
+        entity_col: get_column_letter(all_buildings_metadata_start + 5),
+        fragment_col: get_column_letter(all_buildings_metadata_start + 6),
     }
 
     for row_idx in range(data_start, output_data_end + 1):
@@ -3695,20 +3946,20 @@ def write_ranked_score_sheet(
         score_cell = f"C{row_idx}"
         source_row_cell = f"{source_row_cell_col}{row_idx}"
         sheet.cell(row_idx, 2, f'=IF({score_cell}="","",ROWS($B${data_start}:B{row_idx}))')
-        sheet.cell(row_idx, 3, f'=IFERROR(LARGE({score_range},{relative_rank}),"")')
+        sheet.cell(row_idx, 3, f'=IFERROR(LARGE(FILTER({score_range},{match_range}=1),{relative_rank}),"")')
         sheet.cell(
             row_idx,
             source_row_col,
-            f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},{score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
+            f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},({score_range}={score_cell})*({match_range}=1)),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
             if output_col == fragment_col:
-                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell})&"")')
+                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell})&"")')
             else:
-                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(display_attr_keys, start=attr_start):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -3840,6 +4091,7 @@ def write_ranked_efficiency_sheet(
     score_data_start = 2
     score_data_end = score_data_start + len(records) - 1
     efficiency_score_range = f"'{score_sheet_name}'!$E${score_data_start}:$E${score_data_end}"
+    match_range = f"'{score_sheet_name}'!$H${score_data_start}:$H${score_data_end}"
     source_row_range = f"'{score_sheet_name}'!$A${score_data_start}:$A${score_data_end}"
     source_row_cell_col = get_column_letter(source_row_col)
 
@@ -3851,8 +4103,8 @@ def write_ranked_efficiency_sheet(
         type_col: get_column_letter(all_buildings_metadata_start),
         selected_age_col: get_column_letter(all_buildings_metadata_start + 1),
         available_col: get_column_letter(all_buildings_metadata_start + 2),
-        entity_col: get_column_letter(all_buildings_metadata_start + 4),
-        fragment_col: get_column_letter(all_buildings_metadata_start + 5),
+        entity_col: get_column_letter(all_buildings_metadata_start + 5),
+        fragment_col: get_column_letter(all_buildings_metadata_start + 6),
     }
 
     for row_idx in range(data_start, output_data_end + 1):
@@ -3860,22 +4112,22 @@ def write_ranked_efficiency_sheet(
         score_cell = f"C{row_idx}"
         source_row_cell = f"{source_row_cell_col}{row_idx}"
         sheet.cell(row_idx, 2, f'=IF({score_cell}="","",ROWS($B${data_start}:B{row_idx}))')
-        sheet.cell(row_idx, 3, f'=IFERROR(LARGE({efficiency_score_range},{relative_rank}),"")')
+        sheet.cell(row_idx, 3, f'=IFERROR(LARGE(FILTER({efficiency_score_range},{match_range}=1),{relative_rank}),"")')
         sheet.cell(row_idx, 4, f'=IF(${source_row_cell}="","",INDEX(\'{score_sheet_name}\'!$B:$B,MATCH(${source_row_cell},\'{score_sheet_name}\'!$A:$A,0)))')
         sheet.cell(row_idx, 8, f'=IF(${source_row_cell}="","",INDEX(\'{score_sheet_name}\'!$D:$D,MATCH(${source_row_cell},\'{score_sheet_name}\'!$A:$A,0)))')
         sheet.cell(
             row_idx,
             source_row_col,
-            f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},{efficiency_score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
+            f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},({efficiency_score_range}={score_cell})*({match_range}=1)),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
             if output_col == fragment_col:
-                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell})&"")')
+                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell})&"")')
             else:
-                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+                sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(display_attr_keys, start=attr_start):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -3950,6 +4202,8 @@ def write_fp_goods_scores_sheet(
         "Adjusted Area",
         "FP/Goods Efficiency Score",
         "FP/Goods Efficiency Rank",
+        "Building Category",
+        "Category Match",
     ]
     for col_idx, header in enumerate(headers, start=1):
         cell = sheet.cell(1, col_idx, header)
@@ -3963,14 +4217,15 @@ def write_fp_goods_scores_sheet(
     all_buildings_raw_end = get_column_letter(raw_end)
     score_range = f"$B${data_start}:$B${data_end}"
     efficiency_score_range = f"$E${data_start}:$E${data_end}"
-    for idx, _record in enumerate(records):
+    match_range = f"$H${data_start}:$H${data_end}"
+    for idx, record in enumerate(records):
         row_idx = data_start + idx
         source_row = BUILDING_DATA_START_ROW + idx
         sheet.cell(row_idx, 1, source_row)
         if attr_keys:
-            raw_range = f"'{OVERALL_RANKING_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
-            coefficient_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$6:${all_buildings_raw_end}$6"
-            offset_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$7:${all_buildings_raw_end}$7"
+            raw_range = f"'{OVERALL_SOURCE_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
+            coefficient_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$6:${all_buildings_raw_end}$6"
+            offset_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$7:${all_buildings_raw_end}$7"
             sheet.cell(
                 row_idx,
                 2,
@@ -3978,13 +4233,15 @@ def write_fp_goods_scores_sheet(
             )
         else:
             sheet.cell(row_idx, 2, 0)
-        sheet.cell(row_idx, 3, f'=IF(B{row_idx}="","",1+COUNTIF({score_range},">"&B{row_idx}))')
-        area_formula = f"'{OVERALL_RANKING_SHEET}'!$F${source_row}+IF('{OVERALL_RANKING_SHEET}'!$E${source_row}=\"Y\",1,0)"
+        sheet.cell(row_idx, 3, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({score_range}>B{row_idx})*({match_range}=1)))')
+        area_formula = f"'{OVERALL_SOURCE_SHEET}'!$F${source_row}+IF('{OVERALL_SOURCE_SHEET}'!$E${source_row}=\"Y\",1,0)"
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
-        sheet.cell(row_idx, 6, f'=IF(E{row_idx}="","",1+COUNTIF({efficiency_score_range},">"&E{row_idx}))')
+        sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
+        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
-    for col_idx in range(1, 7):
+    for col_idx in range(1, 9):
         sheet.column_dimensions[get_column_letter(col_idx)].width = 16
 
 
@@ -4063,10 +4320,10 @@ def write_fp_goods_ranking_sheet(
             f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},{fp_goods_score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
-            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(production_attr_keys, start=12):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -4192,10 +4449,10 @@ def write_fp_goods_efficiency_sheet(
             f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},{efficiency_score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
-            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(production_attr_keys, start=14):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -4259,6 +4516,8 @@ def write_qi_scores_sheet(
         "Adjusted Area",
         "QI Efficiency Score",
         "QI Efficiency Rank",
+        "Building Category",
+        "Category Match",
     ]
     for col_idx, header in enumerate(headers, start=1):
         cell = sheet.cell(1, col_idx, header)
@@ -4272,14 +4531,15 @@ def write_qi_scores_sheet(
     all_buildings_raw_end = get_column_letter(raw_end)
     score_range = f"$B${data_start}:$B${data_end}"
     efficiency_score_range = f"$E${data_start}:$E${data_end}"
-    for idx, _record in enumerate(records):
+    match_range = f"$H${data_start}:$H${data_end}"
+    for idx, record in enumerate(records):
         row_idx = data_start + idx
         source_row = BUILDING_DATA_START_ROW + idx
         sheet.cell(row_idx, 1, source_row)
         if attr_keys:
-            raw_range = f"'{OVERALL_RANKING_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
-            coefficient_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$8:${all_buildings_raw_end}$8"
-            offset_range = f"'{OVERALL_RANKING_SHEET}'!${all_buildings_raw_start}$9:${all_buildings_raw_end}$9"
+            raw_range = f"'{OVERALL_SOURCE_SHEET}'!{all_buildings_raw_start}{source_row}:{all_buildings_raw_end}{source_row}"
+            coefficient_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$8:${all_buildings_raw_end}$8"
+            offset_range = f"'{OVERALL_SOURCE_SHEET}'!${all_buildings_raw_start}$9:${all_buildings_raw_end}$9"
             sheet.cell(
                 row_idx,
                 2,
@@ -4287,13 +4547,15 @@ def write_qi_scores_sheet(
             )
         else:
             sheet.cell(row_idx, 2, 0)
-        sheet.cell(row_idx, 3, f'=IF(B{row_idx}="","",1+COUNTIF({score_range},">"&B{row_idx}))')
-        area_formula = f"'{OVERALL_RANKING_SHEET}'!$F${source_row}+IF('{OVERALL_RANKING_SHEET}'!$E${source_row}=\"Y\",1,0)"
+        sheet.cell(row_idx, 3, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({score_range}>B{row_idx})*({match_range}=1)))')
+        area_formula = f"'{OVERALL_SOURCE_SHEET}'!$F${source_row}+IF('{OVERALL_SOURCE_SHEET}'!$E${source_row}=\"Y\",1,0)"
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
-        sheet.cell(row_idx, 6, f'=IF(E{row_idx}="","",1+COUNTIF({efficiency_score_range},">"&E{row_idx}))')
+        sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
+        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
-    for col_idx in range(1, 7):
+    for col_idx in range(1, 9):
         sheet.column_dimensions[get_column_letter(col_idx)].width = 16
 
 
@@ -4372,10 +4634,10 @@ def write_qi_ranking_sheet(
             f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},{qi_score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
-            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(qi_attr_keys, start=12):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -4501,10 +4763,10 @@ def write_qi_efficiency_sheet(
             f'=IF({score_cell}="","",INDEX(FILTER({source_row_range},{efficiency_score_range}={score_cell}),COUNTIF($C${data_start}:{score_cell},{score_cell})))',
         )
         for output_col, source_col in source_mapping.items():
-            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(qi_attr_keys, start=14):
             source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_RANKING_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -4585,6 +4847,7 @@ def write_about_sheet(
         ("Fighting focus", "Main Controls lets you tune GBG vs GE, red vs blue army use, attack vs defense boosts, and current-age vs next-age unit production."),
         ("QI role", "Choose whether QI fighting value should favor blue, red, or both roles."),
         ("Advanced controls", "Use Advanced Controls only for fine tuning. A higher yellow weight makes that attribute matter more; a zero weight turns it off."),
+        ("Building category filter", "Use the Main Controls category dropdown to show all buildings or only a color-coded reward/event category on the ranking sheets."),
         ("Production boost conversion", "FP, goods, guild goods, and medal boost percentages are estimated using the production totals you enter on Main Controls."),
         ("Guild goods", "Guild goods are tracked separately from regular goods, so changing one estimate does not change the other."),
         ("Overall ranking", f"Use {OVERALL_RANKING_SHEET} for a broad building comparison across production, fighting, size, and other weighted attributes."),
@@ -4632,6 +4895,7 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
     else:
         records, attr_keys = collect_records(entities, era, available_only)
     stats = compute_attribute_stats(records, attr_keys)
+    category_options = building_category_options(records)
 
     workbook = Workbook()
     workbook.calculation.calcMode = "auto"
@@ -4639,13 +4903,15 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
     workbook.calculation.calcCompleted = False
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True
-    write_controls_sheet(workbook, reference_file, era, available_only, all_ages)
+    write_controls_sheet(workbook, reference_file, era, available_only, all_ages, category_options)
     write_advanced_controls_sheet(workbook, reference_file, era, attr_keys, stats, available_only, len(records), all_ages)
+    write_category_options_sheet(workbook, category_options)
     if all_ages:
         write_age_options_sheet(workbook)
         age_data_context = write_age_data_sheet(workbook, records_by_age, attr_keys)
     write_buildings_sheet(workbook, records, attr_keys, stats, age_data_context)
     write_overall_scores_sheet(workbook, records, attr_keys)
+    write_overall_ranking_view_sheet(workbook, records, attr_keys)
     write_ranked_efficiency_sheet(
         workbook,
         OVERALL_EFFICIENCY_SHEET,
