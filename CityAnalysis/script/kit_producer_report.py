@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""List buildings that produce One Up/Renovation kits or fragments in a given era."""
+"""List buildings that produce target kits/items or fragments in a given era."""
 from __future__ import annotations
 
 import argparse
@@ -15,7 +15,11 @@ from zipfile import ZipFile, ZIP_DEFLATED
 BASE_DIR = os.path.expanduser("~/Documents/FOE/CityAnalysis")
 INPUT_DIR = os.path.join(BASE_DIR, "input")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-TARGET_KIT_SUBTYPES = {"one_up_kit": "One Up Kit", "renovation_kit": "Renovation Kit"}
+TARGET_KIT_SUBTYPES = {
+    "one_up_kit": "One Up Kit",
+    "renovation_kit": "Renovation Kit",
+    "instant_finish_building": "Finish Special Production",
+}
 
 
 def latest_city_file() -> str:
@@ -258,6 +262,8 @@ def main() -> None:
     latest_file = latest_city_file()
     with open(latest_file, "r", encoding="utf-8") as handle:
         data = json.load(handle)
+    if isinstance(data.get("data"), dict):
+        data = data["data"]
 
     entities = data.get("CityEntities")
     if not isinstance(entities, dict):
@@ -562,7 +568,7 @@ def create_xlsx(
         zf.writestr("xl/_rels/workbook.xml.rels", build_workbook_rels(len(sheets)))
 
         for idx, (name, rows) in enumerate(sheets, start=1):
-            sheet_xml = build_sheet_xml(rows)
+            sheet_xml = build_sheet_xml(rows, idx)
             zf.writestr(f"xl/worksheets/sheet{idx}.xml", sheet_xml)
 
 
@@ -683,44 +689,148 @@ def build_workbook_rels(sheet_count: int) -> str:
 
 
 def build_styles_xml() -> str:
+    fills = [
+        '<fill><patternFill patternType="none"/></fill>',
+        '<fill><patternFill patternType="gray125"/></fill>',
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill>',
+    ]
+    for palette in PASTEL_SHEET_PALETTES:
+        fills.append(
+            f'<fill><patternFill patternType="solid"><fgColor rgb="{palette["header"]}"/><bgColor indexed="64"/></patternFill></fill>'
+        )
+        fills.append(
+            f'<fill><patternFill patternType="solid"><fgColor rgb="{palette["band"]}"/><bgColor indexed="64"/></patternFill></fill>'
+        )
+
+    cell_xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>']
+    for palette_idx, _palette in enumerate(PASTEL_SHEET_PALETTES):
+        header_fill_id = 3 + palette_idx * 2
+        band_fill_id = header_fill_id + 1
+        cell_xfs.extend(
+            [
+                f'<xf numFmtId="0" fontId="1" fillId="{header_fill_id}" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>',
+                '<xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>',
+                '<xf numFmtId="1" fontId="0" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="top"/></xf>',
+                '<xf numFmtId="164" fontId="0" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="top"/></xf>',
+                f'<xf numFmtId="0" fontId="0" fillId="{band_fill_id}" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>',
+                f'<xf numFmtId="1" fontId="0" fillId="{band_fill_id}" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="top"/></xf>',
+                f'<xf numFmtId="164" fontId="0" fillId="{band_fill_id}" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="top"/></xf>',
+            ]
+        )
+
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        '<fonts count="1"><font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font></fonts>'
-        '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
-        '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+        '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.###"/></numFmts>'
+        '<fonts count="3">'
+        '<font><sz val="11"/><color rgb="FF334155"/><name val="Calibri"/><family val="2"/></font>'
+        '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>'
+        '<font><b/><sz val="11"/><color rgb="FF475569"/><name val="Calibri"/><family val="2"/></font>'
+        '</fonts>'
+        f'<fills count="{len(fills)}">{"".join(fills)}</fills>'
+        '<borders count="2">'
+        '<border><left/><right/><top/><bottom/><diagonal/></border>'
+        '<border>'
+        '<left style="thin"><color rgb="FFD7E2DE"/></left>'
+        '<right style="thin"><color rgb="FFD7E2DE"/></right>'
+        '<top style="thin"><color rgb="FFD7E2DE"/></top>'
+        '<bottom style="thin"><color rgb="FFD7E2DE"/></bottom>'
+        '<diagonal/>'
+        '</border>'
+        '</borders>'
         '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-        '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+        f'<cellXfs count="{len(cell_xfs)}">{"".join(cell_xfs)}</cellXfs>'
         '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
         '</styleSheet>'
     )
 
 
-def build_sheet_xml(rows: List[List[Dict[str, Any]]]) -> str:
+PASTEL_SHEET_PALETTES = (
+    {"header": "FF7CBFB3", "band": "FFF0F8F6"},
+    {"header": "FFE7A9BE", "band": "FFFFF2F6"},
+    {"header": "FFA7C7E7", "band": "FFF2F7FD"},
+    {"header": "FFF3C86A", "band": "FFFFFAEC"},
+    {"header": "FFC9B2DD", "band": "FFF8F3FB"},
+)
+
+
+def build_sheet_xml(rows: List[List[Dict[str, Any]]], sheet_index: int) -> str:
+    row_count = max(len(rows), 1)
+    column_count = max((len(row) for row in rows), default=1)
+    last_ref = f"{column_name(column_count)}{row_count}"
+    palette = PASTEL_SHEET_PALETTES[(sheet_index - 1) % len(PASTEL_SHEET_PALETTES)]
+    cols_xml = build_column_widths()
     sheet_data = ['<sheetData>']
     for row_idx, row in enumerate(rows, start=1):
-        sheet_data.append(f'<row r="{row_idx}">')
+        row_attrs = [f'r="{row_idx}"']
+        if row_idx == 1:
+            row_attrs.extend(['ht="24"', 'customHeight="1"'])
+        elif any("\n" in str(cell_value.get("value", "")) for cell_value in row):
+            row_attrs.extend(['ht="48"', 'customHeight="1"'])
+        sheet_data.append(f'<row {" ".join(row_attrs)}>')
         for col_idx, cell_value in enumerate(row, start=1):
             ref = f"{column_name(col_idx)}{row_idx}"
             value = cell_value.get("value")
             ctype = cell_value.get("type", "string")
+            style = cell_style_id(row_idx, col_idx, ctype, sheet_index)
             if ctype == "number" and isinstance(value, (int, float)):
-                sheet_data.append(f'<c r="{ref}"><v>{value}</v></c>')
+                sheet_data.append(f'<c r="{ref}" s="{style}"><v>{value}</v></c>')
             else:
                 text = "" if value is None else str(value)
                 text = escape(text)
                 text = text.replace("\n", "&#10;")
                 sheet_data.append(
-                    f'<c r="{ref}" t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>'
+                    f'<c r="{ref}" s="{style}" t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>'
                 )
         sheet_data.append('</row>')
     sheet_data.append('</sheetData>')
+    auto_filter = f'<autoFilter ref="A1:{last_ref}"/>' if rows else ''
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<sheetPr><tabColor rgb="{palette["header"]}"/></sheetPr>'
+        f'<dimension ref="A1:{last_ref}"/>'
+        '<sheetViews><sheetView workbookViewId="0">'
+        '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
+        '<selection pane="bottomLeft"/>'
+        '</sheetView></sheetViews>'
+        '<sheetFormatPr defaultRowHeight="18"/>'
+        f'{cols_xml}'
         f"{''.join(sheet_data)}"
+        f'{auto_filter}'
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
         '</worksheet>'
     )
+
+
+def build_column_widths() -> str:
+    widths = {
+        1: 8,
+        2: 34,
+        3: 12,
+        4: 18,
+        5: 24,
+        6: 24,
+        7: 52,
+    }
+    cols = [
+        f'<col min="{idx}" max="{idx}" width="{width}" customWidth="1"/>'
+        for idx, width in widths.items()
+    ]
+    return f"<cols>{''.join(cols)}</cols>"
+
+
+def cell_style_id(row_idx: int, col_idx: int, ctype: str, sheet_index: int) -> int:
+    palette_idx = (sheet_index - 1) % len(PASTEL_SHEET_PALETTES)
+    style_offset = 1 + palette_idx * 7
+    if row_idx == 1:
+        return style_offset
+    is_alt_row = row_idx % 2 == 1
+    if ctype == "number":
+        if col_idx in (5, 6):
+            return style_offset + 6 if is_alt_row else style_offset + 3
+        return style_offset + 5 if is_alt_row else style_offset + 2
+    return style_offset + 4 if is_alt_row else style_offset + 1
 
 
 def column_name(index: int) -> str:

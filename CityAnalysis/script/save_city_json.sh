@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DIR="$HOME/Documents/FOE/CityAnalysis/input"
+DIR="../input"
 if [ ! -d "$DIR" ]; then
   mkdir -p "$DIR"
 fi
