@@ -108,11 +108,11 @@ CITY_AGE_LIST_NAME = "CityAgeList"
 BUILDING_CATEGORY_FILTER_CELL = "$B$5"
 BUILDING_CATEGORY_LIST_NAME = "BuildingCategoryList"
 ALL_BUILDING_CATEGORIES = "All Building Categories"
-FIGHTING_GBG_GE_FOCUS_CELL = "$B$11"
-FIGHTING_RED_BLUE_FOCUS_CELL = "$B$13"
-FIGHTING_ATTACK_DEFENSE_FOCUS_CELL = "$B$15"
-FIGHTING_UNIT_AGE_FOCUS_CELL = "$B$17"
-QI_FIGHTER_ROLE_CELL = "$B$18"
+QI_FIGHTER_ROLE_CELL = "$B$10"
+FIGHTING_GBG_GE_FOCUS_CELL = "$B$13"
+FIGHTING_RED_BLUE_FOCUS_CELL = "$B$15"
+FIGHTING_ATTACK_DEFENSE_FOCUS_CELL = "$B$17"
+FIGHTING_UNIT_AGE_FOCUS_CELL = "$B$19"
 BOOST_FP_ATTR = "boost_forge_points_production_all"
 BOOST_GOODS_ATTR = "boost_goods_production_all"
 BOOST_GUILD_GOODS_ATTR = "boost_guild_goods_production_all"
@@ -165,6 +165,16 @@ TAB_COLORS = {
     AGE_DATA_SHEET: "A6A6A6",
     "About": "A6A6A6",
 }
+
+TITLE_FILL_COLOR = "D6EAF7"
+TITLE_FONT_COLOR = "243447"
+HEADER_FILL_COLOR = "E7F4DC"
+HEADER_FONT_COLOR = "243447"
+BORDER_COLOR = "C7D6E2"
+EDITABLE_FILL_COLOR = "FFF4CC"
+CONTROL_CONTEXT_FILL_COLOR = "E4F3EA"
+SLIDER_FILL_COLOR = HEADER_FILL_COLOR
+SLIDER_SELECTED_FILL_COLOR = "B7D7F0"
 
 CORE_RESOURCES = {
     "clan_power",
@@ -2623,13 +2633,16 @@ def write_controls_sheet(
     sheet = workbook.active
     sheet.title = CONTROLS_SHEET
     sheet.sheet_view.showGridLines = False
+    sheet.sheet_view.zoomScale = 115
 
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    editable_fill = PatternFill("solid", fgColor="FFF2CC")
-    slider_fill = PatternFill("solid", fgColor="D9EAF7")
-    slider_selected_fill = PatternFill("solid", fgColor="A9D18E")
-    context_fill = PatternFill("solid", fgColor="E2F0D9")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    editable_fill = PatternFill("solid", fgColor=EDITABLE_FILL_COLOR)
+    slider_fill = PatternFill("solid", fgColor=SLIDER_FILL_COLOR)
+    slider_selected_fill = PatternFill("solid", fgColor=SLIDER_SELECTED_FILL_COLOR)
+    context_fill = PatternFill("solid", fgColor=CONTROL_CONTEXT_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
+    track_side = Side(style="medium", color="79A878")
+    no_side = Side(style=None)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     sheet["A1"] = (
@@ -2637,9 +2650,11 @@ def write_controls_sheet(
         if all_ages
         else "Building Attribute Ranking Main Controls - Scale Values 1-5"
     )
-    sheet["A1"].font = Font(bold=True, size=16, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=18, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
+    sheet["A1"].alignment = Alignment(vertical="center")
     sheet.merge_cells("A1:G1")
+    sheet.row_dimensions[1].height = 30
 
     rows = [
         (
@@ -2654,12 +2669,13 @@ def write_controls_sheet(
         (7, "Estimated total goods production", DEFAULT_ESTIMATED_GOODS_PRODUCTION, editable_fill),
         (8, "Estimated total guild goods production", DEFAULT_ESTIMATED_GUILD_GOODS_PRODUCTION, editable_fill),
         (9, "Estimated total medal production", DEFAULT_ESTIMATED_MEDAL_PRODUCTION, editable_fill),
-        (18, "QI fighter role", "Blue", editable_fill),
+        (10, "QI fighter role", "Blue", editable_fill),
     ]
     for row_idx, label, value, fill in rows:
         sheet.cell(row_idx, 1, label)
         sheet.cell(row_idx, 2, value)
-        sheet.cell(row_idx, 1).font = Font(bold=True)
+        sheet.cell(row_idx, 1).font = Font(size=12, color=HEADER_FONT_COLOR)
+        sheet.cell(row_idx, 2).font = Font(size=12, color=TITLE_FONT_COLOR)
         sheet.cell(row_idx, 1).border = border
         sheet.cell(row_idx, 2).border = border
         sheet.cell(row_idx, 2).fill = fill
@@ -2668,7 +2684,7 @@ def write_controls_sheet(
         if label.startswith("Estimated total"):
             sheet.cell(row_idx, 2).number_format = "#,##0"
     sheet.merge_cells("B2:G2")
-    sheet.row_dimensions[2].height = 48
+    sheet.row_dimensions[2].height = 72
     if all_ages:
         age_start_row = 1
         age_end_row = len(AGE_ORDER)
@@ -2714,56 +2730,64 @@ def write_controls_sheet(
         slider_labels: Sequence[str],
     ) -> None:
         sheet.cell(row_idx, 1, title)
-        sheet.cell(row_idx, 1).font = Font(bold=True)
+        sheet.cell(row_idx, 1).font = Font(size=12, color=HEADER_FONT_COLOR)
         sheet.cell(row_idx, 1).border = border
         sheet.cell(row_idx, 1).alignment = Alignment(vertical="top", wrap_text=True)
         sheet.cell(row_idx, 2, "Selected scale")
-        sheet.cell(row_idx, 2).font = Font(bold=True)
+        sheet.cell(row_idx, 2).font = Font(size=12, color=HEADER_FONT_COLOR)
         sheet.cell(row_idx, 2).fill = slider_fill
         sheet.cell(row_idx, 2).border = border
         sheet.cell(row_idx, 2).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         sheet[input_cell_ref] = default_value
+        sheet[input_cell_ref].font = Font(bold=True, size=12, color=TITLE_FONT_COLOR)
         sheet[input_cell_ref].fill = editable_fill
         sheet[input_cell_ref].border = border
         sheet[input_cell_ref].alignment = Alignment(horizontal="center", vertical="center")
         sheet[input_cell_ref].number_format = "0"
-        for offset, label in enumerate(slider_labels, start=3):
+        track_labels = [slider_labels[0], "", slider_labels[2], "", slider_labels[4]]
+        for offset, label in enumerate(track_labels, start=3):
             label_cell = sheet.cell(row_idx, offset, label)
             value_cell = sheet.cell(row_idx + 1, offset, offset - 2)
-            for cell in (label_cell, value_cell):
-                cell.border = border
-                cell.fill = slider_fill
-                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            value_cell.font = Font(bold=True)
+            label_cell.font = Font(size=12, color=TITLE_FONT_COLOR)
+            label_cell.alignment = Alignment(horizontal="center", vertical="bottom", wrap_text=True)
+            value_cell.border = Border(
+                left=track_side if offset == 3 else no_side,
+                right=track_side if offset == 7 else no_side,
+                top=track_side,
+                bottom=track_side,
+            )
+            value_cell.fill = slider_fill
+            value_cell.alignment = Alignment(horizontal="center", vertical="center")
+            value_cell.font = Font(bold=True, size=12, color=TITLE_FONT_COLOR)
             scale_value = offset - 2
             sheet.conditional_formatting.add(
-                f"{get_column_letter(offset)}{row_idx}:{get_column_letter(offset)}{row_idx + 1}",
+                f"{get_column_letter(offset)}{row_idx + 1}:{get_column_letter(offset)}{row_idx + 1}",
                 FormulaRule(formula=[f"{input_cell_ref}={scale_value}"], fill=slider_selected_fill),
             )
 
     add_focus_selector(
-        10,
+        12,
         "Fighting GBG/GE focus",
         FIGHTING_GBG_GE_FOCUS_CELL,
         DEFAULT_FIGHTING_GBG_GE_FOCUS,
         ["GBG only", "Mostly GBG", "Half and half", "Mostly GE", "GE only"],
     )
     add_focus_selector(
-        12,
+        14,
         "Fighting Red/Blue focus",
         FIGHTING_RED_BLUE_FOCUS_CELL,
         DEFAULT_FIGHTING_RED_BLUE_FOCUS,
         ["Red only", "Mostly Red", "Half and half", "Mostly Blue", "Blue only"],
     )
     add_focus_selector(
-        14,
+        16,
         "Fighting Attack/Defense focus",
         FIGHTING_ATTACK_DEFENSE_FOCUS_CELL,
         DEFAULT_FIGHTING_ATTACK_DEFENSE_FOCUS,
         ["Attack only", "Mostly attack", "Half and half", "Mostly defense", "Defense only"],
     )
     add_focus_selector(
-        16,
+        18,
         "Fighting Current/Next Age unit focus",
         FIGHTING_UNIT_AGE_FOCUS_CELL,
         DEFAULT_FIGHTING_UNIT_AGE_FOCUS,
@@ -2780,11 +2804,15 @@ def write_controls_sheet(
     sheet.add_data_validation(role_dv)
     role_dv.add(QI_FIGHTER_ROLE_CELL)
 
-    sheet.column_dimensions["A"].width = 42
-    sheet.column_dimensions["B"].width = 18
-    for column in ("C", "D", "E", "F"):
-        sheet.column_dimensions[column].width = 14
-    sheet.column_dimensions["G"].width = 14
+    sheet.row_dimensions[10].height = 24
+    for row_idx in (12, 14, 16, 18):
+        sheet.row_dimensions[row_idx].height = 36
+        sheet.row_dimensions[row_idx + 1].height = 28
+
+    sheet.column_dimensions["A"].width = 48
+    sheet.column_dimensions["B"].width = 20
+    for column in ("C", "D", "E", "F", "G"):
+        sheet.column_dimensions[column].width = 16
 
 
 def write_advanced_controls_sheet(
@@ -2800,15 +2828,15 @@ def write_advanced_controls_sheet(
     sheet = workbook.create_sheet(ADVANCED_CONTROLS_SHEET)
     sheet.sheet_view.showGridLines = False
 
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    editable_fill = PatternFill("solid", fgColor="FFF2CC")
-    context_fill = PatternFill("solid", fgColor="E2F0D9")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    editable_fill = PatternFill("solid", fgColor=EDITABLE_FILL_COLOR)
+    context_fill = PatternFill("solid", fgColor=CONTROL_CONTEXT_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     sheet["A1"] = "Advanced Building Attribute Ranking Controls"
-    sheet["A1"].font = Font(bold=True, size=16, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=16, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
     sheet.merge_cells("A1:M1")
 
@@ -3052,15 +3080,15 @@ def write_buildings_sheet(
     ]
     raw_headers = [attr_label(key) for key in attr_keys]
 
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     sheet["A1"] = OVERALL_RANKING_SHEET
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(base_headers) + len(raw_headers) + len(metadata_headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(base_headers) + len(raw_headers) + len(metadata_headers))
 
     coefficient_row = 2
     offset_row = 3
@@ -3330,15 +3358,15 @@ def write_overall_ranking_view_sheet(
     raw_headers = [attr_label(key) for key in attr_keys]
     all_headers = base_headers + raw_headers + metadata_headers
 
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     sheet["A1"] = OVERALL_RANKING_SHEET
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(all_headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(all_headers))
 
     header_row = BUILDING_HEADER_ROW
     data_start = header_row + 1
@@ -3577,9 +3605,9 @@ def write_fighting_sheet(
     sheet.sheet_view.showGridLines = False
 
     fighting_attr_keys = [key for key in attr_keys if fighting_weight_for_attr(key)]
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     headers = [
@@ -3597,9 +3625,9 @@ def write_fighting_sheet(
     ] + [attr_label(key) for key in fighting_attr_keys]
 
     sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} Fighting Buildings"
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = "Uses the Fighting Weight controls. Non-fighting attributes default to zero in that control set."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -3703,9 +3731,9 @@ def write_fighting_efficiency_sheet(
     sheet.sheet_view.showGridLines = False
 
     fighting_attr_keys = [key for key in attr_keys if fighting_weight_for_attr(key)]
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     headers = [
@@ -3725,9 +3753,9 @@ def write_fighting_efficiency_sheet(
     ] + [attr_label(key) for key in fighting_attr_keys]
 
     sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} Fighting Efficiency Buildings"
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = "Fighting efficiency is Fighting Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -3876,9 +3904,9 @@ def write_ranked_score_sheet(
     sheet.sheet_view.showGridLines = False
     display_attr_keys = [key for key in display_attr_keys if not is_road_connection_attr_key(key)]
 
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     attr_start = 7
@@ -3904,9 +3932,9 @@ def write_ranked_score_sheet(
     )
 
     sheet["A1"] = title
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = note
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -4033,9 +4061,9 @@ def write_ranked_efficiency_sheet(
     sheet.sheet_view.showGridLines = False
     display_attr_keys = [key for key in display_attr_keys if not is_road_connection_attr_key(key)]
 
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     attr_start = 9
@@ -4070,9 +4098,9 @@ def write_ranked_efficiency_sheet(
     )
 
     sheet["A1"] = title
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = note
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -4254,9 +4282,9 @@ def write_fp_goods_ranking_sheet(
     sheet.sheet_view.showGridLines = False
 
     production_attr_keys = fp_goods_display_attr_keys(attr_keys)
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     headers = [
@@ -4274,9 +4302,9 @@ def write_fp_goods_ranking_sheet(
     ] + [attr_label(key) for key in production_attr_keys]
 
     sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} FP/Goods Production Buildings"
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = "Uses the FP/Goods Weight controls. Defaults score Production: FPs and Production: Goods Total."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -4379,9 +4407,9 @@ def write_fp_goods_efficiency_sheet(
     sheet.sheet_view.showGridLines = False
 
     production_attr_keys = fp_goods_display_attr_keys(attr_keys)
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     headers = [
@@ -4401,9 +4429,9 @@ def write_fp_goods_efficiency_sheet(
     ] + [attr_label(key) for key in production_attr_keys]
 
     sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} FP/Goods Efficiency Buildings"
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = "FP/Goods efficiency is FP/Goods Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -4568,9 +4596,9 @@ def write_qi_ranking_sheet(
     sheet.sheet_view.showGridLines = False
 
     qi_attr_keys = qi_display_attr_keys(attr_keys)
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     headers = [
@@ -4588,9 +4616,9 @@ def write_qi_ranking_sheet(
     ] + [attr_label(key) for key in qi_attr_keys]
 
     sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} QI Buildings"
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = "Uses the QI Weight controls. Includes attributes whose data key or label is QI-related."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -4693,9 +4721,9 @@ def write_qi_efficiency_sheet(
     sheet.sheet_view.showGridLines = False
 
     qi_attr_keys = qi_display_attr_keys(attr_keys)
-    title_fill = PatternFill("solid", fgColor="1F4E78")
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    thin = Side(style="thin", color="D9E2F3")
+    title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     headers = [
@@ -4715,9 +4743,9 @@ def write_qi_efficiency_sheet(
     ] + [attr_label(key) for key in qi_attr_keys]
 
     sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} QI Efficiency Buildings"
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(10, len(headers)))
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet["A2"] = "QI efficiency is QI Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
@@ -4827,8 +4855,8 @@ def write_about_sheet(
     sheet = workbook.create_sheet("About")
     sheet.sheet_view.showGridLines = False
     sheet["A1"] = "Workbook Guide"
-    sheet["A1"].font = Font(bold=True, size=15, color="FFFFFF")
-    sheet["A1"].fill = PatternFill("solid", fgColor="1F4E78")
+    sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
+    sheet["A1"].fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
     sheet.merge_cells("A1:B1")
     notes = [
         ("Reference file", display_path(reference_file)),
