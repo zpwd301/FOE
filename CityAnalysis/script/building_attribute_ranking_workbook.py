@@ -2660,11 +2660,11 @@ def write_controls_sheet(
         (
             2,
             "How to use",
-            "Start here: choose a building category filter, then enter your city's estimated total FP, goods, guild goods, and medal production in the yellow cells. Choose the fighting and QI settings that match what you care about. On each 1-5 scale, 1 favors the left label, 3 is balanced, and 5 favors the right label. Then review the ranking sheets.",
+            "Start here: choose a building source category filter, then enter your city's estimated total FP, goods, guild goods, and medal production in the yellow cells. Choose the fighting and QI settings that match what you care about. On each 1-5 scale, 1 favors the left label, 3 is balanced, and 5 favors the right label. Then review the ranking sheets.",
             PatternFill(fill_type=None),
         ),
         (3, "Select Your City Age" if all_ages else "Assumed age", selected_age_display(era, all_ages), editable_fill if all_ages else context_fill),
-        (5, "Building category filter", ALL_BUILDING_CATEGORIES, editable_fill),
+        (5, "Building source category filter", ALL_BUILDING_CATEGORIES, editable_fill),
         (6, "Estimated total FP production", DEFAULT_ESTIMATED_FP_PRODUCTION, editable_fill),
         (7, "Estimated total goods production", DEFAULT_ESTIMATED_GOODS_PRODUCTION, editable_fill),
         (8, "Estimated total guild goods production", DEFAULT_ESTIMATED_GUILD_GOODS_PRODUCTION, editable_fill),
@@ -2715,7 +2715,7 @@ def write_controls_sheet(
         category_dv.showInputMessage = True
         category_dv.showErrorMessage = True
         category_dv.errorStyle = "stop"
-        category_dv.promptTitle = "Building category filter"
+        category_dv.promptTitle = "Building source category filter"
         category_dv.prompt = "Pick a category to show in the ranking sheets."
         category_dv.errorTitle = "Use the dropdown"
         category_dv.error = "Choose a building category from the dropdown list."
@@ -4875,7 +4875,7 @@ def write_about_sheet(
         ("Fighting focus", "Main Controls lets you tune GBG vs GE, red vs blue army use, attack vs defense boosts, and current-age vs next-age unit production."),
         ("QI role", "Choose whether QI fighting value should favor blue, red, or both roles."),
         ("Advanced controls", "Use Advanced Controls only for fine tuning. A higher yellow weight makes that attribute matter more; a zero weight turns it off."),
-        ("Building category filter", "Use the Main Controls category dropdown to show all buildings or only a color-coded reward/event category on the ranking sheets."),
+        ("Building source category filter", "Use the Main Controls source category dropdown to show all buildings or only a color-coded reward/event category on the ranking sheets."),
         ("Production boost conversion", "FP, goods, guild goods, and medal boost percentages are estimated using the production totals you enter on Main Controls."),
         ("Guild goods", "Guild goods are tracked separately from regular goods, so changing one estimate does not change the other."),
         ("Overall ranking", f"Use {OVERALL_RANKING_SHEET} for a broad building comparison across production, fighting, size, and other weighted attributes."),
