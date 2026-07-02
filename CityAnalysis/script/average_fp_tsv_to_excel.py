@@ -13,7 +13,15 @@ from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-NUMERIC_COLUMNS = {"AverageExpectedFP", "BaseFP", "Level", "Count", "PassiveFPBoost"}
+NUMERIC_COLUMNS = {"Average Expected FP", "Base FP", "Level", "Count", "Passive FP Boost"}
+REPORT_SUFFIX = "_Blue_Galaxy_Collection_Recommendation_Report"
+REPORT_EXPLANATION = (
+    "This report ranks city buildings for Blue Galaxy collection priority by estimated Forge Point value; "
+    "Average Expected FP assumes the building is motivated and applies the city's passive FP boost, while Base FP "
+    "shows the unboosted expected FP from the best listed collection option."
+)
+HEADER_ROW = 2
+DATA_START_ROW = 3
 ROW_BAND_FILLS = ("F7F3E8", "E8F1EA")
 MALLARD_GREEN = "214E34"
 MALLARD_BLUE = "516C8B"
@@ -25,13 +33,13 @@ GRID_COLOR = "B7C7BA"
 
 def default_input_path(output_dir: Path) -> Path:
     candidates = sorted(
-        output_dir.rglob("*_buildings_level_age_production_sorted_by_average_expected_fp.tsv"),
+        output_dir.rglob(f"*{REPORT_SUFFIX}.tsv"),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
     if candidates:
         return candidates[0]
-    return output_dir / "sel_buildings_level_age_production_sorted_by_average_expected_fp.tsv"
+    return output_dir / f"Sel{REPORT_SUFFIX}.tsv"
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +59,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Output .xlsx path. Defaults to the TSV path with an .xlsx suffix.",
+    )
+    parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="Use simple readable formatting without the report color scheme or gradient.",
     )
     return parser.parse_args()
 
@@ -73,14 +86,15 @@ def excel_value(column_name: str, raw_value: str):
 
 def sheet_title_from_path(path: Path) -> str:
     stem = path.stem
-    suffix = "_buildings_level_age_production_sorted_by_average_expected_fp"
-    if stem.endswith(suffix):
-        stem = stem[: -len(suffix)]
+    if stem.endswith(REPORT_SUFFIX):
+        stem = stem[: -len(REPORT_SUFFIX)]
     cleaned = stem.replace("_", " ").replace("-", " ").strip() or "FP Report"
     return cleaned[:31]
 
 
 def apply_styles(sheet, headers: List[str], row_count: int) -> None:
+    note_font = Font(name="Calibri", size=11, italic=True, color="1F1F1F")
+    note_fill = PatternFill(fill_type="solid", start_color=MALLARD_CREAM, end_color=MALLARD_CREAM)
     header_font = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
     header_fill = PatternFill(fill_type="solid", start_color=MALLARD_GREEN, end_color=MALLARD_GREEN)
     body_font = Font(name="Calibri", size=11, color="1F1F1F")
@@ -93,12 +107,19 @@ def apply_styles(sheet, headers: List[str], row_count: int) -> None:
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
     right = Alignment(horizontal="right", vertical="center", wrap_text=True)
 
-    sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = sheet.dimensions
+    sheet.freeze_panes = f"A{DATA_START_ROW}"
+    sheet.auto_filter.ref = f"A{HEADER_ROW}:{get_column_letter(len(headers))}{row_count + HEADER_ROW}"
     sheet.sheet_view.showGridLines = False
     sheet.sheet_properties.tabColor = MALLARD_BLUE
 
-    for cell in sheet[1]:
+    note_cell = sheet.cell(row=1, column=1)
+    note_cell.font = note_font
+    note_cell.fill = note_fill
+    note_cell.border = border
+    note_cell.alignment = left
+    sheet.row_dimensions[1].height = 34
+
+    for cell in sheet[HEADER_ROW]:
         cell.font = header_font
         cell.fill = header_fill
         cell.border = border
@@ -107,13 +128,13 @@ def apply_styles(sheet, headers: List[str], row_count: int) -> None:
     header_index = {name: idx + 1 for idx, name in enumerate(headers)}
     production_col = header_index.get("Production")
     name_col = header_index.get("Name")
-    avg_col = header_index.get("AverageExpectedFP")
+    avg_col = header_index.get("Average Expected FP")
 
-    for row_idx in range(2, row_count + 2):
+    for row_idx in range(DATA_START_ROW, row_count + DATA_START_ROW):
         band_fill = PatternFill(
             fill_type="solid",
-            start_color=ROW_BAND_FILLS[(row_idx - 2) % 2],
-            end_color=ROW_BAND_FILLS[(row_idx - 2) % 2],
+            start_color=ROW_BAND_FILLS[(row_idx - DATA_START_ROW) % 2],
+            end_color=ROW_BAND_FILLS[(row_idx - DATA_START_ROW) % 2],
         )
         sheet.row_dimensions[row_idx].height = 30
         for col_idx in range(1, len(headers) + 1):
@@ -134,8 +155,8 @@ def apply_styles(sheet, headers: List[str], row_count: int) -> None:
             production_cell.alignment = left
 
     if avg_col is not None and row_count > 0:
-        start = f"{get_column_letter(avg_col)}2"
-        end = f"{get_column_letter(avg_col)}{row_count + 1}"
+        start = f"{get_column_letter(avg_col)}{DATA_START_ROW}"
+        end = f"{get_column_letter(avg_col)}{row_count + HEADER_ROW}"
         avg_range = f"{start}:{end}"
         sheet.conditional_formatting.add(
             avg_range,
@@ -155,27 +176,69 @@ def apply_styles(sheet, headers: List[str], row_count: int) -> None:
             Rule(
                 type="expression",
                 formula=[
-                    f"{start}>=(PERCENTILE(${get_column_letter(avg_col)}$2:${get_column_letter(avg_col)}${row_count + 1},0.85))"
+                    f"{start}>=(PERCENTILE(${get_column_letter(avg_col)}${DATA_START_ROW}:${get_column_letter(avg_col)}${row_count + HEADER_ROW},0.85))"
                 ],
                 dxf=DifferentialStyle(font=light_value_font),
             ),
         )
 
     top_fill = PatternFill(fill_type="solid", start_color="E1EBDD", end_color="E1EBDD")
-    for row_idx in range(2, min(row_count + 2, 7)):
+    for row_idx in range(DATA_START_ROW, min(row_count + DATA_START_ROW, DATA_START_ROW + 5)):
         for col_idx in range(1, len(headers) + 1):
             sheet.cell(row=row_idx, column=col_idx).fill = top_fill
 
 
+def apply_plain_styles(sheet, headers: List[str], row_count: int) -> None:
+    note_font = Font(name="Calibri", size=11, italic=True, color="1F1F1F")
+    note_fill = PatternFill(fill_type="solid", start_color="F7F7F7", end_color="F7F7F7")
+    header_font = Font(name="Calibri", size=11, bold=True, color="1F1F1F")
+    header_fill = PatternFill(fill_type="solid", start_color="EDEDED", end_color="EDEDED")
+    body_font = Font(name="Calibri", size=11, color="1F1F1F")
+    thin = Side(style="thin", color="D9D9D9")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="top", wrap_text=True)
+
+    sheet.freeze_panes = f"A{DATA_START_ROW}"
+    sheet.auto_filter.ref = f"A{HEADER_ROW}:{get_column_letter(len(headers))}{row_count + HEADER_ROW}"
+
+    note_cell = sheet.cell(row=1, column=1)
+    note_cell.font = note_font
+    note_cell.fill = note_fill
+    note_cell.border = border
+    note_cell.alignment = left
+    sheet.row_dimensions[1].height = 34
+
+    for cell in sheet[HEADER_ROW]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+        cell.alignment = center
+
+    for row_idx in range(DATA_START_ROW, row_count + DATA_START_ROW):
+        sheet.row_dimensions[row_idx].height = 45
+        for col_idx, header in enumerate(headers, start=1):
+            cell = sheet.cell(row=row_idx, column=col_idx)
+            cell.font = body_font
+            cell.border = border
+            if header in NUMERIC_COLUMNS:
+                cell.alignment = right
+            elif header == "Production":
+                cell.alignment = left
+            else:
+                cell.alignment = center
+
+
 def adjust_widths(sheet, headers: List[str], rows: List[Dict[str, str]]) -> None:
     width_limits = {
-        "AverageExpectedFP": 18,
-        "BaseFP": 12,
+        "Average Expected FP": 20,
+        "Base FP": 12,
         "Name": 34,
         "Level": 9,
         "Age": 9,
         "Count": 9,
-        "PassiveFPBoost": 16,
+        "Passive FP Boost": 17,
         "Production": 100,
     }
     for col_idx, header in enumerate(headers, start=1):
@@ -187,26 +250,32 @@ def adjust_widths(sheet, headers: List[str], rows: List[Dict[str, str]]) -> None
         sheet.column_dimensions[get_column_letter(col_idx)].width = width
 
 
-def write_workbook(rows: List[Dict[str, str]], output_path: Path, source_path: Path) -> None:
+def write_workbook(rows: List[Dict[str, str]], output_path: Path, source_path: Path, *, plain: bool = False) -> None:
     workbook = Workbook()
     sheet = workbook.active
     headers = list(rows[0].keys()) if rows else [
-        "AverageExpectedFP",
-        "BaseFP",
+        "Average Expected FP",
+        "Base FP",
         "Name",
         "Level",
         "Age",
         "Count",
-        "PassiveFPBoost",
+        "Passive FP Boost",
         "Production",
     ]
     sheet.title = sheet_title_from_path(source_path)
+    sheet.append([REPORT_EXPLANATION])
+    if headers:
+        sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
     sheet.append(headers)
 
     for row in rows:
         sheet.append([excel_value(header, row.get(header, "")) for header in headers])
 
-    apply_styles(sheet, headers, len(rows))
+    if plain:
+        apply_plain_styles(sheet, headers, len(rows))
+    else:
+        apply_styles(sheet, headers, len(rows))
     adjust_widths(sheet, headers, rows)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -222,7 +291,7 @@ def main() -> None:
         else input_path.with_suffix(".xlsx")
     )
     rows = load_tsv(input_path)
-    write_workbook(rows, output_path, input_path)
+    write_workbook(rows, output_path, input_path, plain=args.plain)
 
 
 if __name__ == "__main__":

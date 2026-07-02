@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate age-aware FP reports from a map export using input/ref/zpwd-ref as reference."""
+"""Generate Blue Galaxy collection recommendation reports from a map export."""
 from __future__ import annotations
 
 import argparse
@@ -41,13 +41,13 @@ AGE_BY_LEVEL: Dict[int, Tuple[str, str]] = {
 }
 
 FIELDNAMES_AVERAGE_FP = [
-    "AverageExpectedFP",
-    "BaseFP",
+    "Average Expected FP",
+    "Base FP",
     "Name",
     "Level",
     "Age",
     "Count",
-    "PassiveFPBoost",
+    "Passive FP Boost",
     "Production",
 ]
 
@@ -74,6 +74,8 @@ RESOURCE_LABELS = {
     "random_special_good_up_to_age": "random special good up to age",
     "clan_power": "guild power",
 }
+
+REPORT_NAME = "Blue_Galaxy_Collection_Recommendation_Report"
 
 
 @dataclass(frozen=True)
@@ -110,7 +112,7 @@ def parse_args() -> argparse.Namespace:
     output_dir = base_dir / "output"
 
     parser = argparse.ArgumentParser(
-        description="Generate leveled-building FP reports from a map export and input/ref/zpwd-ref."
+        description="Generate Blue Galaxy collection recommendation reports from a map export and input/ref/zpwd-ref."
     )
     parser.add_argument(
         "--input",
@@ -119,13 +121,13 @@ def parse_args() -> argparse.Namespace:
         dest="map_file",
         type=Path,
         default=None,
-        help="Path to the map JSON file. Explicit input writes TSV only.",
+        help="Path to the map JSON file. Explicit input writes a plain formatted XLSX workbook.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=output_dir,
-        help="Directory for generated TSV reports.",
+        help="Directory for generated XLSX reports.",
     )
     return parser.parse_args()
 
@@ -139,16 +141,22 @@ def output_basename(map_file: Path) -> str:
     return map_file.name if map_file.suffix == "" else map_file.stem
 
 
-def convert_tsv_to_excel(tsv_path: Path) -> Path:
+def output_report_stem(map_file: Path) -> str:
+    basename = output_basename(map_file)
+    capitalized_basename = basename[:1].upper() + basename[1:] if basename else basename
+    return f"{capitalized_basename}_{REPORT_NAME}"
+
+
+def convert_tsv_to_excel(tsv_path: Path, *, plain: bool = False) -> Path:
     base_dir = Path(__file__).resolve().parents[1]
     converter_path = base_dir / "script" / "average_fp_tsv_to_excel.py"
     venv_python = base_dir / ".venv" / "bin" / "python"
     python_executable = venv_python if venv_python.exists() else Path(sys.executable)
     xlsx_path = tsv_path.with_suffix(".xlsx")
-    subprocess.run(
-        [str(python_executable), str(converter_path), "--input", str(tsv_path), "--output", str(xlsx_path)],
-        check=True,
-    )
+    command = [str(python_executable), str(converter_path), "--input", str(tsv_path), "--output", str(xlsx_path)]
+    if plain:
+        command.append("--plain")
+    subprocess.run(command, check=True)
     return xlsx_path
 
 
@@ -660,13 +668,13 @@ def write_average_expected_fp_report(rows: Sequence[ReportRow], output_path: Pat
         average_fp = (base_fp * multiplier).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         sortable.append(
             {
-                "AverageExpectedFP": str(int(average_fp)),
-                "BaseFP": format_decimal(base_fp),
+                "Average Expected FP": str(int(average_fp)),
+                "Base FP": format_decimal(base_fp),
                 "Name": row.name,
                 "Level": row.key.level,
                 "Age": row.age_code,
                 "Count": row.count,
-                "PassiveFPBoost": format_decimal(row.passive_fp_boost),
+                "Passive FP Boost": format_decimal(row.passive_fp_boost),
                 "Production": row.production,
                 "_sort_average_fp": average_fp,
                 "_sort_base_fp": base_fp,
@@ -700,13 +708,9 @@ def main() -> None:
     rows = build_rows(counts, entity_defs, name_by_id)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    tsv_path = args.output_dir / (
-        f"{output_basename(map_file)}_buildings_level_age_production_sorted_by_average_expected_fp.tsv"
-    )
+    tsv_path = args.output_dir / f"{output_report_stem(map_file)}.tsv"
     write_average_expected_fp_report(rows, tsv_path)
-    if explicit_input:
-        return
-    convert_tsv_to_excel(tsv_path)
+    convert_tsv_to_excel(tsv_path, plain=explicit_input)
     tsv_path.unlink(missing_ok=True)
 
 
