@@ -13,7 +13,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZipFile
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from openpyxl import Workbook
 from openpyxl.formatting.rule import ColorScaleRule, FormulaRule
@@ -89,7 +89,7 @@ XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationshi
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
-DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 0.0
+DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
 DEFAULT_ESTIMATED_GUILD_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_MEDAL_PRODUCTION = 400000.0
 DEFAULT_FIGHTING_GBG_GE_FOCUS = 2
@@ -102,8 +102,8 @@ OVERALL_FIGHTING_WEIGHT_BUDGET = 30.0
 OVERALL_NON_FIGHTING_WEIGHT_BUDGET = 30.0
 OVERALL_TOTAL_WEIGHT_CELL = "$B$6"
 FIGHTING_TOTAL_WEIGHT_CELL = "$C$6"
-FP_GOODS_TOTAL_WEIGHT_CELL = "$D$6"
-QI_TOTAL_WEIGHT_CELL = "$E$6"
+FP_GOODS_TOTAL_WEIGHT_CELL = "$E$6"
+QI_TOTAL_WEIGHT_CELL = "$G$6"
 ESTIMATED_FP_PRODUCTION_CELL = "$B$6"
 ESTIMATED_GOODS_PRODUCTION_CELL = "$B$7"
 ESTIMATED_GUILD_GOODS_PRODUCTION_CELL = "$B$8"
@@ -128,6 +128,7 @@ FIGHTING_WEIGHT_OVERRIDE_COLUMN = 18
 FP_GOODS_WEIGHT_OVERRIDE_COLUMN = 19
 QI_WEIGHT_OVERRIDE_COLUMN = 20
 ADVANCED_WEIGHT_MODE_CELL = "$B$7"
+NET_HAPPINESS_ATTR = "net_happiness"
 OVERALL_FIGHTING_WEIGHT_GROUP = "Fighting"
 OVERALL_NON_FIGHTING_WEIGHT_GROUP = "Non-Fighting"
 OVERALL_FIGHTING_ALL_WEIGHT_GROUP = "Fighting: All"
@@ -160,19 +161,22 @@ OVERALL_QI_START_ATTRS = {
 }
 OVERALL_QI_START_RAW_WEIGHT = 0.25
 SIGNED_CENTERED_ATTRS = {
-    "happiness",
+    NET_HAPPINESS_ATTR,
+    "happiness_demanded",
     "static_happiness",
     "static_population",
 }
 HIDDEN_ZERO_WEIGHT_ADVANCED_CONTROL_LABELS = {
     "Autopolivatepriority Priority",
-    "Boost: Coin Production All",
-    "Boost: Forge Points Production All",
-    "Boost: Goods Production All",
-    "Boost: Guild Goods Production All",
-    "Boost: Medal Production All",
-    "Boost: Special Goods Production All",
-    "Boost: Supply Production All",
+    "Boost: Coin production percentage",
+    "Boost: Forge points production percentage",
+    "Boost: Goods production percentage",
+    "Boost: Guild goods production percentage",
+    "Boost: Medal production percentage",
+    "Boost: Special goods production percentage",
+    "Boost: Supply production percentage",
+    "Gross Happiness",
+    "Happiness Demand",
     "Limited Config Collectionamount",
     "Limited Config Expire Time (days)",
     "Multiplycollection Chance",
@@ -622,6 +626,17 @@ def attr_label(key: str) -> str:
         return "Footprint Area"
     if is_road_connection_attr_key(key):
         return REQUIRE_ROAD_HEADER
+    boost_production_labels = {
+        "boost_coin_production_all": "Boost: Coin production percentage",
+        "boost_forge_points_production_all": "Boost: Forge points production percentage",
+        "boost_goods_production_all": "Boost: Goods production percentage",
+        "boost_guild_goods_production_all": "Boost: Guild goods production percentage",
+        "boost_medal_production_all": "Boost: Medal production percentage",
+        "boost_special_goods_production_all": "Boost: Special goods production percentage",
+        "boost_supply_production_all": "Boost: Supply production percentage",
+    }
+    if key in boost_production_labels:
+        return boost_production_labels[key]
     if key == "prod_unit_current_age":
         return "Production: Current Age Unit"
     if key == "prod_unit_next_age":
@@ -633,7 +648,11 @@ def attr_label(key: str) -> str:
     if key == "generic_limited_config_expiretime":
         return "Limited Config Expire Time (days)"
     if key == "happiness":
-        return "Happiness"
+        return "Gross Happiness"
+    if key == NET_HAPPINESS_ATTR:
+        return "Net Happiness"
+    if key == "happiness_demanded":
+        return "Happiness Demand"
     if key == "static_population":
         return "Population"
     text = key.replace("prod_resource_", "Production: ")
@@ -653,19 +672,120 @@ def attr_label(key: str) -> str:
     return text
 
 
+def overall_ranking_attr_label(key: str) -> str:
+    if key == NET_HAPPINESS_ATTR:
+        return "Net Happiness"
+    if key == "prod_resource_money":
+        return "Base Production: Coin"
+    if key == "prod_resource_supplies":
+        return "Base Production: Supplies"
+    return attr_label(key)
+
+
+def overall_ranking_display_attr_keys(attr_keys: Sequence[str]) -> List[str]:
+    display_keys: List[str] = []
+    for key in attr_keys:
+        if key in {"happiness_demanded", NET_HAPPINESS_ATTR}:
+            continue
+        display_keys.append(key)
+        if key == "happiness" and NET_HAPPINESS_ATTR in attr_keys:
+            display_keys.append(NET_HAPPINESS_ATTR)
+    return display_keys
+
+
+def display_attr_value(record: Dict[str, Any], key: str) -> float:
+    if key == NET_HAPPINESS_ATTR:
+        attrs = record.get("attrs", {})
+        if isinstance(attrs, dict):
+            return float(
+                attrs.get(
+                    NET_HAPPINESS_ATTR,
+                    float(attrs.get("happiness", 0.0)) + float(attrs.get("happiness_demanded", 0.0)),
+                )
+            )
+        return 0.0
+    return effective_attr_value(record, key)
+
+
 def attr_description(key: str) -> str:
     if key == "area":
         return "Footprint in tiles; lower is usually better."
     if is_road_connection_attr_key(key):
-        return "Whether the building requires a road connection."
-    if key == "generic_limited_config_expiretime":
-        return "Limited building expiration duration, converted from seconds to days."
+        return "Road requirement flag. Buildings that require a road are treated as one extra tile in efficiency rankings."
+    if key.startswith("boost_att_boost_") or key.startswith("boost_def_boost_"):
+        stat = "attack" if key.startswith("boost_att_boost_") else "defense"
+        army = "blue/defending army" if "_defender_" in key else "red/attacking army"
+        if key.endswith("_battleground"):
+            scope = "Guild Battlegrounds"
+        elif key.endswith("_guild_expedition"):
+            scope = "Guild Expedition"
+        elif key.endswith("_guild_raids"):
+            scope = "QI"
+        else:
+            scope = "all non-QI combat"
+        return f"Percentage {stat} boost for the {army} in {scope}."
+    production_boost_descriptions = {
+        "boost_coin_production_all": "Percentage boost to coin production. Used with the Main Controls base coin estimate when calculating effective coin output.",
+        BOOST_FP_ATTR: "Percentage boost to Forge Point production. Used with the Main Controls base FP estimate when calculating effective FP output.",
+        BOOST_GOODS_ATTR: "Percentage boost to regular goods production. Applies only to regular goods, not special goods or guild goods.",
+        BOOST_GUILD_GOODS_ATTR: "Percentage boost to guild goods production. Applies only to guild goods.",
+        BOOST_MEDALS_ATTR: "Percentage boost to medal production. Used with the Main Controls base medal estimate when calculating effective medal output.",
+        BOOST_SPECIAL_GOODS_ATTR: "Percentage boost to special goods production. Applies only to special goods.",
+        "boost_supply_production_all": "Percentage boost to supply production. This is shown for reference and defaults to zero weight.",
+    }
+    if key in production_boost_descriptions:
+        return production_boost_descriptions[key]
+    qi_boost_descriptions = {
+        "boost_guild_raids_action_points_capacity_all": "Additional QI action point capacity provided by the building.",
+        "boost_guild_raids_action_points_collection_all": "Additional QI action points collected from the building.",
+        "boost_guild_raids_coins_production_all": "Percentage boost to QI coin production.",
+        "boost_guild_raids_coins_start_all": "Starting QI coins granted by the building.",
+        "boost_guild_raids_goods_start_all": "Starting QI goods granted by the building.",
+        "boost_guild_raids_supplies_production_all": "Percentage boost to QI supply production.",
+        "boost_guild_raids_supplies_start_all": "Starting QI supplies granted by the building.",
+        "boost_guild_raids_units_start_all": "Starting QI units granted by the building.",
+    }
+    if key in qi_boost_descriptions:
+        return qi_boost_descriptions[key]
+    production_descriptions = {
+        PROD_FP_ATTR: "Daily-equivalent Forge Points from the building, including motivated production options where applicable.",
+        PROD_GOODS_ATTR: "Daily-equivalent regular goods total. Includes named goods, random/all goods by age, special goods up to age, and era_goods; excludes guild goods.",
+        PROD_GUILD_GOODS_ATTR: "Daily-equivalent guild goods produced for the guild treasury.",
+        PROD_MEDALS_ATTR: "Daily-equivalent medals from the building.",
+        "prod_resource_money": "Base daily-equivalent coin production from the building before percentage boosts.",
+        "prod_resource_supplies": "Base daily-equivalent supply production from the building before percentage boosts.",
+        "prod_resource_all_goods_of_age": "Daily-equivalent current-age regular goods bundle. Already rolls into Goods Total.",
+        "prod_resource_all_goods_of_next_age": "Daily-equivalent next-age regular goods bundle. Already rolls into Goods Total.",
+        "prod_resource_all_goods_of_previous_age": "Daily-equivalent previous-age regular goods bundle. Already rolls into Goods Total.",
+        "prod_resource_special_goods_up_to_age": "Daily-equivalent special goods up to the selected age. Already rolls into Goods Total.",
+        "prod_resource_blueprint": "Daily-equivalent blueprint reward count.",
+        "prod_resource_premium": "Daily-equivalent diamonds from the building.",
+        "prod_unit_current_age": "Current-age military units produced per day-equivalent collection.",
+        "prod_unit_next_age": "Next-age military units produced per day-equivalent collection.",
+        "prod_unit_rogue": "Rogue units produced per day-equivalent collection.",
+    }
+    if key in production_descriptions:
+        return production_descriptions[key]
+    generic_descriptions = {
+        "generic_autopolivatepriority_priority": "Internal auto-polivate priority from the reference data. Hidden and defaults to zero weight.",
+        "generic_limited_config_collectionamount": "Limited-building collection count from reference config. Hidden and defaults to zero weight.",
+        "generic_limited_config_expiretime": "Limited-building expiration duration, converted from seconds to days. Hidden and defaults to zero weight.",
+        "generic_multiplycollection_chance": "Chance for a multiply-collection effect from reference config. Hidden and defaults to zero weight.",
+        "generic_multiplycollection_charges": "Number of charges for a multiply-collection effect. Hidden and defaults to zero weight.",
+        "generic_multiplycollection_factor": "Multiplier applied by a multiply-collection effect. Hidden and defaults to zero weight.",
+    }
+    if key in generic_descriptions:
+        return generic_descriptions[key]
     if key == "happiness":
-        return "Net happiness: provided happiness is positive; demanded happiness is negative."
+        return "Gross happiness provided by the building."
+    if key == NET_HAPPINESS_ATTR:
+        return "Gross happiness minus happiness demand; this is the weighted happiness value."
+    if key == "happiness_demanded":
+        return "Happiness demanded by the building, stored as a negative value."
     if key == "static_population":
         return "Net population: provided population is positive; required population is negative."
     if key.startswith("prod_"):
-        return "Best observed daily production value from reference production options."
+        return "Daily-equivalent production value from the best matching reference production option."
     if key.startswith("boost_"):
         return "Reference boost value for the selected age."
     if key.startswith("cost_"):
@@ -742,7 +862,11 @@ def default_weight_for_attr(key: str) -> float:
         return 0.75
     if key.startswith("static_population"):
         return 0.5
-    if key.startswith("static_happiness") or key == "happiness" or key.startswith("happiness_provided"):
+    if key == NET_HAPPINESS_ATTR:
+        return 0.5
+    if key in {"happiness", "happiness_demanded"}:
+        return 0.0
+    if key.startswith("static_happiness") or key.startswith("happiness_provided"):
         return 0.5
     if "ranking_points" in key:
         return 0.1
@@ -1422,8 +1546,10 @@ def collect_happiness(attrs: Dict[str, float], entity: Dict[str, Any], era: str)
         if numeric is not None:
             if path == ["provided"]:
                 add_attr(attrs, "happiness", numeric)
+                add_attr(attrs, NET_HAPPINESS_ATTR, numeric)
             elif path == ["demanded"]:
-                add_attr(attrs, "happiness", -numeric)
+                add_attr(attrs, "happiness_demanded", -numeric)
+                add_attr(attrs, NET_HAPPINESS_ATTR, -numeric)
             else:
                 add_attr(attrs, "happiness_" + "_".join(path), numeric)
             return
@@ -2843,7 +2969,11 @@ def populate_formula_caches(
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
                 elif item.filename == sheet_files.get(OVERALL_EFFICIENCY_SHEET):
                     root = ET.fromstring(data)
-                    display_attr_keys = [key for key in attr_keys if not is_road_connection_attr_key(key)]
+                    display_attr_keys = [
+                        key
+                        for key in overall_ranking_display_attr_keys(attr_keys)
+                        if not is_road_connection_attr_key(key)
+                    ]
                     attr_start = 9
                     source_row_col = attr_start + len(display_attr_keys) + 4
                     top_indices = sorted(
@@ -2863,7 +2993,7 @@ def populate_formula_caches(
                             set_formula_cache(
                                 root,
                                 f"{get_column_letter(attr_idx)}{output_idx}",
-                                effective_attr_value(record, key),
+                                display_attr_value(record, key),
                             )
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
                 elif item.filename == sheet_files.get(FIGHTING_SCORE_SHEET):
@@ -3296,8 +3426,14 @@ def write_advanced_controls_sheet(
     sheet.row_dimensions[4].height = 45
     sheet["A5"] = "Total active weight"
     sheet["A5"].font = Font(bold=True)
-    total_headers = ("Overall", "Fighting", "FP/Goods", "QI")
-    for col_idx, header in enumerate(total_headers, start=2):
+    total_headers = (
+        (OVERALL_TOTAL_WEIGHT_CELL, "Overall"),
+        (FIGHTING_TOTAL_WEIGHT_CELL, "Fighting"),
+        (FP_GOODS_TOTAL_WEIGHT_CELL, "FP/Goods"),
+        (QI_TOTAL_WEIGHT_CELL, "QI"),
+    )
+    for total_cell, header in total_headers:
+        col_idx = sheet[total_cell].column
         cell = sheet.cell(5, col_idx, header)
         cell.font = Font(bold=True)
         cell.fill = header_fill
@@ -3464,8 +3600,8 @@ def write_advanced_controls_sheet(
         for cell in row:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
     sheet["B4"].alignment = Alignment(vertical="top", wrap_text=True)
-    for col_idx in range(2, 6):
-        sheet.cell(5, col_idx).alignment = Alignment(horizontal="right", vertical="top", wrap_text=True)
+    for total_cell, _header in total_headers:
+        sheet.cell(5, sheet[total_cell].column).alignment = Alignment(horizontal="right", vertical="top", wrap_text=True)
     sheet[QI_FIGHTER_ROLE_CELL].alignment = Alignment(vertical="top", wrap_text=False)
 
 
@@ -3868,7 +4004,8 @@ def write_overall_ranking_view_sheet(
         "Fragment / Reward Production",
         "Source Row",
     ]
-    raw_headers = [attr_label(key) for key in attr_keys]
+    display_attr_keys = overall_ranking_display_attr_keys(attr_keys)
+    raw_headers = [overall_ranking_attr_label(key) for key in display_attr_keys]
     all_headers = base_headers + raw_headers + metadata_headers
 
     title_fill = PatternFill("solid", fgColor=TITLE_FILL_COLOR)
@@ -3886,8 +4023,8 @@ def write_overall_ranking_view_sheet(
     data_start = header_row + 1
     data_end = data_start + row_count - 1
     raw_start = len(base_headers) + 1
-    raw_end = raw_start + len(attr_keys) - 1
-    metadata_start = raw_start + len(attr_keys)
+    raw_end = raw_start + len(display_attr_keys) - 1
+    metadata_start = raw_start + len(display_attr_keys)
     source_metadata_start = RAW_START_COLUMN + len(attr_keys)
     source_row_col = metadata_start + len(metadata_headers) - 1
     source_row_cell_col = get_column_letter(source_row_col)
@@ -3934,9 +4071,21 @@ def write_overall_ranking_view_sheet(
                 sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell})&"")')
             else:
                 sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
-        for attr_idx, key in enumerate(attr_keys, start=raw_start):
-            source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+        for attr_idx, key in enumerate(display_attr_keys, start=raw_start):
+            if key == NET_HAPPINESS_ATTR:
+                gross_col = get_column_letter(RAW_START_COLUMN + attr_keys.index("happiness"))
+                demand_expr = "0"
+                if "happiness_demanded" in attr_keys:
+                    demand_col = get_column_letter(RAW_START_COLUMN + attr_keys.index("happiness_demanded"))
+                    demand_expr = f"INDEX('{OVERALL_SOURCE_SHEET}'!${demand_col}:${demand_col},${source_row_cell})"
+                sheet.cell(
+                    row_idx,
+                    attr_idx,
+                    f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${gross_col}:${gross_col},${source_row_cell})+{demand_expr})',
+                )
+            else:
+                source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
+                sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     for row in sheet.iter_rows(min_row=data_start, max_row=data_end, min_col=1, max_col=len(all_headers)):
         for cell in row:
@@ -3963,7 +4112,7 @@ def write_overall_ranking_view_sheet(
     for col_idx in range(raw_start, raw_end + 1):
         column_letter = get_column_letter(col_idx)
         sheet.column_dimensions[column_letter].width = 18
-        if is_road_connection_attr_key(attr_keys[col_idx - raw_start]):
+        if is_road_connection_attr_key(display_attr_keys[col_idx - raw_start]):
             sheet.column_dimensions[column_letter].hidden = True
     metadata_widths = [18, 18, 17, 24, 48, 28, 92, 10]
     for offset, width in enumerate(metadata_widths):
@@ -4502,8 +4651,20 @@ def write_ranked_score_sheet(
             else:
                 sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(display_attr_keys, start=attr_start):
-            source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            if key == NET_HAPPINESS_ATTR:
+                gross_col = get_column_letter(RAW_START_COLUMN + attr_keys.index("happiness"))
+                demand_expr = "0"
+                if "happiness_demanded" in attr_keys:
+                    demand_col = get_column_letter(RAW_START_COLUMN + attr_keys.index("happiness_demanded"))
+                    demand_expr = f"INDEX('{OVERALL_SOURCE_SHEET}'!${demand_col}:${demand_col},${source_row_cell})"
+                sheet.cell(
+                    row_idx,
+                    attr_idx,
+                    f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${gross_col}:${gross_col},${source_row_cell})+{demand_expr})',
+                )
+            else:
+                source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
+                sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -4573,6 +4734,7 @@ def write_ranked_efficiency_sheet(
     attr_keys: Sequence[str],
     display_attr_keys: Sequence[str],
     top_n: int = FIGHTING_TOP_N,
+    attr_label_func: Callable[[str], str] = attr_label,
 ) -> None:
     sheet = workbook.create_sheet(sheet_name)
     sheet.sheet_view.showGridLines = False
@@ -4603,7 +4765,7 @@ def write_ranked_efficiency_sheet(
             "Area",
             "Adjusted Area",
         ]
-        + [attr_label(key) for key in display_attr_keys]
+        + [attr_label_func(key) for key in display_attr_keys]
         + [
             "Type",
             "Selected Age",
@@ -4671,8 +4833,20 @@ def write_ranked_efficiency_sheet(
             else:
                 sheet.cell(row_idx, output_col, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
         for attr_idx, key in enumerate(display_attr_keys, start=attr_start):
-            source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
-            sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
+            if key == NET_HAPPINESS_ATTR:
+                gross_col = get_column_letter(RAW_START_COLUMN + attr_keys.index("happiness"))
+                demand_expr = "0"
+                if "happiness_demanded" in attr_keys:
+                    demand_col = get_column_letter(RAW_START_COLUMN + attr_keys.index("happiness_demanded"))
+                    demand_expr = f"INDEX('{OVERALL_SOURCE_SHEET}'!${demand_col}:${demand_col},${source_row_cell})"
+                sheet.cell(
+                    row_idx,
+                    attr_idx,
+                    f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${gross_col}:${gross_col},${source_row_cell})+{demand_expr})',
+                )
+            else:
+                source_col = get_column_letter(RAW_START_COLUMN + attr_keys.index(key))
+                sheet.cell(row_idx, attr_idx, f'=IF(${source_row_cell}="","",INDEX(\'{OVERALL_SOURCE_SHEET}\'!${source_col}:${source_col},${source_row_cell}))')
 
     max_col = len(headers)
     for row in sheet.iter_rows(min_row=data_start, max_row=max(output_data_end, header_row), min_col=1, max_col=max_col):
@@ -5399,9 +5573,11 @@ def write_about_sheet(
         ("Advanced controls", "Use Advanced Controls only for fine tuning. Leave Weight mode as Default to restore generated weights, or switch to Custom and enter yellow override values in the right-side override columns. A higher override weight makes that attribute matter more; zero turns it off."),
         ("Building source category filter", "Use the Main Controls source category dropdown to show all buildings or only a color-coded reward/event category on the ranking sheets."),
         ("Production boost conversion", "Boost percentages use matching Main Controls estimates: regular goods boost uses regular goods production, special goods boost uses special goods production, guild goods boost uses guild goods production, and FP/medal boosts use their own totals."),
+        ("Base coin and supplies production", "Base Production: Coin and Base Production: Supplies on the Overall Ranking and Overall Efficiency Ranking sheets do not include percentage-based boosts."),
         ("Goods total", "Regular goods rollup: named goods, all/random goods of previous/current/next age, special goods up to age, and era_goods. It excludes FP, medals, money, supplies, guild goods, and settlement resources."),
         ("Guild goods", "Guild goods are tracked separately from regular goods, so changing one estimate does not change the other."),
-        ("Overall ranking", f"Use {OVERALL_RANKING_SHEET} for a broad building comparison across production, fighting, and other weighted attributes. Overall fighting uses fixed sub-budgets for all-combat, GBG, GE, QI, and unit production, and those sub-budgets follow the Main Controls fighting focus and QI fighter role settings."),
+        ("Happiness", "Gross Happiness shows happiness provided by the building. Net Happiness subtracts internal happiness demand; demand is still tracked as a negative scoring input but is not shown as a separate ranking column."),
+        ("Overall ranking", f"Use {OVERALL_RANKING_SHEET} for a broad building comparison across production, fighting, and other weighted attributes. Overall fighting uses fixed sub-budgets for all non-QI combat, GBG, GE, QI, and unit production, and those sub-budgets follow the Main Controls fighting focus and QI fighter role settings."),
         ("Production normalization", "Major production scores are anchored to the Main Controls production assumptions so one extreme building does not define the full scoring range by itself."),
         ("Footprint", "Overall Ranking does not directly score footprint. Overall Efficiency divides Overall Score by adjusted area, adding one tile when a road connection is required."),
         ("Efficiency rankings", "Efficiency sheets favor buildings that score well for their footprint. Buildings that require a road connection are treated as needing one extra tile."),
@@ -5478,8 +5654,9 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
         "Overall efficiency is Overall Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection.",
         records,
         attr_keys,
-        attr_keys,
+        overall_ranking_display_attr_keys(attr_keys),
         top_n=OVERALL_TOP_N,
+        attr_label_func=overall_ranking_attr_label,
     )
     write_fighting_scores_sheet(workbook, records, attr_keys)
     write_ranked_score_sheet(
