@@ -70,9 +70,9 @@ OVERALL_SCORE_SHEET = "Overall Scores"
 OVERALL_EFFICIENCY_SHEET = "Overall Efficiency Ranking"
 FIGHTING_SCORE_SHEET = "Fighting Scores"
 FIGHTING_EFFICIENCY_SHEET = "Fighting Efficiency Ranking"
-FP_GOODS_SCORE_SHEET = "FP Goods Scores"
-FP_GOODS_PRODUCTION_SHEET = "FP Goods Production Ranking"
-FP_GOODS_EFFICIENCY_SHEET = "FP Goods Efficiency Ranking"
+FP_GOODS_SCORE_SHEET = "Farming Scores"
+FP_GOODS_PRODUCTION_SHEET = "Farming Ranking (WIP)"
+FP_GOODS_EFFICIENCY_SHEET = "Farming Efficiency (WIP)"
 QI_SCORE_SHEET = "QI Scores"
 QI_RANKING_SHEET = "QI Ranking"
 QI_EFFICIENCY_SHEET = "QI Efficiency Ranking"
@@ -81,12 +81,15 @@ ADVANCED_CONTROLS_SHEET = "Advanced Controls"
 AGE_OPTIONS_SHEET = "Age Options"
 CATEGORY_OPTIONS_SHEET = "Category Options"
 AGE_DATA_SHEET = "Age Data"
+GOODS_RESOURCE_AUDIT_SHEET = "Goods Resource Audit"
 CONTROLS_SHEET_REF = f"'{CONTROLS_SHEET}'"
 ADVANCED_CONTROLS_SHEET_REF = f"'{ADVANCED_CONTROLS_SHEET}'"
 AGE_DATA_SHEET_REF = f"'{AGE_DATA_SHEET}'"
 XLSX_MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+# Increment this version before each pushed code change to this workbook generator.
+WORKBOOK_VERSION = "1.0.42"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
@@ -97,7 +100,9 @@ DEFAULT_FIGHTING_RED_BLUE_FOCUS = 3
 DEFAULT_FIGHTING_UNIT_AGE_FOCUS = 3
 DEFAULT_FIGHTING_ATTACK_DEFENSE_FOCUS = 2
 DEFAULT_PRODUCTION_FP_GOODS_FOCUS = 2
-DEFAULT_FIGHTING_WEIGHT_SCALE = 60.0 / 8.75
+FIGHTING_CURRENT_NEXT_UNIT_COMBINED_RAW_WEIGHT = 0.5
+FIGHTING_GBG_GE_COMBINED_RAW_WEIGHT = 3.0
+DEFAULT_FIGHTING_WEIGHT_SCALE = 60.0 / 9.5
 OVERALL_FIGHTING_WEIGHT_BUDGET = 30.0
 OVERALL_NON_FIGHTING_WEIGHT_BUDGET = 30.0
 OVERALL_TOTAL_WEIGHT_CELL = "$B$6"
@@ -183,6 +188,12 @@ HIDDEN_ZERO_WEIGHT_ADVANCED_CONTROL_LABELS = {
     "Multiplycollection Charges",
     "Multiplycollection Factor",
 }
+
+
+def is_forced_zero_weight_attr(key: str) -> bool:
+    return attr_label(key) in HIDDEN_ZERO_WEIGHT_ADVANCED_CONTROL_LABELS
+
+
 BOOST_FP_ATTR = "boost_forge_points_production_all"
 BOOST_GOODS_ATTR = "boost_goods_production_all"
 BOOST_SPECIAL_GOODS_ATTR = "boost_special_goods_production_all"
@@ -192,6 +203,18 @@ PROD_FP_ATTR = "prod_resource_strategy_points"
 PROD_GOODS_ATTR = "prod_resource_goods_total"
 PROD_GUILD_GOODS_ATTR = "prod_resource_guild_goods"
 PROD_MEDALS_ATTR = "prod_resource_medals"
+FARMING_FP_GOODS_COMBINED_RAW_WEIGHT = 40.0
+FARMING_SECONDARY_RAW_WEIGHTS = {
+    PROD_MEDALS_ATTR: 5.0,
+    NET_HAPPINESS_ATTR: 1.0,
+    "prod_resource_blueprint": 5.0,
+    "prod_resource_premium": 5.0,
+    "prod_resource_supplies": 4.0,
+}
+FARMING_RANKING_ABOUT_NOTE = (
+    "Farming Ranking (WIP) uses 40 default weight points split between FPs and Goods Total by the Production FP/Goods focus, plus 20 points across medals, net happiness, blueprints, diamonds, and supplies. Net happiness is intentionally lower than the other secondary farming weights. "
+    "The default farming ranking profile remains, with great dignity and very little closure, a work in progress. Inno’s goods production system appears to contain an infinite number of attributes and exceptions against spreadsheet stability. My current lack of motivation to age out of VF has also contributed exactly nothing to the validation effort. Additionally, the current preset weight profile may be somewhat diamond-heavy for a standard city, so please interpret it as a technical preview, and take this as an excellent opportunity to explore the Farming Override column in the Advanced Controls. 😅"
+)
 GBG_REWARD_PREFIX = "W_MultiAge_GBG"
 QI_REWARD_PREFIX = "W_MultiAge_GR"
 GE_REWARD_PREFIXES = ("W_MultiAge_Expedition", "W_MultiAge_GEX")
@@ -645,6 +668,8 @@ def attr_label(key: str) -> str:
         return "Production: Rogue"
     if key == "prod_resource_premium":
         return "Production: Diamonds/day"
+    if key == "prod_resource_money":
+        return "Production: Coins"
     if key == "generic_limited_config_expiretime":
         return "Limited Config Expire Time (days)"
     if key == "happiness":
@@ -969,22 +994,32 @@ def overall_ge_budget_formula() -> str:
 
 def fighting_gbg_weight_multiplier(focus: float = DEFAULT_FIGHTING_GBG_GE_FOCUS) -> float:
     focus = max(1.0, min(5.0, focus))
-    return 0.7 * (5.0 - focus) / 4.0
+    base_weight = default_weight_for_attr("boost_att_boost_attacker_battleground")
+    if math.isclose(base_weight, 0.0):
+        return 0.0
+    return FIGHTING_GBG_GE_COMBINED_RAW_WEIGHT * (5.0 - focus) / 4.0 / base_weight
 
 
 def fighting_ge_weight_multiplier(focus: float = DEFAULT_FIGHTING_GBG_GE_FOCUS) -> float:
     focus = max(1.0, min(5.0, focus))
-    return 1.75 * (focus - 1.0) / 4.0
+    base_weight = default_weight_for_attr("boost_att_boost_attacker_guild_expedition")
+    if math.isclose(base_weight, 0.0):
+        return 0.0
+    return FIGHTING_GBG_GE_COMBINED_RAW_WEIGHT * (focus - 1.0) / 4.0 / base_weight
 
 
 def fighting_gbg_weight_multiplier_formula() -> str:
     focus_cell = f"{CONTROLS_SHEET_REF}!{FIGHTING_GBG_GE_FOCUS_CELL}"
-    return f"0.7*(5-{focus_cell})/4"
+    combined = cached_number(FIGHTING_GBG_GE_COMBINED_RAW_WEIGHT)
+    base = cached_number(default_weight_for_attr("boost_att_boost_attacker_battleground"))
+    return f"{combined}*(5-{focus_cell})/4/{base}"
 
 
 def fighting_ge_weight_multiplier_formula() -> str:
     focus_cell = f"{CONTROLS_SHEET_REF}!{FIGHTING_GBG_GE_FOCUS_CELL}"
-    return f"1.75*({focus_cell}-1)/4"
+    combined = cached_number(FIGHTING_GBG_GE_COMBINED_RAW_WEIGHT)
+    base = cached_number(default_weight_for_attr("boost_att_boost_attacker_guild_expedition"))
+    return f"{combined}*({focus_cell}-1)/4/{base}"
 
 
 def fighting_red_focus_multiplier(focus: float = DEFAULT_FIGHTING_RED_BLUE_FOCUS) -> float:
@@ -1013,9 +1048,17 @@ def fighting_defense_focus_multiplier(focus: float = DEFAULT_FIGHTING_ATTACK_DEF
 
 def fighting_weight_for_attr(key: str) -> float:
     if key == "prod_unit_current_age":
-        return fighting_current_age_unit_focus_multiplier() * DEFAULT_FIGHTING_WEIGHT_SCALE
+        return (
+            fighting_current_age_unit_focus_multiplier()
+            * FIGHTING_CURRENT_NEXT_UNIT_COMBINED_RAW_WEIGHT
+            * DEFAULT_FIGHTING_WEIGHT_SCALE
+        )
     if key == "prod_unit_next_age":
-        return fighting_next_age_unit_focus_multiplier() * DEFAULT_FIGHTING_WEIGHT_SCALE
+        return (
+            fighting_next_age_unit_focus_multiplier()
+            * FIGHTING_CURRENT_NEXT_UNIT_COMBINED_RAW_WEIGHT
+            * DEFAULT_FIGHTING_WEIGHT_SCALE
+        )
     if key == "prod_unit_rogue":
         return 1.0 * DEFAULT_FIGHTING_WEIGHT_SCALE
     if not is_fighting_attr(key):
@@ -1115,6 +1158,35 @@ def production_goods_raw_weight_formula() -> str:
     return f"IF({focus_cell}>=3,{half}+({focus_cell}-3)/2*{half},{half}*({focus_cell}-1)/2)"
 
 
+def farming_fp_raw_weight(focus: float = DEFAULT_PRODUCTION_FP_GOODS_FOCUS) -> float:
+    focus = max(1.0, min(5.0, focus))
+    combined = FARMING_FP_GOODS_COMBINED_RAW_WEIGHT
+    if focus <= 3.0:
+        return combined - (focus - 1.0) / 2.0 * (combined / 2.0)
+    return combined / 2.0 * (5.0 - focus) / 2.0
+
+
+def farming_goods_raw_weight(focus: float = DEFAULT_PRODUCTION_FP_GOODS_FOCUS) -> float:
+    focus = max(1.0, min(5.0, focus))
+    combined = FARMING_FP_GOODS_COMBINED_RAW_WEIGHT
+    if focus >= 3.0:
+        return combined / 2.0 + (focus - 3.0) / 2.0 * (combined / 2.0)
+    return combined / 2.0 * (focus - 1.0) / 2.0
+
+
+def farming_fp_raw_weight_formula() -> str:
+    focus_cell = f"{CONTROLS_SHEET_REF}!{PRODUCTION_FP_GOODS_FOCUS_CELL}"
+    combined = cached_number(FARMING_FP_GOODS_COMBINED_RAW_WEIGHT)
+    half = cached_number(FARMING_FP_GOODS_COMBINED_RAW_WEIGHT / 2.0)
+    return f"IF({focus_cell}<=3,{combined}-({focus_cell}-1)/2*{half},{half}*(5-{focus_cell})/2)"
+
+
+def farming_goods_raw_weight_formula() -> str:
+    focus_cell = f"{CONTROLS_SHEET_REF}!{PRODUCTION_FP_GOODS_FOCUS_CELL}"
+    half = cached_number(FARMING_FP_GOODS_COMBINED_RAW_WEIGHT / 2.0)
+    return f"IF({focus_cell}>=3,{half}+({focus_cell}-3)/2*{half},{half}*({focus_cell}-1)/2)"
+
+
 def overall_raw_weight_for_attr(key: str) -> float:
     if key in OVERALL_GOODS_TOTAL_COMPONENT_ATTRS:
         return 0.0
@@ -1174,9 +1246,17 @@ def overall_weight_map(attr_keys: Sequence[str]) -> Dict[str, float]:
 
 def fighting_weight_cell_value(key: str) -> Any:
     if key == "prod_unit_current_age":
-        return f"=(5-{CONTROLS_SHEET_REF}!{FIGHTING_UNIT_AGE_FOCUS_CELL})/4*{cached_number(DEFAULT_FIGHTING_WEIGHT_SCALE)}"
+        return (
+            f"=(5-{CONTROLS_SHEET_REF}!{FIGHTING_UNIT_AGE_FOCUS_CELL})/4"
+            f"*{cached_number(FIGHTING_CURRENT_NEXT_UNIT_COMBINED_RAW_WEIGHT)}"
+            f"*{cached_number(DEFAULT_FIGHTING_WEIGHT_SCALE)}"
+        )
     if key == "prod_unit_next_age":
-        return f"=({CONTROLS_SHEET_REF}!{FIGHTING_UNIT_AGE_FOCUS_CELL}-1)/4*{cached_number(DEFAULT_FIGHTING_WEIGHT_SCALE)}"
+        return (
+            f"=({CONTROLS_SHEET_REF}!{FIGHTING_UNIT_AGE_FOCUS_CELL}-1)/4"
+            f"*{cached_number(FIGHTING_CURRENT_NEXT_UNIT_COMBINED_RAW_WEIGHT)}"
+            f"*{cached_number(DEFAULT_FIGHTING_WEIGHT_SCALE)}"
+        )
     if key == "prod_unit_rogue":
         return 1.0 * DEFAULT_FIGHTING_WEIGHT_SCALE
     if not is_fighting_attr(key):
@@ -1279,17 +1359,17 @@ def weight_mode_formula(default_value: Any, override_col: int, row_idx: int) -> 
 
 def fp_goods_weight_for_attr(key: str) -> float:
     if key == PROD_FP_ATTR:
-        return production_fp_raw_weight()
+        return farming_fp_raw_weight()
     if key == PROD_GOODS_ATTR:
-        return production_goods_raw_weight()
-    return 0.0
+        return farming_goods_raw_weight()
+    return FARMING_SECONDARY_RAW_WEIGHTS.get(key, 0.0)
 
 
 def fp_goods_weight_cell_value(key: str) -> Any:
     if key == PROD_FP_ATTR:
-        return f"={production_fp_raw_weight_formula()}"
+        return f"={farming_fp_raw_weight_formula()}"
     if key == PROD_GOODS_ATTR:
-        return f"={production_goods_raw_weight_formula()}"
+        return f"={farming_goods_raw_weight_formula()}"
     return fp_goods_weight_for_attr(key)
 
 
@@ -1317,14 +1397,20 @@ def qi_weight_for_attr(key: str) -> float:
     label = attr_label(key)
     if label in {
         "Boost: Att Boost: Blue QI",
+    }:
+        return 8.0
+    if label in {
         "Boost: Def Boost: Blue QI",
     }:
-        return 15.0
+        return 5.6
     if label in {
         "Boost: Att Boost: Red QI",
+    }:
+        return 8.0
+    if label in {
         "Boost: Def Boost: Red QI",
     }:
-        return 0.0
+        return 5.6
     if label == "Boost: QI Action Points Collection All":
         return 20.0
     if label == "Boost: QI Action Points Capacity All":
@@ -1341,16 +1427,14 @@ def qi_weight_for_attr(key: str) -> float:
 
 def qi_role_weight_formula(key: str) -> Optional[str]:
     label = attr_label(key)
-    if label in {
-        "Boost: Att Boost: Blue QI",
-        "Boost: Def Boost: Blue QI",
-    }:
+    if label == "Boost: Att Boost: Blue QI":
         return f'=IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Blue",15,IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Both",8,0))'
-    if label in {
-        "Boost: Att Boost: Red QI",
-        "Boost: Def Boost: Red QI",
-    }:
+    if label == "Boost: Def Boost: Blue QI":
+        return f'=IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Blue",10.5,IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Both",5.6,0))'
+    if label == "Boost: Att Boost: Red QI":
         return f'=IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Red",15,IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Both",8,0))'
+    if label == "Boost: Def Boost: Red QI":
+        return f'=IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Red",10.5,IF({CONTROLS_SHEET_REF}!{QI_FIGHTER_ROLE_CELL}="Both",5.6,0))'
     return None
 
 
@@ -1476,6 +1560,43 @@ def is_goods_resource_key(key: str) -> bool:
     if key in CORE_RESOURCES or key in SETTLEMENT_RESOURCES or key in NON_GOODS_RESOURCE_TYPES:
         return False
     return True
+
+
+def goods_resource_audit_rows(attr_keys: Sequence[str]) -> List[Tuple[str, str, str, str]]:
+    discovered_sources: Dict[str, set[str]] = {}
+    prefixes = (
+        ("prod_resource_", "Production"),
+        ("cost_", "Cost"),
+        ("static_", "Static"),
+    )
+    for attr_key in attr_keys:
+        for prefix, source in prefixes:
+            if not attr_key.startswith(prefix):
+                continue
+            resource = attr_key.removeprefix(prefix)
+            if resource == "goods_total" or not is_goods_resource_key(resource):
+                continue
+            discovered_sources.setdefault(resource, set()).add(source)
+
+    resources = set(AGGREGATE_GOODS_RESOURCES)
+    resources.update(discovered_sources)
+    rows: List[Tuple[str, str, str, str]] = []
+    for resource in sorted(resources):
+        if resource in AGGREGATE_GOODS_RESOURCES:
+            classification = "Configured aggregate goods key"
+            note = "Always treated as goods by workbook configuration."
+        else:
+            classification = "Assumed goods by non-core rule"
+            note = "Not listed as core, settlement, or excluded non-goods resource."
+        rows.append(
+            (
+                resource,
+                classification,
+                ", ".join(sorted(discovered_sources.get(resource, ()))) or "Not discovered in this workbook",
+                note,
+            )
+        )
+    return rows
 
 
 def add_attr(attrs: Dict[str, float], key: str, value: Any, factor: float = 1.0) -> None:
@@ -3217,7 +3338,7 @@ def write_controls_sheet(
         (
             2,
             "How to use",
-            "Start here: select a building source category filter, then enter your city's estimated base production for FP, regular goods, guild goods, medals, and special goods in the yellow cells. These values should not include any percentage-based boosts.\n\nNext, choose the Fighting, QI, and FP/Goods production focus settings that best match your priorities. For each 1-5 scale, 1 favors the left label, 3 is balanced, and 5 favors the right label.\n\nThen review the ranking sheets.",
+            "Start here: pick your city age, select a building source category filter, then enter your city’s estimated base production for FP, regular goods, guild goods, medals, and special goods in the yellow cells. These values should not include any percentage-based boosts.\n\nNext, choose the Fighting, QI, and FP/Goods Production focus settings that best match your priorities. For each 1–5 scale, 1 favors the left label, 3 is balanced, and 5 favors the right label.\n\nThen review the ranking sheets.",
             PatternFill(fill_type=None),
         ),
         (3, "Select Your City Age" if all_ages else "Assumed age", selected_age_display(era, all_ages), editable_fill if all_ages else context_fill),
@@ -3429,7 +3550,7 @@ def write_advanced_controls_sheet(
     total_headers = (
         (OVERALL_TOTAL_WEIGHT_CELL, "Overall"),
         (FIGHTING_TOTAL_WEIGHT_CELL, "Fighting"),
-        (FP_GOODS_TOTAL_WEIGHT_CELL, "FP/Goods"),
+        (FP_GOODS_TOTAL_WEIGHT_CELL, "Farming"),
         (QI_TOTAL_WEIGHT_CELL, "QI"),
     )
     for total_cell, header in total_headers:
@@ -3476,8 +3597,8 @@ def write_advanced_controls_sheet(
         "Overall Abs Weight",
         "Fighting Weight",
         "Fighting Abs Weight",
-        "FP/Goods Weight",
-        "FP/Goods Abs Weight",
+        "Farming Weight",
+        "Farming Abs Weight",
         "QI Weight",
         "QI Abs Weight",
         "Direction",
@@ -3488,7 +3609,7 @@ def write_advanced_controls_sheet(
         "Overall Weight Budget",
         "Overall Override",
         "Fighting Override",
-        "FP/Goods Override",
+        "Farming Override",
         "QI Override",
     ]
     for col_idx, header in enumerate(headers, start=1):
@@ -3503,15 +3624,33 @@ def write_advanced_controls_sheet(
         raw_col = get_column_letter(RAW_START_COLUMN + attr_idx)
         data_end = BUILDING_DATA_START_ROW + record_count - 1
         label = attr_label(key)
+        force_zero_weight = is_forced_zero_weight_attr(key)
         sheet.cell(row_idx, 1, label)
         sheet.cell(row_idx, 2, attr_description(key))
-        sheet.cell(row_idx, 3, weight_mode_formula(overall_weight_cell_value(row_idx), OVERALL_WEIGHT_OVERRIDE_COLUMN, row_idx))
+        sheet.cell(row_idx, 2).alignment = Alignment(vertical="top", wrap_text=True)
+        sheet.cell(
+            row_idx,
+            3,
+            0 if force_zero_weight else weight_mode_formula(overall_weight_cell_value(row_idx), OVERALL_WEIGHT_OVERRIDE_COLUMN, row_idx),
+        )
         sheet.cell(row_idx, 4, f"=ABS(C{row_idx})")
-        sheet.cell(row_idx, 5, weight_mode_formula(fighting_weight_cell_value(key), FIGHTING_WEIGHT_OVERRIDE_COLUMN, row_idx))
+        sheet.cell(
+            row_idx,
+            5,
+            0 if force_zero_weight else weight_mode_formula(fighting_weight_cell_value(key), FIGHTING_WEIGHT_OVERRIDE_COLUMN, row_idx),
+        )
         sheet.cell(row_idx, 6, f"=ABS(E{row_idx})")
-        sheet.cell(row_idx, 7, weight_mode_formula(fp_goods_weight_cell_value(key), FP_GOODS_WEIGHT_OVERRIDE_COLUMN, row_idx))
+        sheet.cell(
+            row_idx,
+            7,
+            0 if force_zero_weight else weight_mode_formula(fp_goods_weight_cell_value(key), FP_GOODS_WEIGHT_OVERRIDE_COLUMN, row_idx),
+        )
         sheet.cell(row_idx, 8, f"=ABS(G{row_idx})")
-        sheet.cell(row_idx, 9, weight_mode_formula(qi_role_weight_formula(key) or qi_weight_for_attr(key), QI_WEIGHT_OVERRIDE_COLUMN, row_idx))
+        sheet.cell(
+            row_idx,
+            9,
+            0 if force_zero_weight else weight_mode_formula(qi_role_weight_formula(key) or qi_weight_for_attr(key), QI_WEIGHT_OVERRIDE_COLUMN, row_idx),
+        )
         sheet.cell(row_idx, 10, f"=ABS(I{row_idx})")
         sheet.cell(row_idx, 11, direction_for_attr(key))
         if (all_ages or key in {PROD_FP_ATTR, PROD_GOODS_ATTR, PROD_GUILD_GOODS_ATTR, PROD_MEDALS_ATTR}) and record_count:
@@ -3524,13 +3663,15 @@ def write_advanced_controls_sheet(
         else:
             sheet.cell(row_idx, 12, numeric_cell(stats[key]["min"]))
             sheet.cell(row_idx, 13, numeric_cell(stats[key]["max"]))
-        sheet.cell(row_idx, OVERALL_RAW_WEIGHT_COLUMN, overall_raw_weight_cell_value(key))
+        sheet.cell(row_idx, OVERALL_RAW_WEIGHT_COLUMN, 0 if force_zero_weight else overall_raw_weight_cell_value(key))
         weight_group = overall_weight_group_for_attr(key)
         sheet.cell(row_idx, OVERALL_WEIGHT_GROUP_COLUMN, weight_group)
         sheet.cell(row_idx, OVERALL_WEIGHT_BUDGET_COLUMN, overall_weight_budget_cell_value(weight_group))
         for col_idx in range(1, QI_WEIGHT_OVERRIDE_COLUMN + 1):
             cell = sheet.cell(row_idx, col_idx)
             cell.border = border
+            if col_idx == 2:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
             if col_idx in (
                 OVERALL_WEIGHT_OVERRIDE_COLUMN,
                 FIGHTING_WEIGHT_OVERRIDE_COLUMN,
@@ -3557,8 +3698,11 @@ def write_advanced_controls_sheet(
                 QI_WEIGHT_OVERRIDE_COLUMN,
             ):
                 cell.number_format = "0.00"
-        if label in HIDDEN_ZERO_WEIGHT_ADVANCED_CONTROL_LABELS:
+        if force_zero_weight:
             sheet.row_dimensions[row_idx].hidden = True
+
+    for row_idx in range(WEIGHT_START_ROW, WEIGHT_HEADER_ROW + len(attr_keys) + 1):
+        sheet.cell(row_idx, 2).alignment = Alignment(vertical="top", wrap_text=True)
 
     dv = DataValidation(type="decimal", operator="between", formula1="-1000", formula2="1000")
     sheet.add_data_validation(dv)
@@ -3570,7 +3714,7 @@ def write_advanced_controls_sheet(
     sheet.freeze_panes = f"A{WEIGHT_START_ROW}"
     sheet.auto_filter.ref = f"A{WEIGHT_HEADER_ROW}:{get_column_letter(QI_WEIGHT_OVERRIDE_COLUMN)}{WEIGHT_HEADER_ROW + len(attr_keys)}"
     sheet.column_dimensions["A"].width = 34
-    sheet.column_dimensions["B"].width = 72
+    sheet.column_dimensions["B"].width = 92
     sheet.column_dimensions["C"].width = 12
     sheet.column_dimensions["D"].width = 12
     sheet.column_dimensions["E"].width = 12
@@ -3602,7 +3746,6 @@ def write_advanced_controls_sheet(
     sheet["B4"].alignment = Alignment(vertical="top", wrap_text=True)
     for total_cell, _header in total_headers:
         sheet.cell(5, sheet[total_cell].column).alignment = Alignment(horizontal="right", vertical="top", wrap_text=True)
-    sheet[QI_FIGHTER_ROLE_CELL].alignment = Alignment(vertical="top", wrap_text=False)
 
 
 def write_age_data_sheet(
@@ -3688,6 +3831,31 @@ def write_category_options_sheet(workbook: Workbook, category_options: Sequence[
     for row_idx, category in enumerate(category_options, start=1):
         sheet.cell(row_idx, 1, category)
     sheet.column_dimensions["A"].width = 36
+
+
+def write_goods_resource_audit_sheet(workbook: Workbook, attr_keys: Sequence[str]) -> None:
+    sheet = workbook.create_sheet(GOODS_RESOURCE_AUDIT_SHEET)
+    sheet.sheet_state = "hidden"
+    sheet.sheet_view.showGridLines = False
+    headers = ["Resource Key", "Classification", "Discovered In", "Notes"]
+    header_fill = PatternFill("solid", fgColor=HEADER_FILL_COLOR)
+    thin = Side(style="thin", color=BORDER_COLOR)
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for col_idx, header in enumerate(headers, start=1):
+        cell = sheet.cell(1, col_idx, header)
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+        cell.border = border
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for row_idx, row_values in enumerate(goods_resource_audit_rows(attr_keys), start=2):
+        for col_idx, value in enumerate(row_values, start=1):
+            cell = sheet.cell(row_idx, col_idx, value)
+            cell.border = border
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+    widths = [32, 34, 24, 72]
+    for col_idx, width in enumerate(widths, start=1):
+        sheet.column_dimensions[get_column_letter(col_idx)].width = width
+    sheet.freeze_panes = "A2"
 
 
 def write_buildings_sheet(
@@ -4521,6 +4689,11 @@ def fp_goods_display_attr_keys(attr_keys: Sequence[str]) -> List[str]:
     preferred = [
         PROD_FP_ATTR,
         PROD_GOODS_ATTR,
+        PROD_MEDALS_ATTR,
+        NET_HAPPINESS_ATTR,
+        "prod_resource_blueprint",
+        "prod_resource_premium",
+        "prod_resource_supplies",
         "prod_resource_all_goods_of_previous_age",
         "prod_resource_all_goods_of_age",
         "prod_resource_all_goods_of_next_age",
@@ -4916,11 +5089,11 @@ def write_fp_goods_scores_sheet(
 
     headers = [
         "Source Row",
-        "FP/Goods Score",
-        "FP/Goods Score Rank",
+        "Farming Score",
+        "Farming Score Rank",
         "Adjusted Area",
-        "FP/Goods Efficiency Score",
-        "FP/Goods Efficiency Rank",
+        "Farming Efficiency Score",
+        "Farming Efficiency Rank",
         "Building Category",
         "Category Match",
     ]
@@ -4980,8 +5153,8 @@ def write_fp_goods_ranking_sheet(
 
     headers = [
         "Building",
-        "FP/Goods Rank",
-        "FP/Goods Score",
+        "Farming Rank",
+        "Farming Score",
         "Type",
         "Selected Age",
         "Available By Age",
@@ -4992,11 +5165,11 @@ def write_fp_goods_ranking_sheet(
         "Source Row",
     ] + [attr_label(key) for key in production_attr_keys]
 
-    sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} FP/Goods Production Buildings"
+    sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} Farming Buildings"
     sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
     sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-    sheet["A2"] = "Uses the FP/Goods Weight controls. Defaults score Production: FPs and Production: Goods Total."
+    sheet["A2"] = "Uses the Farming Weight controls. Default primary weight is split between FPs and Goods Total; secondary weight covers medals, net happiness, blueprints, diamonds, and supplies."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
     header_row = 4
@@ -5106,8 +5279,8 @@ def write_fp_goods_efficiency_sheet(
     headers = [
         "Building",
         "Efficiency Rank",
-        "FP/Goods Efficiency Score",
-        "FP/Goods Score",
+        "Farming Efficiency Score",
+        "Farming Score",
         "Type",
         "Selected Age",
         "Available By Age",
@@ -5119,11 +5292,11 @@ def write_fp_goods_efficiency_sheet(
         "Source Row",
     ] + [attr_label(key) for key in production_attr_keys]
 
-    sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} FP/Goods Efficiency Buildings"
+    sheet["A1"] = f"Top {min(FIGHTING_TOP_N, len(records))} Farming Efficiency Buildings"
     sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
     sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-    sheet["A2"] = "FP/Goods efficiency is FP/Goods Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection."
+    sheet["A2"] = "Farming efficiency is Farming Score divided by adjusted area. Default farming weight includes FPs, Goods Total, medals, net happiness, blueprints, diamonds, and supplies."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
     header_row = 4
@@ -5555,6 +5728,7 @@ def write_about_sheet(
     notes = [
         ("Reference file", display_path(reference_file)),
         ("Default selected age" if all_ages else "Assumed age", selected_age_display(era, all_ages)),
+        ("Version", WORKBOOK_VERSION),
         ("Generated", datetime.now().strftime("%Y-%m-%d %H:%M")),
         ("Buildings included", len(records)),
         ("Attributes discovered", len(attr_keys)),
@@ -5564,11 +5738,11 @@ def write_about_sheet(
         ("Estimated base special goods production default", format_amount(DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION)),
         ("Estimated base guild goods production default", format_amount(DEFAULT_ESTIMATED_GUILD_GOODS_PRODUCTION)),
         ("Estimated base medal production default", format_amount(DEFAULT_ESTIMATED_MEDAL_PRODUCTION)),
-        ("Start here", "Use Main Controls first. Pick your city age, enter your city's estimated base production for FP, regular goods, special goods, guild goods, and medals without percentage-based boosts, then choose the fighting, QI, and FP/Goods production focus settings that match your priorities." if all_ages else "Use Main Controls first. Enter your city's estimated base production for FP, regular goods, special goods, guild goods, and medals without percentage-based boosts, then choose the fighting, QI, and FP/Goods production focus settings that match your priorities."),
+        ("Start here", "Use Main Controls first. Pick your city age, enter your city's estimated base production for FP, regular goods, special goods, guild goods, and medals without percentage-based boosts, then choose the fighting, QI, and Production FP/Goods focus settings that match your priorities." if all_ages else "Use Main Controls first. Enter your city's estimated base production for FP, regular goods, special goods, guild goods, and medals without percentage-based boosts, then choose the fighting, QI, and Production FP/Goods focus settings that match your priorities."),
         ("All-age mode", "The selected city age on Main Controls updates the age-sensitive source values used by the ranking and efficiency sheets." if all_ages else "This workbook was generated for one fixed assumed age."),
         ("Scale controls", "Each 1-5 scale works left to right: 1 fully favors the left option, 3 is balanced, and 5 fully favors the right option."),
         ("Fighting focus", "Main Controls lets you tune GBG vs GE, red vs blue army use, attack vs defense boosts, and current-age vs next-age unit production."),
-        ("Production FP/Goods focus", f"Main Controls cell {PRODUCTION_FP_GOODS_FOCUS_CELL.replace('$', '')} tunes FP vs goods production value. Default 2 is FP-heavy; 3 is balanced. The setting affects both Overall Ranking and FP/Goods ranking weights."),
+        ("Production FP/Goods focus", f"Main Controls cell {PRODUCTION_FP_GOODS_FOCUS_CELL.replace('$', '')} tunes FP vs goods production value. Default 2 is FP-heavy; 3 is balanced. The setting affects both Overall Ranking and Farming ranking weights."),
         ("QI role", "Choose whether QI fighting value should favor blue, red, or both roles."),
         ("Advanced controls", "Use Advanced Controls only for fine tuning. Leave Weight mode as Default to restore generated weights, or switch to Custom and enter yellow override values in the right-side override columns. A higher override weight makes that attribute matter more; zero turns it off."),
         ("Building source category filter", "Use the Main Controls source category dropdown to show all buildings or only a color-coded reward/event category on the ranking sheets."),
@@ -5582,10 +5756,10 @@ def write_about_sheet(
         ("Footprint", "Overall Ranking does not directly score footprint. Overall Efficiency divides Overall Score by adjusted area, adding one tile when a road connection is required."),
         ("Efficiency rankings", "Efficiency sheets favor buildings that score well for their footprint. Buildings that require a road connection are treated as needing one extra tile."),
         ("Fighting ranking", "Fighting Ranking uses your fighting focus settings and shows the top 100 fighting buildings."),
-        ("FP/Goods ranking", "FP/Goods Production Ranking focuses on FP and regular goods output, using the Production FP/Goods focus control to split weight between FP and goods."),
+        ("Farming ranking", FARMING_RANKING_ABOUT_NOTE),
         ("QI ranking", "QI Ranking focuses on QI-related boosts, starting resources, action points, and the selected QI fighter role."),
         ("Building name colors", "Building names are color-coded by Entity ID: GBG rewards use W_MultiAge_GBG, QI rewards use W_MultiAge_GR, GE rewards use W_MultiAge_Expedition or W_MultiAge_GEX, and current-year event rewards use W_MultiAge_<event abbreviation><two-digit year><letter>... . Each workbook build scans the input data for current-year event abbreviations; newly detected events get an unused color, and assigned event colors stay fixed for the rest of that year."),
-        ("Data scope", "Uses CityEntities reference definitions only; no placed-city quantities are used."),
+        ("Data scope", "Uses CityEntities reference definitions only; no placed-city quantities are used. Great buildings, QI settlement entities, and native era buildings are intentionally excluded from this reward-building workbook."),
     ]
     for row_idx, (label, value) in enumerate(notes, start=2):
         sheet.cell(row_idx, 1, label)
@@ -5638,6 +5812,7 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
     write_controls_sheet(workbook, reference_file, era, available_only, all_ages, category_options)
     write_advanced_controls_sheet(workbook, reference_file, era, attr_keys, stats, available_only, len(records), all_ages)
     write_category_options_sheet(workbook, category_options)
+    write_goods_resource_audit_sheet(workbook, attr_keys)
     if all_ages:
         write_age_options_sheet(workbook)
         age_data_context = write_age_data_sheet(workbook, records_by_age, attr_keys)
@@ -5688,10 +5863,10 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
         workbook,
         FP_GOODS_PRODUCTION_SHEET,
         FP_GOODS_SCORE_SHEET,
-        "FP/Goods Rank",
-        "FP/Goods Score",
-        f"Top {min(FIGHTING_TOP_N, len(records))} FP/Goods Production Buildings",
-        "Uses the FP/Goods Weight controls. Defaults score Production: FPs and Production: Goods Total.",
+        "Farming Rank",
+        "Farming Score",
+        f"Top {min(FIGHTING_TOP_N, len(records))} Farming Buildings",
+        "Uses the Farming Weight controls. Default primary weight is split between FPs and Goods Total; secondary weight covers medals, net happiness, blueprints, diamonds, and supplies.",
         records,
         attr_keys,
         fp_goods_display_attr_keys(attr_keys),
@@ -5700,10 +5875,10 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
         workbook,
         FP_GOODS_EFFICIENCY_SHEET,
         FP_GOODS_SCORE_SHEET,
-        "FP/Goods Efficiency Score",
-        "FP/Goods Score",
-        f"Top {min(FIGHTING_TOP_N, len(records))} FP/Goods Efficiency Buildings",
-        "FP/Goods efficiency is FP/Goods Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection.",
+        "Farming Efficiency Score",
+        "Farming Score",
+        f"Top {min(FIGHTING_TOP_N, len(records))} Farming Efficiency Buildings",
+        "Farming efficiency is Farming Score divided by adjusted area. Default farming weight includes FPs, Goods Total, medals, net happiness, blueprints, diamonds, and supplies.",
         records,
         attr_keys,
         fp_goods_display_attr_keys(attr_keys),

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FOE Building Rankings</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="src/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Forge of Empires building tool</p>
+        <h1>Building Rankings</h1>
+      </div>
+      <div class="version" id="versionLabel"></div>
+    </header>
+
+    <main class="layout">
+      <aside class="controls-panel" aria-label="Ranking controls">
+        <section class="control-section">
+          <h2>City Setup</h2>
+          <label>
+            Preset profile
+            <select id="presetSelect">
+              <option value="">Custom setup</option>
+              <option value="balanced">Balanced City</option>
+              <option value="space">Space Efficient</option>
+              <option value="gbg">GBG Fighter</option>
+              <option value="ge">GE Fighter</option>
+              <option value="qi">QI Fighter</option>
+              <option value="fp">FP Farmer</option>
+              <option value="goods">Goods Farmer</option>
+            </select>
+          </label>
+          <label>
+            City age
+            <select id="ageSelect"></select>
+          </label>
+          <label>
+            Source category
+            <select id="categorySelect"></select>
+          </label>
+          <label>
+            Search building
+            <input id="searchInput" type="search" placeholder="Search by name">
+          </label>
+          <button id="shareButton" type="button" class="secondary-button">Copy share link</button>
+        </section>
+
+        <section class="control-section">
+          <h2>Focus</h2>
+          <label>
+            QI fighter role
+            <select id="qiRoleSelect">
+              <option>Both</option>
+              <option>Blue</option>
+              <option>Red</option>
+            </select>
+          </label>
+          <div class="slider-control">
+            <div><span>GBG</span><output id="gbgGeValue" for="gbgGeFocus"></output><strong>GE</strong></div>
+            <input id="gbgGeFocus" type="range" min="1" max="5" step="1">
+          </div>
+          <div class="slider-control">
+            <div><span>Red</span><output id="redBlueValue" for="redBlueFocus"></output><strong>Blue</strong></div>
+            <input id="redBlueFocus" type="range" min="1" max="5" step="1">
+          </div>
+          <div class="slider-control">
+            <div><span>Attack</span><output id="attackDefenseValue" for="attackDefenseFocus"></output><strong>Defense</strong></div>
+            <input id="attackDefenseFocus" type="range" min="1" max="5" step="1">
+          </div>
+          <div class="slider-control">
+            <div><span>Current units</span><output id="unitAgeValue" for="unitAgeFocus"></output><strong>Next units</strong></div>
+            <input id="unitAgeFocus" type="range" min="1" max="5" step="1">
+          </div>
+          <div class="slider-control">
+            <div><span>FP</span><output id="fpGoodsValue" for="fpGoodsFocus"></output><strong>Goods</strong></div>
+            <input id="fpGoodsFocus" type="range" min="1" max="5" step="1">
+          </div>
+        </section>
+
+        <section class="control-section compact">
+          <h2>Base Production</h2>
+          <label>FP <input id="fpEstimate" type="number" min="0" step="100"></label>
+          <label>Regular goods <input id="goodsEstimate" type="number" min="0" step="100"></label>
+          <label>Guild goods <input id="guildGoodsEstimate" type="number" min="0" step="100"></label>
+          <label>Medals <input id="medalEstimate" type="number" min="0" step="1000"></label>
+          <label>Special goods <input id="specialGoodsEstimate" type="number" min="0" step="1"></label>
+        </section>
+
+        <section class="control-section">
+          <h2>Table Filters</h2>
+          <label>
+            Strength
+            <select id="strengthFilter">
+              <option value="">Any strength</option>
+              <option value="combat">Combat</option>
+              <option value="qi">QI</option>
+              <option value="fp">FP</option>
+              <option value="goods">Goods</option>
+              <option value="units">Units</option>
+              <option value="diamonds">Diamonds</option>
+              <option value="blueprints">Blueprints</option>
+            </select>
+          </label>
+          <div class="split-inputs">
+            <label>Min area <input id="minAreaFilter" type="number" min="0" step="1"></label>
+            <label>Max area <input id="maxAreaFilter" type="number" min="0" step="1"></label>
+          </div>
+          <label class="checkbox-label">
+            <input id="noRoadFilter" type="checkbox">
+            No road required
+          </label>
+          <label>
+            Rows shown
+            <select id="topNSelect">
+              <option value="50">Top 50</option>
+              <option value="100">Top 100</option>
+              <option value="200">Top 200</option>
+              <option value="all">All matching</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="control-section custom-section">
+          <h2>Custom Weights</h2>
+          <label>
+            Weight mode
+            <select id="weightModeSelect">
+              <option value="default">Default</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <p class="section-note">Custom values apply to the active profile. Blank fields keep the generated default.</p>
+          <div id="customWeights" class="custom-weights"></div>
+          <button id="resetWeightsButton" type="button" class="secondary-button">Reset profile weights</button>
+        </section>
+      </aside>
+
+      <section class="content">
+        <nav class="tabs" aria-label="Ranking profile">
+          <button class="tab active" data-profile="overallEfficiency">Overall Efficiency</button>
+          <button class="tab" data-profile="fightingEfficiency">Fighting Efficiency</button>
+          <button class="tab" data-profile="farmingEfficiency">Farming Efficiency</button>
+          <button class="tab" data-profile="qiEfficiency">QI Efficiency</button>
+          <button class="tab" data-profile="overall">Overall</button>
+          <button class="tab" data-profile="fighting">Fighting</button>
+          <button class="tab" data-profile="farming">Farming</button>
+          <button class="tab" data-profile="qi">QI</button>
+        </nav>
+
+        <section class="summary-grid" id="summaryGrid"></section>
+
+        <section class="table-panel">
+          <div class="table-heading">
+            <div>
+              <h2 id="rankingTitle">Overall Efficiency</h2>
+              <p id="rankingSubtitle"></p>
+              <p id="rankingDescription" class="ranking-description"></p>
+              <div id="activeFilters" class="filter-chips" aria-label="Active filters"></div>
+            </div>
+            <div class="table-actions">
+              <p id="resultMeta" class="result-meta"></p>
+              <button id="resetButton" type="button">Reset defaults</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th><button class="sort-button" data-sort="name" type="button">Building</button></th>
+                  <th><button class="sort-button" data-sort="score" type="button">Score</button></th>
+                  <th><button class="sort-button" data-sort="efficiency" type="button">Efficiency</button></th>
+                  <th><button class="sort-button" data-sort="area" type="button">Area</button></th>
+                  <th>Strengths</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="rankingBody"></tbody>
+            </table>
+          </div>
+          <div id="emptyState" class="empty-state" hidden>No buildings match the current filters.</div>
+        </section>
+
+        <section class="compare-panel">
+          <div>
+            <h2>Compare Buildings</h2>
+            <p>Pick two buildings from the selected age and profile.</p>
+          </div>
+          <div class="compare-inputs">
+            <label>Building A <input id="compareA" list="buildingList" placeholder="Start typing"></label>
+            <label>Building B <input id="compareB" list="buildingList" placeholder="Start typing"></label>
+          </div>
+          <datalist id="buildingList"></datalist>
+          <div id="compareOutput" class="compare-output"></div>
+        </section>
+      </section>
+    </main>
+
+    <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+    <aside class="drawer" id="detailDrawer" aria-label="Building details" aria-hidden="true">
+      <button id="closeDrawer" type="button" class="close-button">Close</button>
+      <div id="detailContent"></div>
+    </aside>
+
+    <script src="data/ranking-data.js"></script>
+    <script src="src/app.js"></script>
+  </body>
+</html>
