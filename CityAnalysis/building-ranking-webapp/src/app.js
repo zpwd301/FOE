@@ -1,5 +1,6 @@
 const DATA = window.FOE_BUILDING_RANKING_DATA;
 const ALL_CATEGORIES = "All Building Categories";
+const PRESET_PROFILES_ENABLED = false;
 
 const PROFILE_CONFIG = {
   overallEfficiency: {
@@ -571,9 +572,21 @@ function strengthBadges(record, contributions) {
     if (label.includes("QI")) {
       addBadge("QI", "qi");
     } else if (label.includes("Att Boost") || label.includes("Def Boost") || label.includes("Unit") || label.includes("Rogue")) {
-      addBadge(label.includes("Battleground") ? "GBG" : label.includes("Guild Expedition") ? "GE" : "Combat", "combat");
+      if (label.includes("Battleground")) {
+        addBadge("GBG", "gbg");
+      } else if (label.includes("Guild Expedition")) {
+        addBadge("GE", "ge");
+      } else {
+        addBadge("Combat", "combat");
+      }
     } else if (label.includes("FP") || label.includes("Goods") || label.includes("Medal") || label.includes("Supplies")) {
-      addBadge(label.includes("FP") ? "FP" : label.includes("Goods") ? "Goods" : "Prod", "prod");
+      if (label.includes("FP")) {
+        addBadge("FP", "fp");
+      } else if (label.includes("Goods")) {
+        addBadge("Goods", "goods");
+      } else {
+        addBadge("Prod", "prod");
+      }
     } else if (label.includes("Happiness") || label.includes("Population")) {
       addBadge("City", "utility");
     }
@@ -674,7 +687,12 @@ function renderSummary(rows) {
     ["Top building", top ? top.record.name : "None"],
     ["Top score", top ? fmt(top.score) : ""],
     ["Top efficiency", top ? fmt(top.efficiency, 3) : ""],
-  ].map(([label, value]) => `<div class="summary-card"><span>${label}</span><strong>${value}</strong></div>`).join("");
+  ].map(([label, value]) => `
+    <div class="summary-card">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `).join("");
   el.rankingSubtitle.textContent = `${DATA.ages.find((age) => age.key === c.age)?.label || c.age} · ${c.category}`;
 }
 
@@ -713,7 +731,7 @@ function renderBuildingList() {
 
 function filterChips(c) {
   const chips = [];
-  if (el.presetSelect.value) chips.push(`Preset: ${presetLabel(el.presetSelect.value)}`);
+  if (PRESET_PROFILES_ENABLED && el.presetSelect.value) chips.push(`Preset: ${presetLabel(el.presetSelect.value)}`);
   if (c.search) chips.push(`Search: ${el.searchInput.value.trim()}`);
   if (c.category !== ALL_CATEGORIES) chips.push(c.category);
   if (c.strength) chips.push(`Strength: ${el.strengthFilter.selectedOptions[0]?.textContent || c.strength}`);
@@ -1049,7 +1067,7 @@ function buildUrlParams() {
   const c = controls();
   const params = new URLSearchParams();
   params.set("profile", state.profile);
-  if (el.presetSelect.value) params.set("preset", el.presetSelect.value);
+  if (PRESET_PROFILES_ENABLED && el.presetSelect.value) params.set("preset", el.presetSelect.value);
   params.set("age", c.age);
   if (c.category !== ALL_CATEGORIES) params.set("category", c.category);
   if (c.search) params.set("search", c.search);
@@ -1089,7 +1107,7 @@ function applyUrlState() {
   const params = new URLSearchParams(window.location.search);
   if (!params.size) return;
   state.suppressUrlUpdate = true;
-  if (params.get("preset") && PRESETS[params.get("preset")]) {
+  if (PRESET_PROFILES_ENABLED && params.get("preset") && PRESETS[params.get("preset")]) {
     el.presetSelect.value = params.get("preset");
     applyPreset(params.get("preset"));
   }
