@@ -72,7 +72,7 @@
             <input id="attackDefenseFocus" type="range" min="1" max="5" step="1">
           </div>
           <div class="slider-control">
-            <div><span>Current units</span><output id="unitAgeValue" for="unitAgeFocus"></output><strong>Next units</strong></div>
+            <div><span>Current age units</span><output id="unitAgeValue" for="unitAgeFocus"></output><strong>Next age units</strong></div>
             <input id="unitAgeFocus" type="range" min="1" max="5" step="1">
           </div>
           <div class="slider-control">
@@ -90,53 +90,57 @@
           <label>Special goods <input id="specialGoodsEstimate" type="number" min="0" step="1"></label>
         </section>
 
-        <section class="control-section">
-          <h2>Table Filters</h2>
-          <label>
-            Strength
-            <select id="strengthFilter">
-              <option value="">Any strength</option>
-              <option value="combat">Combat</option>
-              <option value="qi">QI</option>
-              <option value="fp">FP</option>
-              <option value="goods">Goods</option>
-              <option value="units">Units</option>
-              <option value="diamonds">Diamonds</option>
-              <option value="blueprints">Blueprints</option>
-            </select>
-          </label>
-          <div class="split-inputs">
-            <label>Min area <input id="minAreaFilter" type="number" min="0" step="1"></label>
-            <label>Max area <input id="maxAreaFilter" type="number" min="0" step="1"></label>
+        <details class="control-section collapsible-section" data-mobile-collapsible open>
+          <summary><h2>Table Filters</h2></summary>
+          <div class="collapsible-content">
+            <label>
+              Strength
+              <select id="strengthFilter">
+                <option value="">Any strength</option>
+                <option value="combat">Combat</option>
+                <option value="qi">QI</option>
+                <option value="fp">FP</option>
+                <option value="goods">Goods</option>
+                <option value="units">Units</option>
+                <option value="diamonds">Diamonds</option>
+                <option value="blueprints">Blueprints</option>
+              </select>
+            </label>
+            <div class="split-inputs">
+              <label>Min area <input id="minAreaFilter" type="number" min="0" step="1"></label>
+              <label>Max area <input id="maxAreaFilter" type="number" min="0" step="1"></label>
+            </div>
+            <label class="checkbox-label">
+              <input id="noRoadFilter" type="checkbox">
+              No road required
+            </label>
+            <label>
+              Rows shown
+              <select id="topNSelect">
+                <option value="50">Top 50</option>
+                <option value="100">Top 100</option>
+                <option value="200">Top 200</option>
+                <option value="all">All matching</option>
+              </select>
+            </label>
           </div>
-          <label class="checkbox-label">
-            <input id="noRoadFilter" type="checkbox">
-            No road required
-          </label>
-          <label>
-            Rows shown
-            <select id="topNSelect">
-              <option value="50">Top 50</option>
-              <option value="100">Top 100</option>
-              <option value="200">Top 200</option>
-              <option value="all">All matching</option>
-            </select>
-          </label>
-        </section>
+        </details>
 
-        <section class="control-section custom-section">
-          <h2>Custom Weights</h2>
-          <label>
-            Weight mode
-            <select id="weightModeSelect">
-              <option value="default">Default</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-          <p class="section-note">Custom values apply to the active profile. Blank fields keep the generated default.</p>
-          <div id="customWeights" class="custom-weights"></div>
-          <button id="resetWeightsButton" type="button" class="secondary-button">Reset profile weights</button>
-        </section>
+        <details class="control-section collapsible-section custom-section" data-mobile-collapsible open>
+          <summary><h2>Custom Weights</h2></summary>
+          <div class="collapsible-content">
+            <label>
+              Weight mode
+              <select id="weightModeSelect">
+                <option value="default">Default</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <p class="section-note">Custom values apply to the active profile. Blank fields keep the generated default.</p>
+            <div id="customWeights" class="custom-weights"></div>
+            <button id="resetWeightsButton" type="button" class="secondary-button">Reset profile weights</button>
+          </div>
+        </details>
       </aside>
 
       <section class="content">

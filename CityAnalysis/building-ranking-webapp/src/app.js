@@ -98,12 +98,12 @@ const state = {
   },
 };
 
-const focusText = {
-  1: "Strong left",
-  2: "Left heavy",
-  3: "Balanced",
-  4: "Right heavy",
-  5: "Strong right",
+const focusLabels = {
+  gbgGeFocus: ["GBG", "GE"],
+  redBlueFocus: ["Red", "Blue"],
+  attackDefenseFocus: ["Attack", "Defense"],
+  unitAgeFocus: ["Current age units", "Next age units"],
+  fpGoodsFocus: ["FP", "Goods"],
 };
 
 const el = {
@@ -200,8 +200,12 @@ function sortLabel() {
   return `${labels[state.sort.key] || state.sort.key}, ${state.sort.dir === "asc" ? "ascending" : "descending"}`;
 }
 
-function focusValueText(value) {
-  return `${value} - ${focusText[value] || "Balanced"}`;
+function focusValueText(value, leftLabel, rightLabel) {
+  if (value === 1) return `${leftLabel} only`;
+  if (value === 2) return `${leftLabel} heavy`;
+  if (value === 4) return `${rightLabel} heavy`;
+  if (value === 5) return `${rightLabel} only`;
+  return "Balanced";
 }
 
 function controls() {
@@ -723,16 +727,18 @@ function filterChips(c) {
 function renderControlState(rows, visibleRows) {
   const c = controls();
   const focusOutputs = [
-    [el.gbgGeFocus, el.gbgGeValue],
-    [el.redBlueFocus, el.redBlueValue],
-    [el.attackDefenseFocus, el.attackDefenseValue],
-    [el.unitAgeFocus, el.unitAgeValue],
-    [el.fpGoodsFocus, el.fpGoodsValue],
+    [el.gbgGeFocus, el.gbgGeValue, "gbgGeFocus"],
+    [el.redBlueFocus, el.redBlueValue, "redBlueFocus"],
+    [el.attackDefenseFocus, el.attackDefenseValue, "attackDefenseFocus"],
+    [el.unitAgeFocus, el.unitAgeValue, "unitAgeFocus"],
+    [el.fpGoodsFocus, el.fpGoodsValue, "fpGoodsFocus"],
   ];
-  focusOutputs.forEach(([input, output]) => {
+  focusOutputs.forEach(([input, output, labelKey]) => {
     const value = numberValue(input.value);
-    output.textContent = value;
-    input.setAttribute("aria-valuetext", focusValueText(value));
+    const [leftLabel, rightLabel] = focusLabels[labelKey];
+    const label = focusValueText(value, leftLabel, rightLabel);
+    output.textContent = label;
+    input.setAttribute("aria-valuetext", label);
   });
 
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -1119,12 +1125,22 @@ function applyUrlState() {
   state.suppressUrlUpdate = false;
 }
 
+function initMobileCollapsibles() {
+  const mobileQuery = window.matchMedia("(max-width: 760px)");
+  document.querySelectorAll("[data-mobile-collapsible]").forEach((section) => {
+    if (mobileQuery.matches) {
+      section.open = false;
+    }
+  });
+}
+
 function init() {
   el.versionLabel.textContent = `Model ${DATA.metadata.workbookModelVersion} · Last updated ${DATA.metadata.generatedAt}`;
   el.ageSelect.innerHTML = DATA.ages.map((age) => `<option value="${age.key}">${age.label}</option>`).join("");
   el.categorySelect.innerHTML = DATA.categories.map((category) => `<option>${category}</option>`).join("");
   resetDefaults();
   applyUrlState();
+  initMobileCollapsibles();
 
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
