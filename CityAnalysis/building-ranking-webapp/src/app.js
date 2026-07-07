@@ -866,9 +866,16 @@ function renderCompare() {
   }
   el.compareOutput.innerHTML = selected.map((row) => {
     if (!row) return `<div class="compare-card"><h3>No building selected</h3></div>`;
-    const strengths = row.contributions.slice(0, 5).map((item) => `
-      <div class="contribution-row"><span>${item.label}</span><strong>${fmt(item.scorePoints)}</strong></div>
-    `).join("");
+    const weightedRows = attributeRowsFor(row).filter((item) => Math.abs(item.weight) > 1e-9);
+    const strengths = weightedRows.length ? weightedRows.map((item) => `
+      <div class="contribution-row">
+        <span>
+          ${escapeHtml(displayAttributeLabel(item.label, item.key))}
+          <small>Raw ${formatAttributeValue(item.key, item.raw)}${Math.abs(item.raw - item.effective) > 1e-9 ? ` · Effective ${formatAttributeValue(item.key, item.effective)}` : ""}</small>
+        </span>
+        <strong>${fmt(item.scorePoints)}</strong>
+      </div>
+    `).join("") : `<p class="empty-compare-note">No non-zero weight attributes for this profile.</p>`;
     return `
       <div class="compare-card">
         <h3>${row.record.name}</h3>

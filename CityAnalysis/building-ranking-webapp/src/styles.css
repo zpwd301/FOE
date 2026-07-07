@@ -798,23 +798,82 @@ tbody tr:hover {
   min-height: 22px;
   padding: 3px 7px;
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 7px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 4px 8px rgba(55, 42, 65, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 5px 10px rgba(55, 42, 65, 0.12);
   font-size: 12px;
   font-weight: 700;
 }
 
-.badge.combat { background: #a65548; }
-.badge.gbg { background: #b94768; }
-.badge.ge { background: #765a8f; }
-.badge.qi { background: #7a57a3; }
-.badge.fp { background: #2f7c7a; }
-.badge.goods { background: #4f7c61; }
-.badge.prod { background: #9a7242; }
-.badge.diamond { background: #9d5e8f; }
-.badge.blueprint { background: #5b75a8; }
-.badge.utility { background: #a96f32; }
+.badge.combat {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #d94375, #8f2558);
+  border-color: rgba(255, 199, 220, 0.44);
+}
+
+.badge.gbg {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #c84f7f, #8f2d62);
+  border-color: rgba(246, 188, 214, 0.42);
+}
+
+.badge.ge {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #8e6db0, #5e427e);
+  border-color: rgba(219, 199, 238, 0.42);
+}
+
+.badge.qi {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #9a66b7, #6d3f90);
+  border-color: rgba(228, 199, 240, 0.42);
+}
+
+.badge.fp {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #1f9a96, #176b79);
+  border-color: rgba(177, 236, 233, 0.42);
+}
+
+.badge.goods {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #4f9b72, #2e6f56);
+  border-color: rgba(194, 235, 211, 0.42);
+}
+
+.badge.prod {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #d79a42, #966322);
+  border-color: rgba(255, 225, 169, 0.46);
+}
+
+.badge.diamond {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #24b7aa, #126f83);
+  border-color: rgba(166, 240, 232, 0.48);
+}
+
+.badge.blueprint {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #5f83bd, #3f5d91);
+  border-color: rgba(196, 214, 245, 0.42);
+}
+
+.badge.utility {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #36a77d, #1d6f63);
+  border-color: rgba(184, 239, 219, 0.42);
+}
 
 .compare-panel {
   margin-top: 16px;
@@ -859,6 +918,31 @@ tbody tr:hover {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.contribution-row span {
+  min-width: 0;
+}
+
+.contribution-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.compare-card .contributions {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+
+.empty-compare-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .drawer {
