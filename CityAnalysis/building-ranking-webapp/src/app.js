@@ -830,7 +830,9 @@ function renderCustomWeights() {
         : "Switch to custom mode to edit profile weights."
     }</p>
     <div class="weight-list">
-      ${rows.map((row) => `
+      ${rows.map((row) => {
+        const isChanged = row.override !== undefined && Math.abs((row.override || 0) - (row.defaultWeight || 0)) > 1e-9;
+        return `
         <label class="weight-row">
           <span>
             ${row.label}
@@ -842,13 +844,15 @@ function renderCustomWeights() {
             step="0.1"
             min="-1000"
             max="1000"
+            class="${isChanged ? "changed-weight-input" : ""}"
             data-weight-key="${row.key}"
             placeholder="${fmt(row.defaultWeight)}"
             value="${row.override !== undefined ? row.override : el.weightModeSelect.value === "custom" ? row.defaultWeight : ""}"
             ${el.weightModeSelect.value === "custom" ? "" : "disabled"}
           >
         </label>
-      `).join("")}
+      `;
+      }).join("")}
     </div>
   `;
 }
@@ -1563,6 +1567,8 @@ function init() {
   el.customWeights.addEventListener("input", (event) => {
     const input = event.target.closest("input[data-weight-key]");
     if (!input) return;
+    const weightList = el.customWeights.querySelector(".weight-list");
+    const previousScrollTop = weightList?.scrollTop || 0;
     const profile = activeWeightProfile();
     const key = input.dataset.weightKey;
     const value = input.value.trim();
@@ -1573,6 +1579,17 @@ function init() {
       state.customWeights[profile][key] = numberValue(value);
     }
     render();
+    const nextWeightList = el.customWeights.querySelector(".weight-list");
+    if (nextWeightList) nextWeightList.scrollTop = previousScrollTop;
+    const nextInput = Array.from(el.customWeights.querySelectorAll("input[data-weight-key]"))
+      .find((candidate) => candidate.dataset.weightKey === key);
+    if (nextInput) {
+      try {
+        nextInput.focus({ preventScroll: true });
+      } catch (_error) {
+        nextInput.focus();
+      }
+    }
   });
   el.closeDrawer.addEventListener("click", closeDetail);
   el.drawerBackdrop.addEventListener("click", closeDetail);
