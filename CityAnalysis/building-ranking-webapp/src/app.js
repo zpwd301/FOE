@@ -167,6 +167,13 @@ function fmt(value, digits = 2) {
   });
 }
 
+function fmtCompact(value, digits = 2) {
+  if (!Number.isFinite(value)) return "";
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+  });
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -936,6 +943,13 @@ function displayAttributeLabel(label, key = "") {
     .replace(/Strategy Points/g, "Forge Points");
 }
 
+function isPercentageAttribute(key) {
+  const info = attrInfo(key);
+  const description = info.description || "";
+  const label = info.label || "";
+  return /^Percentage\b/i.test(description) || /percentage|chance/i.test(label) || /chance/i.test(key);
+}
+
 function sortAttributeRows(rows) {
   const sorted = [...rows];
   if (state.detailSort.key === "attribute") {
@@ -1000,10 +1014,15 @@ function detailText(value) {
   return text ? escapeHtml(text) : `<span class="muted-text">None recorded</span>`;
 }
 
+function formatAttributeValue(key, value) {
+  const formatted = fmtCompact(value);
+  return formatted && isPercentageAttribute(key) ? `${formatted}%` : formatted;
+}
+
 function rawEffectiveValue(item) {
-  const raw = fmt(item.raw);
+  const raw = formatAttributeValue(item.key, item.raw);
   if (Math.abs(item.raw - item.effective) <= 1e-9) return raw;
-  return `${raw} (${fmt(item.effective)})`;
+  return `${raw} (${formatAttributeValue(item.key, item.effective)})`;
 }
 
 function detailSortMarker(key) {
@@ -1186,7 +1205,7 @@ function buildReportText(row) {
     `Score: ${fmt(row.score)}`,
     `Efficiency: ${fmt(row.efficiency, 3)}`,
     `Attribute checked: ${selected ? displayAttributeLabel(selected.label, selected.key) : "Not selected"}`,
-    `Expected value: ${selected ? fmt(selected.effective) : "N/A"}`,
+    `Expected value: ${selected ? formatAttributeValue(selected.key, selected.effective) : "N/A"}`,
     `Observed value: ${observed || "Not provided"}`,
     `Notes: ${notes || "None"}`,
   ].join("\n");
@@ -1262,7 +1281,7 @@ function openDetail(entityId, focusClose = true) {
       <label>Observed in game <input id="observedValue" type="text" placeholder="Value you see"></label>
       <label>Notes <textarea id="reportNotes" rows="3" placeholder="What looks wrong?"></textarea></label>
       <button id="copyReportButton" type="button" class="secondary-button">Copy report</button>
-      <textarea id="reportOutput" rows="8" readonly placeholder="Copied report text will appear here"></textarea>
+      <textarea id="reportOutput" rows="8" readonly placeholder="Copied report text will appear here. Please send it to me as an in-game PM. Thanks! 😊 -- zpwd"></textarea>
     </div>
   `;
   el.detailDrawer.classList.add("open");
