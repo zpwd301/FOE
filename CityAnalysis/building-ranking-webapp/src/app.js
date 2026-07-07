@@ -499,13 +499,32 @@ function customizedWeightMap(profile, c) {
   return Object.fromEntries(
     Object.entries(weights).map(([key, value]) => [
       key,
-      Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : value,
+      isCustomizableWeight(profile, key) && Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : value,
     ])
   );
 }
 
 function activeWeightProfile() {
   return PROFILE_CONFIG[state.profile].weightProfile;
+}
+
+function isCustomizableWeight(profile, key) {
+  const info = attrInfo(key);
+  const constants = DATA.constants;
+  if (info.isForcedZero) return false;
+  if (profile === "overall") return !info.isGoodsTotalComponent;
+  if (profile === "fighting") {
+    return info.isFighting || key === "prod_unit_current_age" || key === "prod_unit_next_age" || key === "prod_unit_rogue";
+  }
+  if (profile === "farming") {
+    return (
+      key === constants.prodFpAttr
+      || key === constants.prodGoodsAttr
+      || Object.prototype.hasOwnProperty.call(constants.farmingSecondaryRawWeights, key)
+    );
+  }
+  if (profile === "qi") return info.isQi;
+  return false;
 }
 
 function customizableWeightRows(profile, c) {
@@ -518,7 +537,7 @@ function customizableWeightRows(profile, c) {
       override: state.customWeights[profile]?.[key],
       group: attrInfo(key).overallGroup || "Non-Fighting",
     }))
-    .filter((row) => Math.abs(row.defaultWeight) > 1e-9 || row.override !== undefined)
+    .filter((row) => isCustomizableWeight(profile, row.key) || row.override !== undefined)
     .sort((a, b) => Math.abs(b.defaultWeight) - Math.abs(a.defaultWeight) || a.label.localeCompare(b.label));
 }
 
