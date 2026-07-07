@@ -824,7 +824,11 @@ function renderCustomWeights() {
       <span>${PROFILE_CONFIG[state.profile].title}</span>
       <strong>${fmt(totalWeight)} active weight</strong>
     </div>
-    ${activeCount ? `<p class="section-note">${activeCount} override${activeCount === 1 ? "" : "s"} active for this profile.</p>` : ""}
+    <p class="section-note">${
+      el.weightModeSelect.value === "custom"
+        ? `Default values are shown until edited.${activeCount ? ` ${activeCount} override${activeCount === 1 ? "" : "s"} active for this profile.` : ""}`
+        : "Switch to custom mode to edit profile weights."
+    }</p>
     <div class="weight-list">
       ${rows.map((row) => `
         <label class="weight-row">
@@ -840,7 +844,7 @@ function renderCustomWeights() {
             max="1000"
             data-weight-key="${row.key}"
             placeholder="${fmt(row.defaultWeight)}"
-            value="${row.override !== undefined ? row.override : ""}"
+            value="${row.override !== undefined ? row.override : el.weightModeSelect.value === "custom" ? row.defaultWeight : ""}"
             ${el.weightModeSelect.value === "custom" ? "" : "disabled"}
           >
         </label>
