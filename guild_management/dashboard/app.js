@@ -86,7 +86,7 @@
     $("#trend-note").textContent = `${usable} daily snapshots`; renderOverview(); renderTrend(); renderAges(); renderGoods();
   }
 
-  $("#as-of").textContent = `Data through ${formatDate(data.meta.latestDate)}`; $("#footnote").textContent = `Source: ${data.meta.source}. ${data.meta.bronzeExcluded.join(", ")} are excluded from every calculation. Refresh data by running generate_treasury_dashboard.py.`;
+  $("#as-of").textContent = `Data through ${formatDate(data.meta.latestDate)}`;
   document.querySelectorAll("[data-range]").forEach((button) => button.addEventListener("click", () => { selectedDays = Number(button.dataset.range); render(); }));
   $("#goods-sort").addEventListener("change", (event) => { sortMode = event.target.value; renderGoods(); }); $("#detail-close").addEventListener("click", () => $("#detail-dialog").close());
   window.addEventListener("resize", renderTrend); render();
