@@ -11,9 +11,7 @@ the same rule as the PDF report.
 
 ## Prerequisites
 
-- Python virtual environment:
-  - a Python virtual environment
-- `matplotlib` installed in that venv
+- Python 3 with `matplotlib` installed
 
 ## How To Run
 
@@ -44,8 +42,11 @@ the current semicolon-delimited FoE export format. The current site uses all
 available data up to 90 days; when fewer than three months are present it says
 so in the overview.
 
-To deploy, connect this repository to Cloudflare Pages and set the build output
-directory to `dashboard`. No build command is required. For a local preview:
+Treasury data is operational guild information. Protect the deployed dashboard
+with a Cloudflare Access policy before adding a public custom domain. Static
+headers prevent indexing, but they do not authenticate visitors.
+
+For a local preview:
 
 ```bash
 python3 -m http.server 8001 --directory dashboard

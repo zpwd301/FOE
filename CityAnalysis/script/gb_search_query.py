@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import json
 import math
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +18,6 @@ from urllib.request import Request, urlopen
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
-SIGNATURE_SECRET = "kGieqOaaLpOTbLmppu/YqVtD7SCH/5EJlrMW0MG03/Rx0Ln35/ANbXCZeYwtWsyFdM6oRKpaDdEjktbeIwRKMQ=="
 DEFAULT_CLIENT_VERSION = "1.333"
 FORGE_HX_PATH_RE = re.compile(r"(https?://[^\"']+|/[^\"']*|)cache/ForgeHX-[^\"']+\.js")
 FORGE_HX_SIGNATURE_RE = re.compile(r'_signatureHash\+"([^"]+)"\+a\)')
@@ -28,9 +28,9 @@ CLIENT_CONFIG_CACHE: Dict[str, Tuple[str, str]] = {}
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Query Great Building rankings/details directly via game/json")
     parser.add_argument("--world", default="zz1", help="World host prefix (default: zz1)")
-    parser.add_argument("--h", required=True, help="Gateway h value from /game/json?h=...")
-    parser.add_argument("--sid", required=True, help="Session cookie sid")
-    parser.add_argument("--cid", required=True, help="Session cookie cid")
+    parser.add_argument("--h-env", default="FOE_GATEWAY_H", help="Environment variable holding the gateway h value.")
+    parser.add_argument("--sid-env", default="FOE_SID", help="Environment variable holding the session sid cookie.")
+    parser.add_argument("--cid-env", default="FOE_CID", help="Environment variable holding the session cid cookie.")
     parser.add_argument("--query", required=True, help="Search text (player/clan/GB depending on search category)")
     parser.add_argument(
         "--search-category",
@@ -72,11 +72,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds")
     parser.add_argument("--limit", type=int, default=25, help="Rows to print in terminal (default: 25)")
-    parser.add_argument(
-        "--extra-cookies",
-        default="",
-        help="Optional extra cookies string, e.g. 'foo=bar; baz=1'",
-    )
+    parser.add_argument("--extra-cookies-env", default="FOE_EXTRA_COOKIES", help="Optional environment variable holding extra cookies.")
     parser.add_argument(
         "--save-json",
         default="",
@@ -282,30 +278,17 @@ def resolve_client_config(
     world: str,
     timeout: float,
     version: str,
-    signature_secret: Optional[str],
     cookie_header: str,
 ) -> Tuple[str, str]:
     requested_version = version.strip()
     if requested_version.lower() == "auto":
         requested_version = ""
-    requested_secret = signature_secret.strip() if isinstance(signature_secret, str) else ""
-
-    needs_discovery = not requested_version or not requested_secret
-    discovered_secret = ""
-    discovered_version = ""
-    if needs_discovery:
-        try:
-            discovered_secret, discovered_version = discover_client_config(
-                world=world,
-                timeout=timeout,
-                cookie_header=cookie_header,
-            )
-        except (HTTPError, URLError, OSError, RuntimeError):
-            discovered_secret, discovered_version = "", ""
-
-    resolved_secret = requested_secret or discovered_secret or SIGNATURE_SECRET
-    resolved_version = requested_version or discovered_version or DEFAULT_CLIENT_VERSION
-    return resolved_secret, resolved_version
+    signature_secret, discovered_version = discover_client_config(
+        world=world,
+        timeout=timeout,
+        cookie_header=cookie_header,
+    )
+    return signature_secret, requested_version or discovered_version or DEFAULT_CLIENT_VERSION
 
 
 def generate_signature(h_value: str, request_body: str, signature_secret: str) -> str:
@@ -360,13 +343,11 @@ def send_requests(
     cookie_header: str,
     version: str,
     timeout: float,
-    signature_secret: Optional[str] = None,
 ) -> Any:
     resolved_secret, resolved_version = resolve_client_config(
         world=world,
         timeout=timeout,
         version=version,
-        signature_secret=signature_secret,
         cookie_header=cookie_header,
     )
     request_body = json.dumps(requests, separators=(",", ":"), ensure_ascii=False)
@@ -834,14 +815,25 @@ def write_required_points_tsv(path_arg: str, data: Dict[str, Any], default_filen
 def main() -> None:
     args = parse_args()
     base_request_id = args.request_id if args.request_id > 0 else int(datetime.now().timestamp())
-    cookie_header = build_cookie_header(args.sid, args.cid, args.extra_cookies)
+    def require_env(name: str) -> str:
+        value = os.environ.get(name, "").strip()
+        if not value:
+            raise SystemExit(f"Missing required environment variable: {name}")
+        return value
+
+    h_value = require_env(args.h_env)
+    cookie_header = build_cookie_header(
+        require_env(args.sid_env),
+        require_env(args.cid_env),
+        os.environ.get(args.extra_cookies_env, ""),
+    )
 
     if args.collect_required_points:
         target_name = args.target_gb_name.strip() or args.query
         try:
             collection = collect_required_points_from_ranking(
                 world=args.world,
-                h_value=args.h,
+                h_value=h_value,
                 cookie_header=cookie_header,
                 version=args.version,
                 timeout=args.timeout,
@@ -894,7 +886,7 @@ def main() -> None:
     try:
         response_payload = send_requests(
             world=args.world,
-            h_value=args.h,
+            h_value=h_value,
             requests=search_payload,
             cookie_header=cookie_header,
             version=args.version,
@@ -924,7 +916,7 @@ def main() -> None:
         try:
             detail_bundle = fetch_detail_bundle(
                 world=args.world,
-                h_value=args.h,
+                h_value=h_value,
                 cookie_header=cookie_header,
                 version=args.version,
                 timeout=args.timeout,

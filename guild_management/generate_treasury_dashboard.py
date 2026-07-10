@@ -105,11 +105,9 @@ def main() -> None:
     payload = {
         "meta": {
             "guildName": args.guild_name.strip() or "Guild",
-            "source": source.name,
             "firstDate": rows[0][0].isoformat(),
             "latestDate": rows[-1][0].isoformat(),
             "availableDays": len(rows),
-            "bronzeExcluded": [good for good in goods if good.strip().lower() in BRONZE_GOODS],
             "lowStockThreshold": 110000,
         },
         "dates": [date.isoformat() for date, _ in rows],

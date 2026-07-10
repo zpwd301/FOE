@@ -3,3 +3,7 @@
 __pycache__/
 CityAnalysis/input/
 CityAnalysis/output/
+guild_management/.mplconfig/
+guild_management/__pycache__/
+guild_management/input/
+guild_management/output/
