@@ -4,11 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FOE Building Rankings</title>
-    <link rel="icon" href="image.png?v=20260707-1" type="image/png">
-    <link rel="stylesheet" href="src/styles.css?v=20260707-1">
+    <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
+    <link rel="preload" href="data/ranking-data.json.gz?v=20260711-2" as="fetch" type="application/gzip" crossorigin="anonymous">
+    <link rel="stylesheet" href="src/styles.css?v=20260711-17">
   </head>
-  <body>
+  <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
+    <div id="appStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <header class="app-header">
       <div>
         <p class="eyebrow">Forge of Empires building tool</p>
@@ -17,10 +19,33 @@
       <div class="version" id="versionLabel"></div>
     </header>
 
+    <p id="loadStatus" class="load-status" role="status" aria-live="polite">Loading ranking data…</p>
+    <noscript><p class="load-status load-error">JavaScript is required to use the building rankings.</p></noscript>
+
     <main class="layout">
       <aside class="controls-panel" aria-label="Ranking controls">
+        <details class="mobile-settings" data-mobile-settings open>
+          <summary class="mobile-settings-summary">
+            <span>
+              <strong>Ranking settings</strong>
+              <small>City, production, focus and filters</small>
+            </span>
+            <span class="mobile-settings-action">Adjust</span>
+          </summary>
+          <div class="mobile-settings-content">
         <section class="control-section">
-          <h2>City Setup</h2>
+          <div class="info-heading">
+            <h2>City Setup</h2>
+            <button class="info-button" type="button" aria-expanded="false" aria-controls="citySetupInfo" aria-label="Show City Setup information" data-info-label="City Setup">i</button>
+          </div>
+          <div id="citySetupInfo" class="section-note info-text" hidden>
+            <p>Choose which buildings you want to compare.</p>
+            <ul>
+              <li><strong>City age</strong> updates age-based goods and unit values.</li>
+              <li><strong>Source category</strong> shows every reward building or only one event or game-mode group.</li>
+              <li><strong>Search</strong> finds a building by name.</li>
+            </ul>
+          </div>
           <label class="is-hidden">
             Preset profile
             <select id="presetSelect">
@@ -40,14 +65,22 @@
           </label>
           <label>
             Source category
-            <select id="categorySelect"></select>
+            <select id="categorySelect" aria-describedby="categorySelectionPreview"></select>
+            <small id="categorySelectionPreview" class="selection-preview" hidden></small>
           </label>
           <label>
             Search building
             <input id="searchInput" type="search" placeholder="Search by name">
           </label>
           <div class="base-production-controls compact">
-            <h3>Base Production</h3>
+            <div class="info-heading">
+              <h3>Base Production</h3>
+              <button class="info-button" type="button" aria-expanded="false" aria-controls="baseProductionInfo" aria-label="Show Base Production information" data-info-label="Base Production">i</button>
+            </div>
+            <div id="baseProductionInfo" class="section-note info-text" hidden>
+              <p>Enter rough totals for what your city produces before percentage bonuses. These estimates help the dashboard value buildings that add, for example, “+10% Forge Points.”</p>
+              <p>A higher estimate makes the matching percentage bonus more valuable. If you are unsure, the defaults are a good starting point. Regular, special, and guild goods are kept separate.</p>
+            </div>
             <label>FP <input id="fpEstimate" type="number" min="0" step="100"></label>
             <label>Regular goods <input id="goodsEstimate" type="number" min="0" step="100"></label>
             <label>Guild goods <input id="guildGoodsEstimate" type="number" min="0" step="100"></label>
@@ -58,7 +91,19 @@
         </section>
 
         <section class="control-section">
-          <h2>Focus</h2>
+          <div class="info-heading">
+            <h2>Focus</h2>
+            <button class="info-button" type="button" aria-expanded="false" aria-controls="focusInfo" aria-label="Show Focus controls information" data-info-label="Focus controls">i</button>
+          </div>
+          <div id="focusInfo" class="section-note info-text" hidden>
+            <p>Use these controls to tell the dashboard what matters most to you.</p>
+            <ul>
+              <li>Move a slider left or right to favor that side. The middle is balanced; either end fully favors one side.</li>
+              <li><strong>GBG/GE</strong> means Guild Battlegrounds versus Guild Expedition.</li>
+              <li><strong>QI fighter role</strong> favors blue, red, or both Quantum Incursions combat bonuses.</li>
+              <li><strong>FP/Goods</strong> changes how Forge Points and goods are valued in the Overall and Farming profiles.</li>
+            </ul>
+          </div>
           <label>
             QI fighter role
             <select id="qiRoleSelect">
@@ -69,29 +114,40 @@
           </label>
           <div class="slider-control">
             <div><span>GBG</span><output id="gbgGeValue" for="gbgGeFocus"></output><strong>GE</strong></div>
-            <input id="gbgGeFocus" type="range" min="1" max="5" step="1">
+            <input id="gbgGeFocus" type="range" min="1" max="5" step="1" aria-label="Guild Battlegrounds versus Guild Expedition focus">
           </div>
           <div class="slider-control">
             <div><span>Red</span><output id="redBlueValue" for="redBlueFocus"></output><strong>Blue</strong></div>
-            <input id="redBlueFocus" type="range" min="1" max="5" step="1">
+            <input id="redBlueFocus" type="range" min="1" max="5" step="1" aria-label="Red versus blue army focus">
           </div>
           <div class="slider-control">
             <div><span>Attack</span><output id="attackDefenseValue" for="attackDefenseFocus"></output><strong>Defense</strong></div>
-            <input id="attackDefenseFocus" type="range" min="1" max="5" step="1">
+            <input id="attackDefenseFocus" type="range" min="1" max="5" step="1" aria-label="Attack versus defense focus">
           </div>
           <div class="slider-control">
             <div><span>Current age units</span><output id="unitAgeValue" for="unitAgeFocus"></output><strong>Next age units</strong></div>
-            <input id="unitAgeFocus" type="range" min="1" max="5" step="1">
+            <input id="unitAgeFocus" type="range" min="1" max="5" step="1" aria-label="Current-age versus next-age unit production focus">
           </div>
           <div class="slider-control">
             <div><span>FP</span><output id="fpGoodsValue" for="fpGoodsFocus"></output><strong>Goods</strong></div>
-            <input id="fpGoodsFocus" type="range" min="1" max="5" step="1">
+            <input id="fpGoodsFocus" type="range" min="1" max="5" step="1" aria-label="Forge Points versus goods production focus">
           </div>
         </section>
 
         <details class="control-section collapsible-section" data-mobile-collapsible open>
-          <summary><h2>Table Filters</h2></summary>
+          <summary>
+            <h2>Table Filters</h2>
+            <button class="info-button" type="button" aria-expanded="false" aria-controls="tableFiltersInfo" aria-label="Show Table Filters information" data-info-label="Table Filters">i</button>
+          </summary>
           <div class="collapsible-content">
+            <div id="tableFiltersInfo" class="section-note info-text" hidden>
+              <p>Filters only hide or show rows. They do not recalculate scores or rank numbers, so a building keeps the same rank when you narrow the list.</p>
+              <ul>
+                <li><strong>Strength</strong> checks all recorded building benefits, even when that strength is not one of the three badges shown in the table.</li>
+                <li><strong>Area</strong> is the building footprint plus one tile when a road is required.</li>
+                <li><strong>Rows shown</strong> limits the table without removing matches from the result count.</li>
+              </ul>
+            </div>
             <label>
               Strength
               <select id="strengthFilter">
@@ -106,9 +162,10 @@
               </select>
             </label>
             <div class="split-inputs">
-              <label>Min area <input id="minAreaFilter" type="number" min="0" step="1"></label>
-              <label>Max area <input id="maxAreaFilter" type="number" min="0" step="1"></label>
+              <label>Min area <input id="minAreaFilter" type="number" min="0" step="1" aria-describedby="areaFilterError"></label>
+              <label>Max area <input id="maxAreaFilter" type="number" min="0" step="1" aria-describedby="areaFilterError"></label>
             </div>
+            <p id="areaFilterError" class="field-error" role="status" aria-live="polite" hidden></p>
             <label class="checkbox-label">
               <input id="noRoadFilter" type="checkbox">
               No road required
@@ -126,7 +183,10 @@
         </details>
 
         <details class="control-section collapsible-section custom-section" data-mobile-collapsible open>
-          <summary><h2>Custom Weights</h2></summary>
+          <summary>
+            <h2>Custom Weights</h2>
+            <button class="info-button" type="button" aria-expanded="false" aria-controls="customWeightsInfo" aria-label="Show Custom Weights information" data-info-label="Custom Weights">i</button>
+          </summary>
           <div class="collapsible-content">
             <label>
               Weight mode
@@ -135,63 +195,90 @@
                 <option value="custom">Custom</option>
               </select>
             </label>
-            <p class="section-note">Custom values apply to the active profile. Blank fields keep the generated default.</p>
+            <div id="customWeightsInfo" class="section-note info-text" hidden>
+              <p>Default mode is recommended for most users. Choose Custom when you want to change what matters in the active ranking profile.</p>
+              <ul>
+                <li>A higher number gives that benefit more influence; zero ignores it.</li>
+                <li>Changing one weight shifts the balance between benefits—it does not simply add points to every score.</li>
+                <li>Each profile keeps its own custom values. <strong>Reset profile weights</strong> restores the active profile; <strong>Reset defaults</strong> restores every profile.</li>
+              </ul>
+            </div>
             <div id="customWeights" class="custom-weights"></div>
             <button id="resetWeightsButton" type="button" class="secondary-button">Reset profile weights</button>
+          </div>
+        </details>
+            <button id="viewRankingsButton" type="button" class="secondary-button mobile-view-rankings">View rankings</button>
           </div>
         </details>
       </aside>
 
       <section class="content">
-        <nav class="tabs" aria-label="Ranking profile">
-          <button class="tab active" data-profile="overallEfficiency">Overall Efficiency</button>
-          <button class="tab" data-profile="fightingEfficiency">Fighting Efficiency</button>
-          <button class="tab" data-profile="farmingEfficiency">Farming Efficiency</button>
-          <button class="tab" data-profile="qiEfficiency">QI Efficiency</button>
-          <button class="tab" data-profile="overall">Overall</button>
-          <button class="tab" data-profile="fighting">Fighting</button>
-          <button class="tab" data-profile="farming">Farming</button>
-          <button class="tab" data-profile="qi">QI</button>
+        <nav class="tabs" role="tablist" aria-label="Ranking profile">
+          <button class="tab active" id="profileTab-overallEfficiency" role="tab" aria-selected="true" aria-controls="rankingPanel" tabindex="0" data-profile="overallEfficiency">Overall Efficiency</button>
+          <button class="tab" id="profileTab-fightingEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="fightingEfficiency">Fighting Efficiency</button>
+          <button class="tab" id="profileTab-farmingEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="farmingEfficiency">Farming Efficiency</button>
+          <button class="tab" id="profileTab-qiEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="qiEfficiency">QI Efficiency</button>
+          <button class="tab" id="profileTab-overall" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="overall">Overall</button>
+          <button class="tab" id="profileTab-fighting" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="fighting">Fighting</button>
+          <button class="tab" id="profileTab-farming" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="farming">Farming</button>
+          <button class="tab" id="profileTab-qi" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="qi">QI</button>
         </nav>
 
+        <div id="rankingPanel" class="ranking-panel" role="tabpanel" aria-labelledby="profileTab-overallEfficiency">
         <section class="summary-grid" id="summaryGrid"></section>
 
         <section class="table-panel">
           <div class="table-heading">
             <div>
-              <h2 id="rankingTitle">Overall Efficiency</h2>
+              <div class="info-heading">
+                <h2 id="rankingTitle">Overall Efficiency</h2>
+                <button class="info-button" type="button" aria-expanded="false" aria-controls="rankingDescription" aria-label="Show Ranking profile information" data-info-label="Ranking profile">i</button>
+              </div>
               <p id="rankingSubtitle"></p>
-              <p id="rankingDescription" class="ranking-description"></p>
+              <p id="rankingDescription" class="ranking-description info-text" hidden></p>
               <div id="activeFilters" class="filter-chips" aria-label="Active filters"></div>
             </div>
             <div class="table-actions">
-              <p id="resultMeta" class="result-meta"></p>
+              <p id="resultMeta" class="result-meta" role="status" aria-live="polite" aria-atomic="true"></p>
               <button id="resetButton" type="button">Reset defaults</button>
             </div>
           </div>
-          <div class="table-wrap">
+          <div id="strengthLegend" class="strength-legend info-text" role="region" aria-label="Strength badge explanations" hidden></div>
+          <p class="table-scroll-hint" id="tableScrollHint">Swipe or scroll sideways to see scores, strengths, and details <span aria-hidden="true">→</span></p>
+          <div class="table-wrap" role="region" aria-label="Building ranking table" aria-describedby="tableScrollHint" tabindex="0">
             <table>
               <thead>
                 <tr>
-                  <th>Rank</th>
+                  <th><button class="sort-button rank-sort-button" data-sort="profile" type="button">Rank</button></th>
                   <th><button class="sort-button" data-sort="name" type="button">Building</button></th>
                   <th><button class="sort-button" data-sort="score" type="button">Score</button></th>
                   <th><button class="sort-button" data-sort="efficiency" type="button">Efficiency</button></th>
                   <th><button class="sort-button" data-sort="area" type="button">Area</button></th>
-                  <th>Strengths</th>
+                  <th>
+                    <div class="column-info-heading">
+                      <span>Strengths</span>
+                      <button class="info-button compact-info-button" type="button" aria-expanded="false" aria-controls="strengthLegend" aria-label="Show Strength labels information" data-info-label="Strength labels">i</button>
+                    </div>
+                  </th>
                   <th>Details</th>
                 </tr>
               </thead>
               <tbody id="rankingBody"></tbody>
             </table>
           </div>
-          <div id="emptyState" class="empty-state" hidden>No buildings match the current filters.</div>
+          <div id="emptyState" class="empty-state" role="status" hidden>No buildings match the current filters.</div>
         </section>
 
         <section class="compare-panel">
           <div>
-            <h2>Compare Buildings</h2>
-            <p>Pick two buildings from the selected age and profile.</p>
+            <div class="info-heading">
+              <h2>Compare Buildings</h2>
+              <button class="info-button" type="button" aria-expanded="false" aria-controls="compareInfo" aria-label="Show Compare Buildings information" data-info-label="Compare Buildings">i</button>
+            </div>
+            <div id="compareInfo" class="info-text" hidden>
+              <p>Start typing and choose two building names. Both cards use the same city age, profile, focus choices, production estimates, and weights as the ranking table.</p>
+              <p>The attribute list shows which benefits add the most to each score. Change any control above and the comparison updates immediately.</p>
+            </div>
           </div>
           <div class="compare-inputs">
             <label>Building A <input id="compareA" list="buildingList" placeholder="Start typing"></label>
@@ -200,16 +287,44 @@
           <datalist id="buildingList"></datalist>
           <div id="compareOutput" class="compare-output"></div>
         </section>
+
+        <section class="model-notes">
+          <div class="info-heading model-notes-heading">
+            <h2>How the ranking model works</h2>
+            <button class="info-button" type="button" aria-expanded="false" aria-controls="modelNotesContent" aria-label="Show Ranking model information" data-info-label="Ranking model">i</button>
+          </div>
+          <div id="modelNotesContent" class="model-notes-grid" hidden>
+            <section>
+              <h2>Reading scores</h2>
+              <p>A score is a comparison number, not an amount you receive in the game. The dashboard compares each benefit with the full building list for your selected age, then combines those benefits using the active profile and focus choices.</p>
+              <p>Efficiency means score per adjusted tile. A building that needs a road counts as using one extra tile. Filters do not change either score.</p>
+            </section>
+            <section>
+              <h2>Goods and happiness</h2>
+              <p><strong>Goods Total</strong> groups regular named and random goods from the relevant ages. It does not include Forge Points, medals, coins, supplies, guild goods, or settlement resources.</p>
+              <p><strong>Gross Happiness</strong> is what the building provides. <strong>Net Happiness</strong> is what remains after subtracting the happiness the building itself requires.</p>
+            </section>
+            <section>
+              <h2>What is included</h2>
+              <p>The dashboard compares reward-building definitions. It does not use how many copies you have placed in your city. Great Buildings, Quantum Incursions settlement buildings, and standard era buildings are intentionally left out.</p>
+              <p>The Farming profiles are still being tuned, especially for goods and diamonds. Treat them as a helpful guide and adjust the custom weights when the defaults do not match your city.</p>
+            </section>
+          </div>
+        </section>
+        </div>
       </section>
     </main>
 
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
-    <aside class="drawer" id="detailDrawer" aria-label="Building details" aria-hidden="true">
+    <aside class="drawer" id="detailDrawer" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" tabindex="-1">
       <button id="closeDrawer" type="button" class="close-button">Close</button>
       <div id="detailContent"></div>
     </aside>
 
-    <script src="data/ranking-data.js?v=20260707-1"></script>
-    <script src="src/app.js?v=20260707-1"></script>
+    <script
+      src="src/bootstrap.js?v=20260711-2"
+      data-data-version="20260711-2"
+      data-app-version="20260711-13"
+    ></script>
   </body>
 </html>

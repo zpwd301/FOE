@@ -5,49 +5,49 @@ const PRESET_PROFILES_ENABLED = false;
 const PROFILE_CONFIG = {
   overallEfficiency: {
     title: "Overall Efficiency",
-    subtitle: "Overall Score divided by adjusted area. Small buildings with strong weighted value rise here.",
+    subtitle: "Best for finding well-rounded buildings that give strong value for their space. It uses the Overall score, then divides by adjusted area. A building that needs a road counts as using one extra tile.",
     weightProfile: "overall",
     efficiency: true,
   },
   overall: {
     title: "Overall",
-    subtitle: "Broad comparison across fighting, production, QI, units, and other weighted values.",
+    subtitle: "An all-round comparison of production, combat, Quantum Incursions, units, and other useful benefits. Building size is not part of this score, so choose Overall Efficiency when space matters.",
     weightProfile: "overall",
     efficiency: false,
   },
   fighting: {
     title: "Fighting Ranking",
-    subtitle: "Combat-focused score using fighting boosts and unit production.",
+    subtitle: "Ranks buildings for combat using your Guild Battlegrounds versus Guild Expedition, red versus blue, attack versus defense, and unit-age choices. Building size is not part of this score.",
     weightProfile: "fighting",
     efficiency: false,
   },
   fightingEfficiency: {
     title: "Fighting Efficiency",
-    subtitle: "Fighting Score divided by adjusted area.",
+    subtitle: "Uses the same combat priorities as Fighting Ranking, but favors buildings that provide more combat value per tile. A required road adds one tile to the area.",
     weightProfile: "fighting",
     efficiency: true,
   },
   farming: {
     title: "Farming Ranking",
-    subtitle: "FPs and Goods Total, plus medals, net happiness, blueprints, diamonds, and supplies.",
+    subtitle: "Compares resource-producing buildings using Forge Points, Goods Total, medals, net happiness, blueprints, diamonds, and supplies. This profile is still being tuned, especially for goods and diamonds, so treat it as a guide and adjust the weights when needed.",
     weightProfile: "farming",
     efficiency: false,
   },
   farmingEfficiency: {
     title: "Farming Efficiency",
-    subtitle: "Farming Score divided by adjusted area.",
+    subtitle: "Shows the Farming value delivered per tile, with one extra tile for a required road. The Farming model is still being tuned, especially for goods and diamonds, so treat the results as a guide.",
     weightProfile: "farming",
     efficiency: true,
   },
   qi: {
     title: "QI Ranking",
-    subtitle: "QI fighting boosts, QI action points, and QI starting resources.",
+    subtitle: "Ranks buildings for Quantum Incursions using combat bonuses, action points, and starting resources. The QI fighter role decides whether blue, red, or both combat bonuses receive value.",
     weightProfile: "qi",
     efficiency: false,
   },
   qiEfficiency: {
     title: "QI Efficiency",
-    subtitle: "QI Score divided by adjusted area.",
+    subtitle: "Shows Quantum Incursions value per tile using your selected QI fighter role. A building that needs a road counts as using one extra tile.",
     weightProfile: "qi",
     efficiency: true,
   },
@@ -90,6 +90,7 @@ const state = {
   selectedAgeRows: [],
   activeDetailEntityId: null,
   detailSelectedAttributeKey: null,
+  detailReturnFocus: null,
   sort: { key: "profile", dir: "desc" },
   detailSort: { key: "score", dir: "desc" },
   suppressUrlUpdate: false,
@@ -109,11 +110,26 @@ const focusLabels = {
   fpGoodsFocus: ["FP", "Goods"],
 };
 
+const STRENGTH_INFO = {
+  Combat: { cls: "combat", description: "Attack, defense, or unit value that is not tied to one specific game mode." },
+  GBG: { cls: "gbg", description: "Useful combat bonuses for Guild Battlegrounds." },
+  GE: { cls: "ge", description: "Useful combat bonuses for Guild Expedition." },
+  QI: { cls: "qi", description: "Quantum Incursions combat bonuses, action points, or starting resources." },
+  FP: { cls: "fp", description: "Produces Forge Points or increases your Forge Point production." },
+  Goods: { cls: "goods", description: "Produces regular or guild goods, or increases goods production." },
+  Prod: { cls: "prod", description: "Other useful production, such as medals or supplies." },
+  City: { cls: "utility", description: "Supports your city with happiness or population." },
+  Diamond: { cls: "diamond", description: "Produces diamonds." },
+  Blueprint: { cls: "blueprint", description: "Produces Great Building blueprints." },
+};
+
 const el = {
+  appStatus: document.getElementById("appStatus"),
   versionLabel: document.getElementById("versionLabel"),
   presetSelect: document.getElementById("presetSelect"),
   ageSelect: document.getElementById("ageSelect"),
   categorySelect: document.getElementById("categorySelect"),
+  categorySelectionPreview: document.getElementById("categorySelectionPreview"),
   searchInput: document.getElementById("searchInput"),
   shareButton: document.getElementById("shareButton"),
   qiRoleSelect: document.getElementById("qiRoleSelect"),
@@ -135,12 +151,14 @@ const el = {
   strengthFilter: document.getElementById("strengthFilter"),
   minAreaFilter: document.getElementById("minAreaFilter"),
   maxAreaFilter: document.getElementById("maxAreaFilter"),
+  areaFilterError: document.getElementById("areaFilterError"),
   noRoadFilter: document.getElementById("noRoadFilter"),
   topNSelect: document.getElementById("topNSelect"),
   weightModeSelect: document.getElementById("weightModeSelect"),
   customWeights: document.getElementById("customWeights"),
   resetWeightsButton: document.getElementById("resetWeightsButton"),
   rankingBody: document.getElementById("rankingBody"),
+  strengthLegend: document.getElementById("strengthLegend"),
   emptyState: document.getElementById("emptyState"),
   rankingTitle: document.getElementById("rankingTitle"),
   rankingSubtitle: document.getElementById("rankingSubtitle"),
@@ -158,6 +176,10 @@ const el = {
   buildingList: document.getElementById("buildingList"),
   compareOutput: document.getElementById("compareOutput"),
 };
+
+let renderTimer = null;
+let pendingAfterRender = null;
+let announceTimer = null;
 
 function fmt(value, digits = 2) {
   if (!Number.isFinite(value)) return "";
@@ -189,6 +211,17 @@ function clamp(value, min, max) {
 function numberValue(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function announce(message) {
+  window.clearTimeout(announceTimer);
+  el.appStatus.textContent = "";
+  window.requestAnimationFrame(() => {
+    el.appStatus.textContent = message;
+    announceTimer = window.setTimeout(() => {
+      el.appStatus.textContent = "";
+    }, 3000);
+  });
 }
 
 function ageLabel(ageKey) {
@@ -240,6 +273,37 @@ function controls() {
     noRoadOnly: el.noRoadFilter.checked,
     topN: el.topNSelect.value,
   };
+}
+
+function areaFilterValidation(c = controls()) {
+  const minEntered = el.minAreaFilter.value !== "";
+  const maxEntered = el.maxAreaFilter.value !== "";
+  if ((minEntered && !el.minAreaFilter.validity.valid) || (maxEntered && !el.maxAreaFilter.validity.valid)) {
+    return {
+      message: "Use whole area values of zero or more. Area filters are paused until this is corrected.",
+      minInvalid: minEntered && !el.minAreaFilter.validity.valid,
+      maxInvalid: maxEntered && !el.maxAreaFilter.validity.valid,
+    };
+  }
+  if (c.minArea !== null && c.maxArea !== null && c.minArea > c.maxArea) {
+    return {
+      message: "Minimum area cannot be greater than maximum area. Area filters are paused until this is corrected.",
+      minInvalid: true,
+      maxInvalid: true,
+    };
+  }
+  return { message: "", minInvalid: false, maxInvalid: false };
+}
+
+function syncLongValuePresentation() {
+  const category = el.categorySelect.selectedOptions[0]?.textContent || el.categorySelect.value;
+  const age = el.ageSelect.selectedOptions[0]?.textContent || el.ageSelect.value;
+  el.categorySelect.title = category;
+  el.ageSelect.title = age;
+  el.categorySelectionPreview.textContent = category ? `Selected: ${category}` : "";
+  el.categorySelectionPreview.hidden = category.length <= 30;
+  el.compareA.title = el.compareA.value;
+  el.compareB.title = el.compareB.value;
 }
 
 function attrInfo(key) {
@@ -667,11 +731,12 @@ function buildRows() {
 
 function filteredRows(rows) {
   const c = controls();
+  const areaFiltersValid = !areaFilterValidation(c).message;
   return rows.filter((row) => {
     if (c.category !== ALL_CATEGORIES && row.record.category !== c.category) return false;
     if (c.search && !row.record.name.toLowerCase().includes(c.search)) return false;
-    if (c.minArea !== null && row.record.adjustedArea < c.minArea) return false;
-    if (c.maxArea !== null && row.record.adjustedArea > c.maxArea) return false;
+    if (areaFiltersValid && c.minArea !== null && row.record.adjustedArea < c.minArea) return false;
+    if (areaFiltersValid && c.maxArea !== null && row.record.adjustedArea > c.maxArea) return false;
     if (c.noRoadOnly && row.record.requiresRoad) return false;
     if (!rowHasStrength(row, c.strength)) return false;
     return true;
@@ -708,17 +773,26 @@ function displayRows(rows) {
 
 function renderSummary(rows) {
   const c = controls();
+  const config = PROFILE_CONFIG[state.profile];
   const filtered = filteredRows(rows);
   const top = filtered[0];
   el.summaryGrid.innerHTML = [
-    ["Buildings", filtered.length.toLocaleString()],
-    ["Top building", top ? top.record.name : "None"],
-    ["Top score", top ? fmt(top.score) : ""],
-    ["Top efficiency", top ? fmt(top.efficiency, 3) : ""],
-  ].map(([label, value]) => `
+    ["Buildings", filtered.length.toLocaleString(), "The number of buildings left after your current search and filters."],
+    ["Top building", top ? top.record.name : "None", "The highest-ranked building among the current matches. Filters narrow the list but do not recalculate its rank."],
+    ["Top score", top ? fmt(top.score) : "", config.efficiency
+      ? "The profile score of the efficiency winner. Another building may have a higher score before space is considered."
+      : "The active profile score of the top building. This is a comparison number, not an amount produced in the game."],
+    ["Top efficiency", top ? fmt(top.efficiency, 3) : "", config.efficiency
+      ? "The top building's score per adjusted tile, including one extra tile when a road is required."
+      : "The efficiency of the top-ranked building. Choose an Efficiency tab to rank buildings by value per tile."],
+  ].map(([label, value, help], index) => `
     <div class="summary-card">
-      <span>${label}</span>
-      <strong>${value}</strong>
+      <div class="summary-label-row">
+        <span>${label}</span>
+        <button class="info-button compact-info-button" type="button" aria-expanded="false" aria-controls="summaryInfo${index}" aria-label="Show ${label} information" data-info-label="${label}">i</button>
+      </div>
+      <strong>${escapeHtml(value)}</strong>
+      <p id="summaryInfo${index}" class="summary-help info-text" hidden>${help}</p>
     </div>
   `).join("");
   el.rankingSubtitle.textContent = `${DATA.ages.find((age) => age.key === c.age)?.label || c.age} · ${c.category}`;
@@ -733,13 +807,16 @@ function renderTable(rows) {
   const visible = sorted.slice(0, limit);
   el.emptyState.hidden = visible.length > 0;
   el.rankingBody.innerHTML = visible.map((row) => {
-    const badges = row.badges.map((badge) => `<span class="badge ${badge.cls}">${badge.text}</span>`).join("");
+    const badges = row.badges.map((badge) => {
+      const description = STRENGTH_INFO[badge.text]?.description || "A leading strength for this building in the active profile.";
+      return `<span class="badge ${badge.cls}" title="${escapeHtml(description)}" aria-label="${escapeHtml(`${badge.text}: ${description}`)}">${badge.text}</span>`;
+    }).join("");
     return `
       <tr data-entity-id="${row.record.entityId}">
         <td class="rank">${row.rank}</td>
         <td>
-          <div class="building-name">${row.record.name}</div>
-          <div class="building-meta">${row.record.category}</div>
+          <div class="building-name">${escapeHtml(row.record.name)}</div>
+          <div class="building-meta">${escapeHtml(row.record.category)}</div>
         </td>
         <td>${fmt(row.score)}</td>
         <td>${fmt(row.efficiency, 3)}</td>
@@ -753,25 +830,43 @@ function renderTable(rows) {
 
 function renderBuildingList() {
   el.buildingList.innerHTML = state.selectedAgeRows
-    .map((record) => `<option value="${record.name.replaceAll('"', "&quot;")}"></option>`)
+    .map((record) => `<option value="${escapeHtml(record.name)}"></option>`)
     .join("");
+}
+
+function renderStrengthLegend() {
+  el.strengthLegend.innerHTML = `
+    <p class="strength-legend-intro">Strength badges are quick highlights, not a complete list. Up to three appear in each row; open <strong>View</strong> to see the full scoring breakdown.</p>
+    <div class="strength-legend-grid">
+      ${Object.entries(STRENGTH_INFO).map(([label, info]) => `
+        <div class="strength-legend-item">
+          <span class="badge ${info.cls}">${label}</span>
+          <span>${info.description}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function filterChips(c) {
   const chips = [];
+  const areaValidation = areaFilterValidation(c);
   if (PRESET_PROFILES_ENABLED && el.presetSelect.value) chips.push(`Preset: ${presetLabel(el.presetSelect.value)}`);
   if (c.search) chips.push(`Search: ${el.searchInput.value.trim()}`);
   if (c.category !== ALL_CATEGORIES) chips.push(c.category);
   if (c.strength) chips.push(`Strength: ${el.strengthFilter.selectedOptions[0]?.textContent || c.strength}`);
-  if (c.minArea !== null) chips.push(`Min area: ${c.minArea}`);
-  if (c.maxArea !== null) chips.push(`Max area: ${c.maxArea}`);
+  if (areaValidation.message) {
+    chips.push("Area filters paused");
+  } else {
+    if (c.minArea !== null) chips.push(`Min area: ${c.minArea}`);
+    if (c.maxArea !== null) chips.push(`Max area: ${c.maxArea}`);
+  }
   if (c.noRoadOnly) chips.push("No road");
   if (el.weightModeSelect.value === "custom") chips.push("Custom weights");
   return chips;
 }
 
-function renderControlState(rows, visibleRows) {
-  const c = controls();
+function syncFocusOutputs() {
   const focusOutputs = [
     [el.gbgGeFocus, el.gbgGeValue, "gbgGeFocus"],
     [el.redBlueFocus, el.redBlueValue, "redBlueFocus"],
@@ -786,15 +881,28 @@ function renderControlState(rows, visibleRows) {
     output.textContent = label;
     input.setAttribute("aria-valuetext", label);
   });
+}
 
-  document.querySelectorAll(".tab").forEach((tab) => {
-    const selected = tab.dataset.profile === state.profile;
-    tab.setAttribute("aria-selected", selected ? "true" : "false");
-  });
+function renderControlState(rows, visibleRows) {
+  const c = controls();
+  const areaValidation = areaFilterValidation(c);
+  syncFocusOutputs();
+  syncLongValuePresentation();
+
+  el.minAreaFilter.setAttribute("aria-invalid", areaValidation.minInvalid ? "true" : "false");
+  el.maxAreaFilter.setAttribute("aria-invalid", areaValidation.maxInvalid ? "true" : "false");
+  el.areaFilterError.textContent = areaValidation.message;
+  el.areaFilterError.hidden = !areaValidation.message;
+
+  syncProfileTabs();
 
   document.querySelectorAll(".sort-button").forEach((button) => {
     const active = button.dataset.sort === state.sort.key;
     button.classList.toggle("active-sort", active);
+    button.closest("th")?.setAttribute(
+      "aria-sort",
+      active ? (state.sort.dir === "asc" ? "ascending" : "descending") : "none"
+    );
     button.setAttribute(
       "aria-label",
       `${button.textContent.trim()} sort${active ? `, ${state.sort.dir === "asc" ? "ascending" : "descending"}` : ""}`
@@ -822,12 +930,14 @@ function renderCustomWeights() {
   el.customWeights.innerHTML = `
     <div class="custom-summary">
       <span>${PROFILE_CONFIG[state.profile].title}</span>
-      <strong>${fmt(totalWeight)} active weight</strong>
+      <strong>${fmt(totalWeight)} importance total</strong>
     </div>
     <p class="section-note">${
       el.weightModeSelect.value === "custom"
-        ? `Default values are shown until edited.${activeCount ? ` ${activeCount} override${activeCount === 1 ? "" : "s"} active for this profile.` : ""}`
-        : "Switch to custom mode to edit profile weights."
+        ? activeCount
+          ? `${activeCount} custom change${activeCount === 1 ? " is" : "s are"} active for this profile. Every unchanged field still uses its default value.`
+          : "Custom mode is on, but no values have been changed yet. Edit any field to create a custom value."
+        : `Using the recommended weights for ${PROFILE_CONFIG[state.profile].title}. Choose Custom if you want to change the balance.`
     }</p>
     <div class="weight-list">
       ${rows.map((row) => {
@@ -878,7 +988,7 @@ function renderCompare() {
     `).join("") : `<p class="empty-compare-note">No non-zero weight attributes for this profile.</p>`;
     return `
       <div class="compare-card">
-        <h3>${row.record.name}</h3>
+        <h3>${escapeHtml(row.record.name)}</h3>
         <dl class="metric-list">
           <div><dt>Rank</dt><dd>${row.rank}</dd></div>
           <div><dt>Score</dt><dd>${fmt(row.score)}</dd></div>
@@ -897,20 +1007,19 @@ function explainRanking(row) {
   const strengths = plainStrengths(top).join(", ");
   const rankText = `#${row.rank} in ${config.title}`;
   const areaText = row.record.adjustedArea
-    ? `It uses ${fmt(row.record.adjustedArea, 0)} adjusted tiles`
-    : "Its footprint is not available";
-  const scoreText = `with a ${fmt(row.score)} score`;
+    ? `Its adjusted area is ${fmt(row.record.adjustedArea, 0)} tiles${row.record.requiresRoad ? ", including one tile for the road" : ""}.`
+    : "Its building area is not available.";
   const hasCompactFootprint = Number(row.record.adjustedArea || 0) > 0 && row.record.adjustedArea < 18;
   if (!top.length) {
-    return `${row.record.name} is ${rankText}. ${areaText} ${scoreText}, but this profile has no large positive contribution for the building.`;
+    return `${row.record.name} ranks ${rankText}. Its profile score is ${fmt(row.score)}, but none of its recorded benefits receives much value in this profile. ${areaText}`;
   }
   if (config.efficiency) {
     const efficiencyReason = hasCompactFootprint
-      ? `the compact footprint helps those values convert into a ${fmt(row.efficiency, 3)} efficiency score`
-      : `those values convert into a ${fmt(row.efficiency, 3)} efficiency score`;
-    return `${row.record.name} is ${rankText}. Its strongest signals are ${strengths}, and ${efficiencyReason}. ${areaText}.`;
+      ? `Its compact footprint helps it reach ${fmt(row.efficiency, 3)} score per tile.`
+      : `Together, those benefits give it ${fmt(row.efficiency, 3)} score per tile.`;
+    return `${row.record.name} ranks ${rankText}. Its main strengths are ${strengths}. ${efficiencyReason} ${areaText}`;
   }
-  return `${row.record.name} is ${rankText}. Its strongest signals are ${strengths}. ${areaText} ${scoreText}.`;
+  return `${row.record.name} ranks ${rankText}. Its main strengths are ${strengths}, giving it a profile score of ${fmt(row.score)}. Building size does not affect this ranking. ${areaText}`;
 }
 
 function plainStrengthForLabel(label) {
@@ -1226,9 +1335,45 @@ function buildReportText(row) {
   ].join("\n");
 }
 
-function openDetail(entityId, focusClose = true) {
+function setBackgroundInert(inert) {
+  [document.querySelector(".app-header"), document.querySelector(".layout")].forEach((region) => {
+    if (region) region.inert = inert;
+  });
+}
+
+function drawerFocusableElements() {
+  return Array.from(el.detailDrawer.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+  )).filter((item) => item.getClientRects().length > 0);
+}
+
+function trapDetailFocus(event) {
+  if (event.key !== "Tab" || !el.detailDrawer.classList.contains("open")) return;
+  const focusable = drawerFocusableElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    el.detailDrawer.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey && (active === first || !el.detailDrawer.contains(active))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (active === last || !el.detailDrawer.contains(active))) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function openDetail(entityId, focusClose = true, returnFocus = null) {
   const row = state.rows.find((item) => item.record.entityId === entityId);
   if (!row) return;
+  if (focusClose) {
+    state.detailReturnFocus = returnFocus
+      || (!el.detailDrawer.contains(document.activeElement) ? document.activeElement : state.detailReturnFocus);
+  }
   if (state.activeDetailEntityId !== entityId) state.detailSelectedAttributeKey = null;
   state.activeDetailEntityId = entityId;
   const attrRows = attributeRowsFor(row);
@@ -1257,7 +1402,7 @@ function openDetail(entityId, focusClose = true) {
     </tr>
   `).join("");
   el.detailContent.innerHTML = `
-    <h2 class="detail-title">${escapeHtml(row.record.name)}</h2>
+    <h2 class="detail-title" id="detailTitle">${escapeHtml(row.record.name)}</h2>
     <p class="detail-subtitle">${escapeHtml(row.record.category)}</p>
     <div class="detail-grid">
       <div class="detail-stat"><span>Rank</span><strong>${row.rank}</strong></div>
@@ -1302,6 +1447,8 @@ function openDetail(entityId, focusClose = true) {
   el.detailDrawer.classList.add("open");
   el.detailDrawer.setAttribute("aria-hidden", "false");
   el.drawerBackdrop.hidden = false;
+  document.body.classList.add("drawer-open");
+  setBackgroundInert(true);
   el.detailContent.querySelectorAll("[data-detail-sort]").forEach((button) => {
     button.addEventListener("click", () => {
       const key = button.dataset.detailSort;
@@ -1318,11 +1465,20 @@ function openDetail(entityId, focusClose = true) {
 }
 
 function closeDetail() {
+  if (!el.detailDrawer.classList.contains("open")) return;
+  const returnFocus = state.detailReturnFocus;
+  if (el.detailDrawer.contains(document.activeElement)) document.activeElement.blur();
   el.detailDrawer.classList.remove("open");
   el.detailDrawer.setAttribute("aria-hidden", "true");
   el.drawerBackdrop.hidden = true;
+  document.body.classList.remove("drawer-open");
+  setBackgroundInert(false);
   state.activeDetailEntityId = null;
   state.detailSelectedAttributeKey = null;
+  state.detailReturnFocus = null;
+  if (returnFocus?.isConnected) {
+    requestAnimationFrame(() => returnFocus.focus());
+  }
 }
 
 function render() {
@@ -1335,6 +1491,25 @@ function render() {
   renderCustomWeights();
   renderCompare();
   updateUrl();
+}
+
+function renderImmediately() {
+  window.clearTimeout(renderTimer);
+  renderTimer = null;
+  pendingAfterRender = null;
+  render();
+}
+
+function scheduleRender(delay = 100, afterRender = null) {
+  window.clearTimeout(renderTimer);
+  pendingAfterRender = afterRender;
+  renderTimer = window.setTimeout(() => {
+    renderTimer = null;
+    const callback = pendingAfterRender;
+    pendingAfterRender = null;
+    render();
+    callback?.();
+  }, delay);
 }
 
 function resetDefaults() {
@@ -1360,15 +1535,33 @@ function resetDefaults() {
   el.noRoadFilter.checked = false;
   el.topNSelect.value = "200";
   el.weightModeSelect.value = "default";
+  state.customWeights = {
+    overall: {},
+    fighting: {},
+    farming: {},
+    qi: {},
+  };
   state.sort = { key: "profile", dir: "desc" };
 }
 
 function setActiveProfile(profile) {
   if (!PROFILE_CONFIG[profile]) return;
   state.profile = profile;
-  document.querySelectorAll(".tab").forEach((item) => {
-    item.classList.toggle("active", item.dataset.profile === profile);
+  syncProfileTabs();
+}
+
+function syncProfileTabs() {
+  let activeTab = null;
+  document.querySelectorAll(".tab").forEach((tab) => {
+    const selected = tab.dataset.profile === state.profile;
+    tab.classList.toggle("active", selected);
+    tab.setAttribute("aria-selected", selected ? "true" : "false");
+    tab.tabIndex = selected ? 0 : -1;
+    if (selected) activeTab = tab;
   });
+  if (activeTab) {
+    document.getElementById("rankingPanel")?.setAttribute("aria-labelledby", activeTab.id);
+  }
 }
 
 function applyPreset(presetKey) {
@@ -1486,58 +1679,102 @@ function applyUrlState() {
 }
 
 function initMobileCollapsibles() {
-  const mobileQuery = window.matchMedia("(max-width: 760px)");
-  document.querySelectorAll("[data-mobile-collapsible]").forEach((section) => {
-    if (mobileQuery.matches) {
-      section.open = false;
-    }
-  });
+  const mobileQuery = window.matchMedia("(max-width: 1100px)");
+  const mobileSettings = document.querySelector("[data-mobile-settings]");
+  const sync = () => {
+    if (mobileSettings) mobileSettings.open = !mobileQuery.matches;
+    document.querySelectorAll("[data-mobile-collapsible]").forEach((section) => {
+      section.open = !mobileQuery.matches;
+    });
+  };
+  sync();
+  mobileQuery.addEventListener("change", sync);
 }
 
 function init() {
   el.versionLabel.textContent = `Model ${DATA.metadata.workbookModelVersion} · Last updated ${DATA.metadata.generatedAt}`;
-  el.ageSelect.innerHTML = DATA.ages.map((age) => `<option value="${age.key}">${age.label}</option>`).join("");
-  el.categorySelect.innerHTML = DATA.categories.map((category) => `<option>${category}</option>`).join("");
+  el.ageSelect.innerHTML = DATA.ages.map((age) => `<option value="${escapeHtml(age.key)}" title="${escapeHtml(age.label)}">${escapeHtml(age.label)}</option>`).join("");
+  el.categorySelect.innerHTML = DATA.categories.map((category) => `<option value="${escapeHtml(category)}" title="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("");
   resetDefaults();
   applyUrlState();
   initMobileCollapsibles();
+  renderStrengthLegend();
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".info-button");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const target = document.getElementById(button.getAttribute("aria-controls"));
+    if (!target) return;
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    target.hidden = !expanded;
+    const label = button.dataset.infoLabel || "section";
+    button.setAttribute("aria-label", `${expanded ? "Hide" : "Show"} ${label} information`);
+  });
 
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
       el.presetSelect.value = "";
       setActiveProfile(button.dataset.profile);
       state.sort = { key: "profile", dir: "desc" };
-      render();
+      renderImmediately();
     });
   });
 
+  document.querySelector(".tabs").addEventListener("keydown", (event) => {
+    const current = event.target.closest('[role="tab"]');
+    if (!current) return;
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const currentIndex = tabs.indexOf(current);
+    let nextIndex = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = tabs.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    tabs[nextIndex].focus();
+    tabs[nextIndex].click();
+  });
+
   [
-    el.presetSelect,
     el.ageSelect,
     el.categorySelect,
-    el.searchInput,
     el.qiRoleSelect,
+    el.strengthFilter,
+    el.noRoadFilter,
+    el.topNSelect,
+    el.weightModeSelect,
+  ].forEach((input) => input.addEventListener("change", renderImmediately));
+
+  el.searchInput.addEventListener("input", () => scheduleRender(160));
+
+  [
     el.gbgGeFocus,
     el.redBlueFocus,
     el.attackDefenseFocus,
     el.unitAgeFocus,
     el.fpGoodsFocus,
+  ].forEach((input) => input.addEventListener("input", () => {
+    syncFocusOutputs();
+    scheduleRender(80);
+  }));
+
+  [
     el.fpEstimate,
     el.goodsEstimate,
     el.guildGoodsEstimate,
     el.medalEstimate,
     el.specialGoodsEstimate,
-    el.strengthFilter,
     el.minAreaFilter,
     el.maxAreaFilter,
-    el.noRoadFilter,
-    el.topNSelect,
-    el.weightModeSelect,
-  ].forEach((input) => input.addEventListener("input", render));
+  ].forEach((input) => input.addEventListener("input", () => scheduleRender(120)));
 
   el.presetSelect.addEventListener("change", () => {
     applyPreset(el.presetSelect.value);
-    render();
+    renderImmediately();
   });
 
   document.querySelectorAll(".sort-button").forEach((button) => {
@@ -1548,13 +1785,14 @@ function init() {
       } else {
         state.sort = { key, dir: key === "name" || key === "area" ? "asc" : "desc" };
       }
-      render();
+      renderImmediately();
     });
   });
 
   el.resetButton.addEventListener("click", () => {
     resetDefaults();
-    render();
+    renderImmediately();
+    announce("Dashboard defaults restored.");
   });
   el.shareButton.addEventListener("click", async () => {
     updateUrl();
@@ -1562,6 +1800,7 @@ function init() {
     try {
       await navigator.clipboard.writeText(url);
       el.shareButton.textContent = "Copied";
+      announce("Share link copied.");
       setTimeout(() => { el.shareButton.textContent = "Copy share link"; }, 1200);
     } catch (_error) {
       window.prompt("Copy this link", url);
@@ -1569,7 +1808,8 @@ function init() {
   });
   el.resetWeightsButton.addEventListener("click", () => {
     state.customWeights[activeWeightProfile()] = {};
-    render();
+    renderImmediately();
+    announce("Weights for the active profile restored.");
   });
   el.customWeights.addEventListener("input", (event) => {
     const input = event.target.closest("input[data-weight-key]");
@@ -1585,24 +1825,28 @@ function init() {
     } else {
       state.customWeights[profile][key] = numberValue(value);
     }
-    render();
-    const nextWeightList = el.customWeights.querySelector(".weight-list");
-    if (nextWeightList) nextWeightList.scrollTop = previousScrollTop;
-    const nextInput = Array.from(el.customWeights.querySelectorAll("input[data-weight-key]"))
-      .find((candidate) => candidate.dataset.weightKey === key);
-    if (nextInput) {
-      try {
-        nextInput.focus({ preventScroll: true });
-      } catch (_error) {
-        nextInput.focus();
+    scheduleRender(140, () => {
+      const nextWeightList = el.customWeights.querySelector(".weight-list");
+      if (nextWeightList) nextWeightList.scrollTop = previousScrollTop;
+      const nextInput = Array.from(el.customWeights.querySelectorAll("input[data-weight-key]"))
+        .find((candidate) => candidate.dataset.weightKey === key);
+      if (nextInput && document.activeElement === document.body) {
+        try {
+          nextInput.focus({ preventScroll: true });
+        } catch (_error) {
+          nextInput.focus();
+        }
       }
-    }
+    });
   });
   el.closeDrawer.addEventListener("click", closeDetail);
   el.drawerBackdrop.addEventListener("click", closeDetail);
   el.rankingBody.addEventListener("click", (event) => {
     const row = event.target.closest("tr[data-entity-id]");
-    if (row) openDetail(row.dataset.entityId);
+    if (row) {
+      const returnFocus = event.target.closest(".details-button") || row.querySelector(".details-button");
+      openDetail(row.dataset.entityId, true, returnFocus);
+    }
   });
   el.detailContent.addEventListener("click", async (event) => {
     const attrRow = event.target.closest("tr[data-attribute-key]");
@@ -1628,6 +1872,7 @@ function init() {
     try {
       await navigator.clipboard.writeText(reportText);
       button.textContent = "Copied";
+      announce("Building report copied.");
       setTimeout(() => { button.textContent = "Copy report"; }, 1200);
     } catch (_error) {
       if (output) {
@@ -1651,10 +1896,26 @@ function init() {
       row.classList.toggle("selected-attribute-row", row.dataset.attributeKey === state.detailSelectedAttributeKey);
     });
   });
-  el.compareA.addEventListener("input", renderCompare);
-  el.compareB.addEventListener("input", renderCompare);
+  el.compareA.addEventListener("input", () => {
+    syncLongValuePresentation();
+    renderCompare();
+  });
+  el.compareB.addEventListener("input", () => {
+    syncLongValuePresentation();
+    renderCompare();
+  });
+  document.getElementById("viewRankingsButton").addEventListener("click", () => {
+    const mobileSettings = document.querySelector("[data-mobile-settings]");
+    if (mobileSettings) mobileSettings.open = false;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.querySelector(".tabs")?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+  });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeDetail();
+    if (event.key === "Escape") {
+      closeDetail();
+      return;
+    }
+    trapDetailFocus(event);
   });
 
   render();

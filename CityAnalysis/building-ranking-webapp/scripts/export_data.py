@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
+import gzip
+import hashlib
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -12,10 +16,91 @@ SCRIPT_DIR = os.path.join(PROJECT_ROOT, "script")
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-import building_attribute_ranking_workbook as model  # noqa: E402
-
+import building_ranking_model as model  # noqa: E402
 
 DEFAULT_AGE = "VirtualFuture"
+DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
+# Increment when the serialized website payload shape or semantics change.
+EXPORT_SCHEMA_VERSION = 1
+
+
+def file_sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def data_paths() -> Dict[str, str]:
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    return {
+        "directory": data_dir,
+        "script": os.path.join(data_dir, "ranking-data.js"),
+        "compressed": os.path.join(data_dir, "ranking-data.json.gz"),
+        "state": os.path.join(data_dir, "export-state.json"),
+    }
+
+
+def atomic_write(path: str, content: Any, binary: bool = False) -> None:
+    mode = "wb" if binary else "w"
+    kwargs = {} if binary else {"encoding": "utf-8"}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode, dir=os.path.dirname(path), delete=False, **kwargs) as handle:
+        temp_path = handle.name
+        handle.write(content)
+    os.replace(temp_path, path)
+
+
+def read_wrapped_data(path: str) -> tuple[str, Dict[str, Any]]:
+    with open(path, "r", encoding="utf-8") as handle:
+        script_text = handle.read()
+    if not script_text.startswith(DATA_PREFIX) or not script_text.rstrip().endswith(";"):
+        raise ValueError(f"Unexpected data wrapper in {path}")
+    json_text = script_text[len(DATA_PREFIX):].rstrip()[:-1]
+    return json_text, json.loads(json_text)
+
+
+def semantic_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = dict(data.get("metadata", {}))
+    metadata.pop("generatedAt", None)
+    return {**data, "metadata": metadata}
+
+
+def export_fingerprint(reference_file: str) -> Dict[str, Any]:
+    return {
+        "schemaVersion": EXPORT_SCHEMA_VERSION,
+        "modelVersion": model.WORKBOOK_VERSION,
+        "modelSha256": file_sha256(os.path.abspath(model.__file__)),
+        "source": os.path.relpath(reference_file, PROJECT_ROOT),
+        "sourceSha256": file_sha256(reference_file),
+    }
+
+
+def matching_export_state(fingerprint: Dict[str, Any]) -> bool:
+    paths = data_paths()
+    if not all(os.path.exists(paths[key]) for key in ("script", "compressed", "state")):
+        return False
+    try:
+        with open(paths["state"], "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except (OSError, ValueError):
+        return False
+    return (
+        all(state.get(key) == value for key, value in fingerprint.items())
+        and state.get("scriptSha256") == file_sha256(paths["script"])
+        and state.get("compressedSha256") == file_sha256(paths["compressed"])
+    )
+
+
+def write_export_state(fingerprint: Dict[str, Any]) -> None:
+    paths = data_paths()
+    state = {
+        **fingerprint,
+        "scriptSha256": file_sha256(paths["script"]),
+        "compressedSha256": file_sha256(paths["compressed"]),
+    }
+    atomic_write(paths["state"], json.dumps(state, indent=2, sort_keys=True) + "\n")
 
 
 def record_payload(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,8 +155,53 @@ def attr_metadata(attr_keys: List[str]) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def write_data_files(data: Dict[str, Any]) -> bool:
+    paths = data_paths()
+    out_dir = paths["directory"]
+    json_text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    if os.path.exists(paths["script"]):
+        try:
+            existing_json_text, existing_data = read_wrapped_data(paths["script"])
+        except (OSError, ValueError, json.JSONDecodeError):
+            existing_json_text, existing_data = "", {}
+        if semantic_payload(existing_data) == semantic_payload(data):
+            expected_compressed = gzip.compress(existing_json_text.encode("utf-8"), compresslevel=9, mtime=0)
+            repaired = not os.path.exists(paths["compressed"]) or file_sha256(paths["compressed"]) != hashlib.sha256(expected_compressed).hexdigest()
+            if repaired:
+                atomic_write(paths["compressed"], expected_compressed, binary=True)
+                print(f"Repaired {os.path.relpath(paths['compressed'], PROJECT_ROOT)}")
+            print("No ranking changes; kept the existing data files and generation timestamp.")
+            return False
+
+    script_text = f"{DATA_PREFIX}{json_text};\n"
+    compressed_bytes = gzip.compress(json_text.encode("utf-8"), compresslevel=9, mtime=0)
+    atomic_write(paths["script"], script_text)
+    atomic_write(paths["compressed"], compressed_bytes, binary=True)
+
+    script_size = os.path.getsize(paths["script"])
+    compressed_size = os.path.getsize(paths["compressed"])
+    print(f"Wrote {os.path.relpath(paths['script'], PROJECT_ROOT)} ({script_size:,} bytes)")
+    print(f"Wrote {os.path.relpath(paths['compressed'], PROJECT_ROOT)} ({compressed_size:,} bytes)")
+    return True
+
+
+def compress_existing_data() -> None:
+    paths = data_paths()
+    json_text, _ = read_wrapped_data(paths["script"])
+    atomic_write(
+        paths["compressed"],
+        gzip.compress(json_text.encode("utf-8"), compresslevel=9, mtime=0),
+        binary=True,
+    )
+    print(f"Wrote {os.path.relpath(paths['compressed'], PROJECT_ROOT)} ({os.path.getsize(paths['compressed']):,} bytes)")
+
+
 def main() -> None:
     reference_file = os.path.abspath(model.DEFAULT_REFERENCE)
+    fingerprint = export_fingerprint(reference_file)
+    if matching_export_state(fingerprint):
+        print("Input, model, schema, and output hashes are unchanged; export skipped.")
+        return
     payload = model.load_payload(reference_file)
     entities = payload.get("CityEntities")
     if not isinstance(entities, dict):
@@ -142,15 +272,19 @@ def main() -> None:
         },
     }
 
-    out_dir = os.path.join(os.path.dirname(__file__), "..", "data")
-    os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, "ranking-data.js")
-    with open(out_file, "w", encoding="utf-8") as handle:
-        handle.write("window.FOE_BUILDING_RANKING_DATA = ")
-        json.dump(data, handle, ensure_ascii=False, separators=(",", ":"))
-        handle.write(";\n")
-    print(f"Wrote {os.path.relpath(out_file, PROJECT_ROOT)}")
+    write_data_files(data)
+    write_export_state(fingerprint)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Export the building-ranking dashboard data.")
+    parser.add_argument(
+        "--compress-existing",
+        action="store_true",
+        help="Create the compressed JSON asset from the current ranking-data.js without rebuilding data.",
+    )
+    args = parser.parse_args()
+    if args.compress_existing:
+        compress_existing_data()
+    else:
+        main()

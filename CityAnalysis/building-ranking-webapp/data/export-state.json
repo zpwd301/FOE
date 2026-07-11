@@ -1,0 +1,9 @@
+{
+  "compressedSha256": "d70110501805f2a07b1335bc48539720e0e744a90c2ba88785d767481380e37c",
+  "modelSha256": "44784f9ac5970cd1780727c218186d84fb4eb4936b5c1ae63a92eb07b908da1f",
+  "modelVersion": "1.0.42",
+  "schemaVersion": 1,
+  "scriptSha256": "9a663702c3c5e6a73e3ac88db0a30b207a2ae3a73d04ba3fbce9fd23262a99f9",
+  "source": "input/ref/zpwd-ref",
+  "sourceSha256": "a220e215cbd03e25030cb9eadb667f20437a5348c8df1df541892d95117cdd63"
+}
