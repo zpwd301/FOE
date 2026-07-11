@@ -53,11 +53,20 @@
     $("#net-value").textContent = signed(net); $("#net-value").className = net >= 0 ? "positive" : "negative"; $("#net-sub").textContent = `${(net / first * 100).toFixed(2)}% across selected period`;
     $("#pace-value").textContent = signed(Math.round(net / elapsed)); $("#pace-value").className = net >= 0 ? "positive" : "negative"; $("#pace-sub").textContent = "average net goods per day";
     const alert = $("#critical-alert");
-    alert.hidden = criticalGoods.length === 0;
+    const hasCriticalGoods = criticalGoods.length > 0;
+    alert.hidden = false;
+    alert.classList.toggle("is-healthy", !hasCriticalGoods);
+    alert.setAttribute("role", hasCriticalGoods ? "alert" : "status");
+    $("#critical-mark").textContent = hasCriticalGoods ? "!" : "✓";
+    $("#critical-label").textContent = hasCriticalGoods ? "Critical stock alert" : "Treasury status";
     if (criticalGoods.length) {
       const list = criticalGoods.map((good) => `${good.name} (${good.age}): ${fmt.format(good.current)}`).join(", ");
       const shortfall = sum(criticalGoods.map((good) => data.meta.lowStockThreshold - good.current));
       $("#critical-summary").textContent = `${list} in stock. ${fmt.format(shortfall)} needed to reach the ${fmt.format(data.meta.lowStockThreshold)} target.`;
+      $("#critical-guidance").textContent = "GBG officers: Please avoid spending any good marked as critically low unless it is truly necessary. Donations to replenish low goods are greatly appreciated! ❤️";
+    } else {
+      $("#critical-summary").textContent = "Treasury thriving. Thank you, Guardians! ✨";
+      $("#critical-guidance").textContent = "Every tracked good is safely above the critical threshold. Your steady contributions are keeping GoE prepared and prosperous. Fantastic teamwork!";
     }
     const best = [...goods].sort((a, b) => b.delta - a.delta)[0]; const weakest = [...goods].sort((a, b) => a.delta - b.delta)[0]; const lowest = [...goods].sort((a, b) => a.current - b.current)[0];
     $("#insights").innerHTML = `<div class="insight"><strong class="${weakAge.delta >= 0 ? "positive" : "negative"}">${signed(weakAge.delta)}</strong><span>${escapeHtml(weakAge.age)} is the weakest age group.</span><span class="insight-tag">AGE MOVEMENT</span></div><div class="insight"><strong class="positive">${escapeHtml(best.name)}</strong><span>Largest gain: ${signed(best.delta)} goods.</span><span class="insight-tag">BEST CONTRIBUTOR</span></div><div class="insight"><strong class="negative">${escapeHtml(weakest.name)}</strong><span>Largest draw: ${signed(weakest.delta)} goods.</span><span class="insight-tag">REFILL PRIORITY</span></div>`;

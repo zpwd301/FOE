@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Guardians of Elysium guild management and treasury health.">
-    <title>Guardians of Elysium | Guild Management</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta name="description" content="GoE guild management and treasury health.">
+    <title>GoE | Guild Management</title>
+    <link rel="stylesheet" href="styles.css?v=20260711-1">
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="#guild-management" aria-label="Guardians of Elysium guild management">
-        <img class="guild-icon" src="GOE.png" alt="Guardians of Elysium emblem">
-        <span class="brand-copy"><strong>Guardians of Elysium</strong><span>Guild Management</span></span>
+      <a class="brand" href="#guild-management" aria-label="GoE guild management">
+        <img class="guild-icon" src="GOE.png" alt="GoE emblem">
+        <span class="brand-copy"><strong>GoE</strong><span>Guild Management</span></span>
       </a>
       <nav class="main-nav" aria-label="Primary navigation"><a href="#guild-management">Overview</a><a href="#treasury-dashboard">Treasury</a></nav>
       <div class="as-of" id="as-of"></div>
@@ -38,9 +38,9 @@
         </div>
       </section>
 
-      <section class="critical-alert" id="critical-alert" role="alert" hidden>
-        <div class="alert-mark" aria-hidden="true">!</div>
-        <div><p class="alert-label">Critical stock alert</p><h2 id="critical-summary">-</h2><p id="critical-guidance">GBG officers: Please avoid spending any good marked as critically low unless it is truly necessary. Donations to replenish low goods are greatly appreciated! ❤️</p></div>
+      <section class="critical-alert" id="critical-alert" role="status" aria-atomic="true" hidden>
+        <div class="alert-mark" id="critical-mark" aria-hidden="true">!</div>
+        <div><p class="alert-label" id="critical-label">Treasury status</p><h2 id="critical-summary">-</h2><p id="critical-guidance"></p></div>
       </section>
 
       <section class="metrics" aria-label="Treasury summary">
@@ -92,6 +92,6 @@
       <div class="table-scroll"><table><thead><tr><th>Good</th><th>Current stock</th><th>Period change</th><th>Low point</th></tr></thead><tbody id="detail-goods"></tbody></table></div>
     </dialog>
     <script src="data.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260711-1"></script>
   </body>
 </html>
