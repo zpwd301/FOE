@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
-    <link rel="preload" href="data/ranking-data.json.gz?v=20260711-2" as="fetch" type="application/gzip" crossorigin="anonymous">
-    <link rel="stylesheet" href="src/styles.css?v=20260711-17">
+    <link rel="preload" href="data/ranking-data.json.gz?v=20260712-1" as="fetch" type="application/gzip" crossorigin="anonymous">
+    <link rel="stylesheet" href="src/styles.css?v=20260712-1">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -28,7 +28,7 @@
           <summary class="mobile-settings-summary">
             <span>
               <strong>Ranking settings</strong>
-              <small>City, production, focus and filters</small>
+              <small id="settingsSummaryText">City, production, focus and filters</small>
             </span>
             <span class="mobile-settings-action">Adjust</span>
           </summary>
@@ -72,7 +72,7 @@
             Search building
             <input id="searchInput" type="search" placeholder="Search by name">
           </label>
-          <div class="base-production-controls compact">
+          <div class="base-production-controls compact" id="baseProductionControls">
             <div class="info-heading">
               <h3>Base Production</h3>
               <button class="info-button" type="button" aria-expanded="false" aria-controls="baseProductionInfo" aria-label="Show Base Production information" data-info-label="Base Production">i</button>
@@ -90,7 +90,7 @@
           <button id="shareButton" type="button" class="secondary-button">Copy share link</button>
         </section>
 
-        <section class="control-section">
+        <section class="control-section" id="focusControls">
           <div class="info-heading">
             <h2>Focus</h2>
             <button class="info-button" type="button" aria-expanded="false" aria-controls="focusInfo" aria-label="Show Focus controls information" data-info-label="Focus controls">i</button>
@@ -159,6 +159,15 @@
                 <option value="units">Units</option>
                 <option value="diamonds">Diamonds</option>
                 <option value="blueprints">Blueprints</option>
+                <optgroup label="Kit production">
+                  <option value="kit-oneUp">One-Up</option>
+                  <option value="kit-renovation">Renovation</option>
+                  <option value="kit-specialFinish">FSP</option>
+                  <option value="kit-supplyFinish">Supply Finish</option>
+                  <option value="kit-goodsFinish">Goods Finish</option>
+                  <option value="kit-massAid">Mass Aid</option>
+                  <option value="kit-store">Store</option>
+                </optgroup>
               </select>
             </label>
             <div class="split-inputs">
@@ -199,7 +208,8 @@
               <p>Default mode is recommended for most users. Choose Custom when you want to change what matters in the active ranking profile.</p>
               <ul>
                 <li>A higher number gives that benefit more influence; zero ignores it.</li>
-                <li>Changing one weight shifts the balance between benefits—it does not simply add points to every score.</li>
+                <li>Weights cannot be negative. Kit profiles use whole numbers from zero to ten.</li>
+                <li>Changing one weight shifts the balance between benefits. It does not simply add points to every score.</li>
                 <li>Each profile keeps its own custom values. <strong>Reset profile weights</strong> restores the active profile; <strong>Reset defaults</strong> restores every profile.</li>
               </ul>
             </div>
@@ -218,10 +228,12 @@
           <button class="tab" id="profileTab-fightingEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="fightingEfficiency">Fighting Efficiency</button>
           <button class="tab" id="profileTab-farmingEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="farmingEfficiency">Farming Efficiency</button>
           <button class="tab" id="profileTab-qiEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="qiEfficiency">QI Efficiency</button>
+          <button class="tab" id="profileTab-kitEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="kitEfficiency">Kit Efficiency</button>
           <button class="tab" id="profileTab-overall" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="overall">Overall</button>
           <button class="tab" id="profileTab-fighting" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="fighting">Fighting</button>
           <button class="tab" id="profileTab-farming" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="farming">Farming</button>
           <button class="tab" id="profileTab-qi" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="qi">QI</button>
+          <button class="tab" id="profileTab-kit" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="kit">Kit Producers</button>
         </nav>
 
         <div id="rankingPanel" class="ranking-panel" role="tabpanel" aria-labelledby="profileTab-overallEfficiency">
@@ -251,8 +263,8 @@
                 <tr>
                   <th><button class="sort-button rank-sort-button" data-sort="profile" type="button">Rank</button></th>
                   <th><button class="sort-button" data-sort="name" type="button">Building</button></th>
-                  <th><button class="sort-button" data-sort="score" type="button">Score</button></th>
-                  <th><button class="sort-button" data-sort="efficiency" type="button">Efficiency</button></th>
+                  <th><button class="sort-button" data-sort="score" type="button" id="scoreColumnLabel">Score</button></th>
+                  <th><button class="sort-button" data-sort="efficiency" type="button" id="efficiencyColumnLabel">Efficiency</button></th>
                   <th><button class="sort-button" data-sort="area" type="button">Area</button></th>
                   <th>
                     <div class="column-info-heading">
@@ -307,6 +319,7 @@
             <section>
               <h2>What is included</h2>
               <p>The dashboard compares reward-building definitions. It does not use how many copies you have placed in your city. Great Buildings, Quantum Incursions settlement buildings, and standard era buildings are intentionally left out.</p>
+              <p>Kit profiles compare expected daily output for seven utility-kit families. Fragments are converted using each kit recipe, supply rushes include their duration, and each family uses the building's best available production option.</p>
               <p>The Farming profiles are still being tuned, especially for goods and diamonds. Treat them as a helpful guide and adjust the custom weights when the defaults do not match your city.</p>
             </section>
           </div>
@@ -323,8 +336,8 @@
 
     <script
       src="src/bootstrap.js?v=20260711-2"
-      data-data-version="20260711-2"
-      data-app-version="20260711-13"
+      data-data-version="20260712-2"
+      data-app-version="20260712-4"
     ></script>
   </body>
 </html>

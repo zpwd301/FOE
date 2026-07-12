@@ -51,6 +51,18 @@ const PROFILE_CONFIG = {
     weightProfile: "qi",
     efficiency: true,
   },
+  kit: {
+    title: "Kit Producers",
+    subtitle: "Compares expected production of seven useful kit families. Fragment rewards are converted to completed-kit equivalents, supply rushes include their duration, and building size is not part of this score.",
+    weightProfile: "kits",
+    efficiency: false,
+  },
+  kitEfficiency: {
+    title: "Kit Efficiency",
+    subtitle: "Uses the same kit-production score as Kit Producers, then divides it by adjusted area. A required road adds one tile to the area.",
+    weightProfile: "kits",
+    efficiency: true,
+  },
 };
 
 const PRESETS = {
@@ -99,6 +111,7 @@ const state = {
     fighting: {},
     farming: {},
     qi: {},
+    kits: {},
   },
 };
 
@@ -121,7 +134,17 @@ const STRENGTH_INFO = {
   City: { cls: "utility", description: "Supports your city with happiness or population." },
   Diamond: { cls: "diamond", description: "Produces diamonds." },
   Blueprint: { cls: "blueprint", description: "Produces Great Building blueprints." },
+  "One-Up": { cls: "kit", description: "Produces One-Up Kit fragments or completed kits." },
+  Renovation: { cls: "kit", description: "Produces Renovation Kit fragments or completed kits." },
+  FSP: { cls: "kit", description: "Produces Finish Special Production rewards." },
+  "Supply Finish": { cls: "kit", description: "Produces timed or all-supply production rush rewards." },
+  "Goods Finish": { cls: "kit", description: "Produces rewards that finish a goods-building production." },
+  "Mass Aid": { cls: "kit", description: "Produces Mass Self-Aid Kit fragments or completed kits." },
+  Store: { cls: "kit", description: "Produces Store Building fragments or completed kits." },
 };
+
+const KIT_FAMILIES = DATA.kitFamilies || [];
+const KIT_FAMILY_BY_KEY = Object.fromEntries(KIT_FAMILIES.map((family) => [family.key, family]));
 
 const el = {
   appStatus: document.getElementById("appStatus"),
@@ -132,6 +155,9 @@ const el = {
   categorySelectionPreview: document.getElementById("categorySelectionPreview"),
   searchInput: document.getElementById("searchInput"),
   shareButton: document.getElementById("shareButton"),
+  settingsSummaryText: document.getElementById("settingsSummaryText"),
+  baseProductionControls: document.getElementById("baseProductionControls"),
+  focusControls: document.getElementById("focusControls"),
   qiRoleSelect: document.getElementById("qiRoleSelect"),
   gbgGeFocus: document.getElementById("gbgGeFocus"),
   redBlueFocus: document.getElementById("redBlueFocus"),
@@ -163,6 +189,8 @@ const el = {
   rankingTitle: document.getElementById("rankingTitle"),
   rankingSubtitle: document.getElementById("rankingSubtitle"),
   rankingDescription: document.getElementById("rankingDescription"),
+  scoreColumnLabel: document.getElementById("scoreColumnLabel"),
+  efficiencyColumnLabel: document.getElementById("efficiencyColumnLabel"),
   activeFilters: document.getElementById("activeFilters"),
   resultMeta: document.getElementById("resultMeta"),
   summaryGrid: document.getElementById("summaryGrid"),
@@ -211,6 +239,33 @@ function clamp(value, min, max) {
 function numberValue(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function customWeightRules(profile) {
+  return profile === "kits"
+    ? { min: 0, max: 10, step: 1, integer: true }
+    : { min: 0, max: 1000, step: 0.1, integer: false };
+}
+
+function sanitizeCustomWeight(profile, value) {
+  const rules = customWeightRules(profile);
+  const numeric = numberValue(value);
+  const normalized = rules.integer ? Math.round(numeric) : numeric;
+  return clamp(normalized, rules.min, rules.max);
+}
+
+function sanitizeCustomWeightState(value) {
+  const profiles = ["overall", "fighting", "farming", "qi", "kits"];
+  const sanitized = Object.fromEntries(profiles.map((profile) => [profile, {}]));
+  for (const profile of profiles) {
+    const weights = value?.[profile];
+    if (!weights || typeof weights !== "object" || Array.isArray(weights)) continue;
+    for (const [key, weight] of Object.entries(weights)) {
+      if (!Number.isFinite(Number(weight))) continue;
+      sanitized[profile][key] = sanitizeCustomWeight(profile, weight);
+    }
+  }
+  return sanitized;
 }
 
 function announce(message) {
@@ -312,6 +367,28 @@ function attrInfo(key) {
 
 function attrLabel(key) {
   return attrInfo(key).label || key;
+}
+
+function isKitProfile(profile = state.profile) {
+  return PROFILE_CONFIG[profile]?.weightProfile === "kits";
+}
+
+function kitFamilyForAttr(key) {
+  const family = attrInfo(key).kitFamily;
+  return family ? KIT_FAMILY_BY_KEY[family] : null;
+}
+
+function recordHasKitProduction(record) {
+  return KIT_FAMILIES.some((family) => rawAttr(record, family.attrKey) > 0);
+}
+
+function kitProductionForRecord(record) {
+  const entry = DATA.kitProductionByEntity?.[record.entityId];
+  if (!entry) return {};
+  if (entry.overrides && Object.prototype.hasOwnProperty.call(entry.overrides, record.selectedAge)) {
+    return entry.overrides[record.selectedAge] || {};
+  }
+  return entry.default || {};
 }
 
 function rawAttr(record, key) {
@@ -454,7 +531,7 @@ function productionRawWeights(c, combined) {
 function overallRawWeight(key, c) {
   const info = attrInfo(key);
   const constants = DATA.constants;
-  if (info.isForcedZero || info.isGoodsTotalComponent) return 0;
+  if (info.isForcedZero || info.isGoodsTotalComponent || info.isKit) return 0;
   let weight;
   if (key === constants.prodFpAttr) {
     const combined = attrInfo(constants.prodFpAttr).defaultWeight + attrInfo(constants.prodGoodsAttr).defaultWeight;
@@ -554,6 +631,10 @@ function qiWeight(key, c) {
   return attrInfo(key).defaultWeight || 1;
 }
 
+function kitWeight(key) {
+  return attrInfo(key).isKit ? 1 : 0;
+}
+
 function weightMap(profile, c) {
   if (profile === "overall") return overallWeights(c);
   const out = {};
@@ -561,6 +642,7 @@ function weightMap(profile, c) {
     if (profile === "fighting") out[key] = fightingWeight(key, c);
     else if (profile === "farming") out[key] = farmingWeight(key, c);
     else if (profile === "qi") out[key] = qiWeight(key, c);
+    else if (profile === "kits") out[key] = kitWeight(key);
   }
   return out;
 }
@@ -572,7 +654,9 @@ function customizedWeightMap(profile, c) {
   return Object.fromEntries(
     Object.entries(weights).map(([key, value]) => [
       key,
-      isCustomizableWeight(profile, key) && Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : value,
+      isCustomizableWeight(profile, key) && Object.prototype.hasOwnProperty.call(overrides, key)
+        ? sanitizeCustomWeight(profile, overrides[key])
+        : value,
     ])
   );
 }
@@ -585,7 +669,7 @@ function isCustomizableWeight(profile, key) {
   const info = attrInfo(key);
   const constants = DATA.constants;
   if (info.isForcedZero) return false;
-  if (profile === "overall") return !info.isGoodsTotalComponent;
+  if (profile === "overall") return !info.isGoodsTotalComponent && !info.isKit;
   if (profile === "fighting") {
     return info.isFighting || key === "prod_unit_current_age" || key === "prod_unit_next_age" || key === "prod_unit_rogue";
   }
@@ -597,6 +681,7 @@ function isCustomizableWeight(profile, key) {
     );
   }
   if (profile === "qi") return info.isQi;
+  if (profile === "kits") return info.isKit;
   return false;
 }
 
@@ -608,7 +693,7 @@ function customizableWeightRows(profile, c) {
       label: attrLabel(key),
       defaultWeight: defaults[key] || 0,
       override: state.customWeights[profile]?.[key],
-      group: attrInfo(key).overallGroup || "Non-Fighting",
+      group: attrInfo(key).isKit ? "Kit production" : attrInfo(key).overallGroup || "Non-Fighting",
     }))
     .filter((row) => isCustomizableWeight(profile, row.key) || row.override !== undefined)
     .sort((a, b) => Math.abs(b.defaultWeight) - Math.abs(a.defaultWeight) || a.label.localeCompare(b.label));
@@ -654,6 +739,16 @@ function strengthBadges(record, contributions) {
     }
   };
 
+  if (isKitProfile()) {
+    for (const item of contributions) {
+      const family = kitFamilyForAttr(item.key);
+      if (!family || item.value <= 0) continue;
+      addBadge(family.strength, "kit");
+      if (labels.length >= 3) break;
+    }
+    return labels;
+  }
+
   if (rawAttr(record, "prod_resource_premium") > 0) addBadge("Diamond", "diamond");
   if (rawAttr(record, "prod_resource_blueprint") > 0) addBadge("Blueprint", "blueprint");
 
@@ -688,10 +783,12 @@ function strengthBadges(record, contributions) {
 
 function rowHasStrength(row, strength) {
   if (!strength) return true;
+  const requestedKitFamily = strength.startsWith("kit-") ? strength.slice(4) : "";
   return Object.entries(row.record.attrs).some(([key, value]) => {
     if (Number(value || 0) <= 0) return false;
     const info = attrInfo(key);
     const label = attrLabel(key);
+    if (requestedKitFamily) return info.kitFamily === requestedKitFamily;
     if (strength === "combat") return info.isFighting;
     if (strength === "qi") return info.isQi || label.includes("QI");
     if (strength === "fp") return key === DATA.constants.prodFpAttr || label.includes("FP");
@@ -710,7 +807,7 @@ function buildRows() {
   state.selectedAgeRows = records;
   const stats = computeStats(records, c);
   const weights = customizedWeightMap(config.weightProfile, c);
-  const rows = records.map((record) => {
+  let rows = records.map((record) => {
     const scored = scoreRecord(record, stats, weights, c);
     const efficiency = record.adjustedArea ? scored.score / record.adjustedArea : 0;
     return {
@@ -723,6 +820,7 @@ function buildRows() {
       badges: strengthBadges(record, scored.contributions),
     };
   });
+  if (isKitProfile()) rows = rows.filter((row) => recordHasKitProduction(row.record));
   rows.sort((a, b) => b.rankValue - a.rankValue || a.record.name.localeCompare(b.record.name));
   rows.forEach((row, idx) => { row.rank = idx + 1; });
   state.rows = rows;
@@ -774,15 +872,20 @@ function displayRows(rows) {
 function renderSummary(rows) {
   const c = controls();
   const config = PROFILE_CONFIG[state.profile];
+  const kitProfile = isKitProfile();
   const filtered = filteredRows(rows);
   const top = filtered[0];
   el.summaryGrid.innerHTML = [
-    ["Buildings", filtered.length.toLocaleString(), "The number of buildings left after your current search and filters."],
+    [kitProfile ? "Kit producers" : "Buildings", filtered.length.toLocaleString(), kitProfile
+      ? "The number of buildings with supported kit production left after your current search and filters."
+      : "The number of buildings left after your current search and filters."],
     ["Top building", top ? top.record.name : "None", "The highest-ranked building among the current matches. Filters narrow the list but do not recalculate its rank."],
-    ["Top score", top ? fmt(top.score) : "", config.efficiency
+    [kitProfile ? "Top kit score" : "Top score", top ? fmt(top.score) : "", config.efficiency
       ? "The profile score of the efficiency winner. Another building may have a higher score before space is considered."
-      : "The active profile score of the top building. This is a comparison number, not an amount produced in the game."],
-    ["Top efficiency", top ? fmt(top.efficiency, 3) : "", config.efficiency
+      : kitProfile
+        ? "A comparison score across the seven supported kit families. It is not a literal number of kits produced."
+        : "The active profile score of the top building. This is a comparison number, not an amount produced in the game."],
+    [kitProfile ? "Kit efficiency" : "Top efficiency", top ? fmt(top.efficiency, 3) : "", config.efficiency
       ? "The top building's score per adjusted tile, including one extra tile when a road is required."
       : "The efficiency of the top-ranked building. Choose an Efficiency tab to rank buildings by value per tile."],
   ].map(([label, value, help], index) => `
@@ -805,6 +908,9 @@ function renderTable(rows) {
   const sorted = displayRows(rows);
   const limit = c.topN === "all" ? sorted.length : Number(c.topN);
   const visible = sorted.slice(0, limit);
+  el.emptyState.textContent = isKitProfile()
+    ? "No kit-producing buildings match the current filters."
+    : "No buildings match the current filters.";
   el.emptyState.hidden = visible.length > 0;
   el.rankingBody.innerHTML = visible.map((row) => {
     const badges = row.badges.map((badge) => {
@@ -885,9 +991,18 @@ function syncFocusOutputs() {
 
 function renderControlState(rows, visibleRows) {
   const c = controls();
+  const kitProfile = isKitProfile();
   const areaValidation = areaFilterValidation(c);
   syncFocusOutputs();
   syncLongValuePresentation();
+
+  el.baseProductionControls.hidden = kitProfile;
+  el.focusControls.hidden = kitProfile;
+  el.settingsSummaryText.textContent = kitProfile
+    ? "City, kit priorities and filters"
+    : "City, production, focus and filters";
+  el.scoreColumnLabel.textContent = kitProfile ? "Kit score" : "Score";
+  el.efficiencyColumnLabel.textContent = kitProfile ? "Kit efficiency" : "Efficiency";
 
   el.minAreaFilter.setAttribute("aria-invalid", areaValidation.minInvalid ? "true" : "false");
   el.maxAreaFilter.setAttribute("aria-invalid", areaValidation.maxInvalid ? "true" : "false");
@@ -920,6 +1035,8 @@ function renderControlState(rows, visibleRows) {
 
 function renderCustomWeights() {
   const profile = activeWeightProfile();
+  const rules = customWeightRules(profile);
+  const kitProfile = profile === "kits";
   const c = controls();
   const rows = customizableWeightRows(profile, c);
   const activeCount = Object.keys(state.customWeights[profile] || {}).length;
@@ -930,7 +1047,7 @@ function renderCustomWeights() {
   el.customWeights.innerHTML = `
     <div class="custom-summary">
       <span>${PROFILE_CONFIG[state.profile].title}</span>
-      <strong>${fmt(totalWeight)} importance total</strong>
+      <strong>${fmt(totalWeight, kitProfile ? 0 : 2)} importance total</strong>
     </div>
     <p class="section-note">${
       el.weightModeSelect.value === "custom"
@@ -939,24 +1056,30 @@ function renderCustomWeights() {
           : "Custom mode is on, but no values have been changed yet. Edit any field to create a custom value."
         : `Using the recommended weights for ${PROFILE_CONFIG[state.profile].title}. Choose Custom if you want to change the balance.`
     }</p>
+    <p class="section-note">${kitProfile
+      ? "Kit weights use whole numbers from 0 to 10. Zero ignores a kit family."
+      : "Weights must be zero or greater. Zero ignores an attribute."
+    }</p>
     <div class="weight-list">
       ${rows.map((row) => {
         const isChanged = row.override !== undefined && Math.abs((row.override || 0) - (row.defaultWeight || 0)) > 1e-9;
+        const defaultLabel = fmt(row.defaultWeight, kitProfile ? 0 : 2);
         return `
         <label class="weight-row">
           <span>
             ${row.label}
-            <small>Default ${fmt(row.defaultWeight)} · ${row.group}</small>
+            <small>Default ${defaultLabel} · ${row.group}</small>
           </span>
           <input
             type="number"
             name="weight-${profile}-${row.key}"
-            step="0.1"
-            min="-1000"
-            max="1000"
+            step="${rules.step}"
+            min="${rules.min}"
+            max="${rules.max}"
+            inputmode="${rules.integer ? "numeric" : "decimal"}"
             class="${isChanged ? "changed-weight-input" : ""}"
             data-weight-key="${row.key}"
-            placeholder="${fmt(row.defaultWeight)}"
+            placeholder="${defaultLabel}"
             value="${row.override !== undefined ? row.override : el.weightModeSelect.value === "custom" ? row.defaultWeight : ""}"
             ${el.weightModeSelect.value === "custom" ? "" : "disabled"}
           >
@@ -1022,7 +1145,9 @@ function explainRanking(row) {
   return `${row.record.name} ranks ${rankText}. Its main strengths are ${strengths}, giving it a profile score of ${fmt(row.score)}. Building size does not affect this ranking. ${areaText}`;
 }
 
-function plainStrengthForLabel(label) {
+function plainStrengthForLabel(label, key = "") {
+  const kitFamily = kitFamilyForAttr(key);
+  if (kitFamily) return `${kitFamily.strength.toLowerCase()} production`;
   if (label.includes("QI Action Points")) return "QI action points";
   if (label.includes("QI Coins") || label.includes("QI Goods") || label.includes("QI Units")) return "QI starting resources";
   if (label.includes("QI")) return "QI combat value";
@@ -1047,7 +1172,7 @@ function plainStrengthForLabel(label) {
 function plainStrengths(contributions) {
   const labels = [];
   for (const item of contributions) {
-    const label = plainStrengthForLabel(item.label);
+    const label = plainStrengthForLabel(item.label, item.key);
     if (!labels.includes(label)) labels.push(label);
     if (labels.length >= 3) break;
   }
@@ -1140,6 +1265,8 @@ function detailText(value) {
 
 function formatAttributeValue(key, value) {
   const formatted = fmtCompact(value);
+  const kitFamily = kitFamilyForAttr(key);
+  if (kitFamily) return `${formatted} ${kitFamily.unit}`;
   return formatted && isPercentageAttribute(key) ? `${formatted}%` : formatted;
 }
 
@@ -1335,6 +1462,59 @@ function buildReportText(row) {
   ].join("\n");
 }
 
+function kitItemProductionText(item) {
+  const expectedKits = fmtCompact(Number(item.kitEquivalentsPerDay || 0));
+  const possibleKits = fmtCompact(Number(item.possibleKitEquivalentsPerDay || 0));
+  const expectedFragments = fmtCompact(Number(item.expectedFragmentsPerDay || 0));
+  const possibleFragments = fmtCompact(Number(item.possibleFragmentsPerDay || 0));
+  const chance = Number(item.chance ?? 1);
+  const durationText = item.durationHours ? ` Each completed reward provides a ${fmtCompact(item.durationHours)}-hour supply rush.` : "";
+  if (item.source === "kit") {
+    const possibleText = chance < 0.999
+      ? ` Possible output is ${possibleKits} kits/day at ${(chance * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}%.`
+      : "";
+    return `${expectedKits} expected completed kits/day.${possibleText}${durationText}`;
+  }
+  const possibleText = chance < 0.999
+    ? ` The possible output is ${possibleFragments} fragments/day, or ${possibleKits} kits/day.`
+    : "";
+  return `${expectedFragments} expected fragments/day, with ${fmtCompact(item.requiredFragments)} needed per kit. That equals ${expectedKits} kits/day.${possibleText}${durationText}`;
+}
+
+function renderKitProductionDetails(record) {
+  const production = kitProductionForRecord(record);
+  const families = KIT_FAMILIES.filter((family) => production[family.key]);
+  if (!families.length) return "";
+  return `
+    <h3>Kit Production</h3>
+    <p class="detail-section-note">Expected values include collection frequency and reward probability. Each family shows the building's best available production option, so different families may come from different choices.</p>
+    <div class="kit-detail-grid">
+      ${families.map((family) => {
+        const familyProduction = production[family.key];
+        const primaryValue = family.key === "supplyFinish"
+          ? `${fmtCompact(familyProduction.valuePerDay)} rush hours/day`
+          : `${fmtCompact(familyProduction.kitEquivalentsPerDay)} kits/day`;
+        return `
+          <article class="kit-detail-card">
+            <div class="kit-detail-heading">
+              <span class="badge kit">${escapeHtml(family.strength)}</span>
+              <strong>${escapeHtml(primaryValue)}</strong>
+            </div>
+            <div class="kit-detail-items">
+              ${familyProduction.items.map((item) => `
+                <div>
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <p>${escapeHtml(kitItemProductionText(item))}</p>
+                </div>
+              `).join("")}
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function setBackgroundInert(inert) {
   [document.querySelector(".app-header"), document.querySelector(".layout")].forEach((region) => {
     if (region) region.inert = inert;
@@ -1414,6 +1594,7 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
     </div>
     <h3>Summary</h3>
     <p class="detail-summary">${escapeHtml(explainRanking(row))}</p>
+    ${renderKitProductionDetails(row.record)}
     <h3>Ranking Attributes</h3>
     <div class="attribute-table-wrap">
       <table class="attribute-table signal-table">
@@ -1540,6 +1721,7 @@ function resetDefaults() {
     fighting: {},
     farming: {},
     qi: {},
+    kits: {},
   };
   state.sort = { key: "profile", dir: "desc" };
 }
@@ -1673,7 +1855,7 @@ function applyUrlState() {
   }
   const decodedWeights = params.get("weights") ? decodeState(params.get("weights")) : null;
   if (decodedWeights && typeof decodedWeights === "object") {
-    state.customWeights = { overall: {}, fighting: {}, farming: {}, qi: {}, ...decodedWeights };
+    state.customWeights = sanitizeCustomWeightState(decodedWeights);
   }
   state.suppressUrlUpdate = false;
 }
@@ -1823,7 +2005,9 @@ function init() {
     if (value === "") {
       delete state.customWeights[profile][key];
     } else {
-      state.customWeights[profile][key] = numberValue(value);
+      const sanitized = sanitizeCustomWeight(profile, value);
+      state.customWeights[profile][key] = sanitized;
+      input.value = String(sanitized);
     }
     scheduleRender(140, () => {
       const nextWeightList = el.customWeights.querySelector(".weight-list");

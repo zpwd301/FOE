@@ -21,7 +21,7 @@ import building_ranking_model as model  # noqa: E402
 DEFAULT_AGE = "VirtualFuture"
 DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
 # Increment when the serialized website payload shape or semantics change.
-EXPORT_SCHEMA_VERSION = 1
+EXPORT_SCHEMA_VERSION = 2
 
 
 def file_sha256(path: str) -> str:
@@ -72,6 +72,7 @@ def export_fingerprint(reference_file: str) -> Dict[str, Any]:
         "schemaVersion": EXPORT_SCHEMA_VERSION,
         "modelVersion": model.WORKBOOK_VERSION,
         "modelSha256": file_sha256(os.path.abspath(model.__file__)),
+        "exporterSha256": file_sha256(os.path.abspath(__file__)),
         "source": os.path.relpath(reference_file, PROJECT_ROOT),
         "sourceSha256": file_sha256(reference_file),
     }
@@ -105,7 +106,7 @@ def write_export_state(fingerprint: Dict[str, Any]) -> None:
 
 def record_payload(record: Dict[str, Any]) -> Dict[str, Any]:
     area = record.get("area")
-    return {
+    payload = {
         "entityId": record["entity_id"],
         "name": record["name"],
         "type": record.get("type", ""),
@@ -124,6 +125,40 @@ def record_payload(record: Dict[str, Any]) -> Dict[str, Any]:
             if abs(float(value)) > 1e-12
         },
     }
+    return payload
+
+
+def kit_production_index(records_by_age: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+    variants_by_entity: Dict[str, Dict[str, Any]] = {}
+    for age, records in records_by_age.items():
+        for record in records:
+            entity_id = str(record["entity_id"])
+            production = record.get("kit_production")
+            if not isinstance(production, dict):
+                production = {}
+            variants_by_entity.setdefault(entity_id, {})[age] = production
+
+    index: Dict[str, Dict[str, Any]] = {}
+    for entity_id, values_by_age in variants_by_entity.items():
+        if not any(values_by_age.values()):
+            continue
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for age, production in values_by_age.items():
+            token = json.dumps(production, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            group = grouped.setdefault(token, {"production": production, "ages": []})
+            group["ages"].append(age)
+        default_group = max(grouped.values(), key=lambda group: len(group["ages"]))
+        default_production = default_group["production"]
+        overrides = {
+            age: production
+            for age, production in values_by_age.items()
+            if production != default_production
+        }
+        entry: Dict[str, Any] = {"default": default_production}
+        if overrides:
+            entry["overrides"] = overrides
+        index[entity_id] = entry
+    return index
 
 
 def attr_metadata(attr_keys: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -151,6 +186,8 @@ def attr_metadata(attr_keys: List[str]) -> Dict[str, Dict[str, Any]]:
             "isGoodsTotalComponent": key in model.OVERALL_GOODS_TOTAL_COMPONENT_ATTRS,
             "isOverallQiStart": key in model.OVERALL_QI_START_ATTRS,
             "isForcedZero": model.is_forced_zero_weight_attr(key),
+            "isKit": key in model.KIT_ATTR_TO_FAMILY,
+            "kitFamily": model.KIT_ATTR_TO_FAMILY.get(key, ""),
         }
     return out
 
@@ -229,6 +266,11 @@ def main() -> None:
             for age in model.AGE_ORDER
         ],
         "categories": model.building_category_options(category_records),
+        "kitFamilies": [
+            {"key": key, **definition}
+            for key, definition in model.KIT_FAMILY_DEFINITIONS.items()
+        ],
+        "kitProductionByEntity": kit_production_index(records_by_age),
         "attrKeys": attr_keys,
         "attrs": attr_metadata(attr_keys),
         "constants": {

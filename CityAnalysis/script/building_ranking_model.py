@@ -81,7 +81,7 @@ XLSX_MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 # Increment this version before each pushed code change to this workbook generator.
-WORKBOOK_VERSION = "1.0.42"
+WORKBOOK_VERSION = "1.0.43"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
@@ -195,6 +195,81 @@ PROD_FP_ATTR = "prod_resource_strategy_points"
 PROD_GOODS_ATTR = "prod_resource_goods_total"
 PROD_GUILD_GOODS_ATTR = "prod_resource_guild_goods"
 PROD_MEDALS_ATTR = "prod_resource_medals"
+KIT_FAMILY_DEFINITIONS = {
+    "oneUp": {
+        "attrKey": "prod_kit_one_up",
+        "label": "One-Up Kit",
+        "strength": "One-Up",
+        "description": "Expected One-Up Kit equivalents produced per day.",
+        "unit": "kits/day",
+    },
+    "renovation": {
+        "attrKey": "prod_kit_renovation",
+        "label": "Renovation Kit",
+        "strength": "Renovation",
+        "description": "Expected Renovation Kit equivalents produced per day.",
+        "unit": "kits/day",
+    },
+    "specialFinish": {
+        "attrKey": "prod_kit_special_finish",
+        "label": "Finish Special Production",
+        "strength": "FSP",
+        "description": "Expected Finish Special Production equivalents produced per day.",
+        "unit": "kits/day",
+    },
+    "supplyFinish": {
+        "attrKey": "prod_kit_supply_finish_hours",
+        "label": "Supply Finish Value",
+        "strength": "Supply Finish",
+        "description": "Expected supply-production rush hours produced per day, adjusted for each reward duration.",
+        "unit": "rush hours/day",
+    },
+    "goodsFinish": {
+        "attrKey": "prod_kit_goods_finish",
+        "label": "Finish Goods Production",
+        "strength": "Goods Finish",
+        "description": "Expected Finish Goods Production equivalents produced per day.",
+        "unit": "kits/day",
+    },
+    "massAid": {
+        "attrKey": "prod_kit_mass_self_aid",
+        "label": "Mass Self-Aid Kit",
+        "strength": "Mass Aid",
+        "description": "Expected Mass Self-Aid Kit equivalents produced per day.",
+        "unit": "kits/day",
+    },
+    "store": {
+        "attrKey": "prod_kit_store_building",
+        "label": "Store Building Kit",
+        "strength": "Store",
+        "description": "Expected Store Building Kit equivalents produced per day.",
+        "unit": "kits/day",
+    },
+}
+KIT_REWARD_DEFINITIONS = {
+    "one_up_kit": {"family": "oneUp", "requiredFragments": 30.0},
+    "renovation_kit": {"family": "renovation", "requiredFragments": 30.0},
+    "rush_event_buildings_instant": {"family": "specialFinish", "requiredFragments": 30.0},
+    "rush_mass_supplies_30m": {
+        "family": "supplyFinish", "requiredFragments": 30.0, "durationHours": 0.5,
+    },
+    "rush_mass_supplies_2h": {
+        "family": "supplyFinish", "requiredFragments": 15.0, "durationHours": 2.0,
+    },
+    "rush_mass_supplies_6h": {
+        "family": "supplyFinish", "requiredFragments": 15.0, "durationHours": 6.0,
+    },
+    "rush_mass_supplies_24h": {
+        "family": "supplyFinish", "requiredFragments": 15.0, "durationHours": 24.0,
+    },
+    "rush_goods_buildings_instant": {"family": "goodsFinish", "requiredFragments": 30.0},
+    "mass_self_aid_kit": {"family": "massAid", "requiredFragments": 30.0},
+    "store_building": {"family": "store", "requiredFragments": 15.0},
+}
+KIT_ATTR_TO_FAMILY = {
+    definition["attrKey"]: family
+    for family, definition in KIT_FAMILY_DEFINITIONS.items()
+}
 FARMING_FP_GOODS_COMBINED_RAW_WEIGHT = 40.0
 FARMING_SECONDARY_RAW_WEIGHTS = {
     PROD_MEDALS_ATTR: 5.0,
@@ -327,6 +402,7 @@ SINGLE_BUILDING_ATTRIBUTE_ALLOWLIST = {
     "generic_passive_bonus_maxvalue",
     "generic_production_bonus_maxvalue",
     BOOST_SPECIAL_GOODS_ATTR,
+    *KIT_ATTR_TO_FAMILY.keys(),
 }
 
 SKIP_GENERIC_KEYS = {
@@ -584,6 +660,8 @@ def attr_label(key: str) -> str:
         return "Footprint Area"
     if is_road_connection_attr_key(key):
         return REQUIRE_ROAD_HEADER
+    if key in KIT_ATTR_TO_FAMILY:
+        return str(KIT_FAMILY_DEFINITIONS[KIT_ATTR_TO_FAMILY[key]]["label"])
     boost_production_labels = {
         "boost_coin_production_all": "Boost: Coin production percentage",
         "boost_forge_points_production_all": "Boost: Forge points production percentage",
@@ -672,6 +750,8 @@ def attr_description(key: str) -> str:
         return "Footprint in tiles; lower is usually better."
     if is_road_connection_attr_key(key):
         return "Road requirement flag. Buildings that require a road are treated as one extra tile in efficiency rankings."
+    if key in KIT_ATTR_TO_FAMILY:
+        return str(KIT_FAMILY_DEFINITIONS[KIT_ATTR_TO_FAMILY[key]]["description"])
     if key.startswith("boost_att_boost_") or key.startswith("boost_def_boost_"):
         stat = "attack" if key.startswith("boost_att_boost_") else "defense"
         army = "blue/defending army" if "_defender_" in key else "red/attacking army"
@@ -768,6 +848,8 @@ def direction_for_attr(key: str) -> str:
 
 def default_weight_for_attr(key: str) -> float:
     if key == "area":
+        return 0.0
+    if key in KIT_ATTR_TO_FAMILY:
         return 0.0
     if key == "boost_guild_raids_action_points_capacity_all":
         return 0.0
@@ -1123,7 +1205,7 @@ def farming_goods_raw_weight_formula() -> str:
 
 
 def overall_raw_weight_for_attr(key: str) -> float:
-    if key in OVERALL_GOODS_TOTAL_COMPONENT_ATTRS:
+    if key in OVERALL_GOODS_TOTAL_COMPONENT_ATTRS or key in KIT_ATTR_TO_FAMILY:
         return 0.0
     if key == PROD_FP_ATTR:
         weight = production_fp_raw_weight()
@@ -1780,6 +1862,238 @@ def resolved_reward(
     if reward_lookup and isinstance(reward.get("id"), str) and reward["id"] in reward_lookup:
         return {**reward_lookup[reward["id"]], **reward}
     return reward
+
+
+def kit_reward_measure(reward: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    subtype = resource_key(str(reward.get("subType", "")))
+    assembled = reward.get("assembledReward")
+    source = "fragments" if subtype == "fragment" and isinstance(assembled, dict) else "kit"
+    kit_reward = assembled if source == "fragments" else reward
+    reward_id = kit_reward.get("id") if isinstance(kit_reward, dict) else None
+    if not isinstance(reward_id, str) or reward_id not in KIT_REWARD_DEFINITIONS:
+        return None
+
+    definition = KIT_REWARD_DEFINITIONS[reward_id]
+    required_fragments = as_float(reward.get("requiredAmount")) or float(definition["requiredFragments"])
+    amount = as_float(reward.get("amount", reward.get("value", 1))) or 1.0
+    label = kit_reward.get("name") or KIT_FAMILY_DEFINITIONS[str(definition["family"])]["label"]
+    return {
+        "rewardId": reward_id,
+        "family": str(definition["family"]),
+        "label": str(label),
+        "requiredFragments": required_fragments,
+        "durationHours": float(definition.get("durationHours", 0.0)),
+        "amount": amount,
+        "source": source,
+    }
+
+
+def add_kit_output(
+    outputs: Dict[str, Dict[str, Any]],
+    measure: Dict[str, Any],
+    time_factor: float,
+    probability: float,
+) -> None:
+    reward_id = str(measure["rewardId"])
+    required = float(measure["requiredFragments"])
+    amount = float(measure["amount"])
+    source = str(measure["source"])
+    if source == "fragments":
+        possible_fragments = amount * time_factor
+        possible_kits = possible_fragments / required
+    else:
+        possible_kits = amount * time_factor
+        possible_fragments = possible_kits * required
+    expected_fragments = possible_fragments * probability
+    expected_kits = possible_kits * probability
+    duration_hours = float(measure["durationHours"])
+    possible_value = possible_kits * duration_hours if duration_hours else possible_kits
+    expected_value = possible_value * probability
+
+    current = outputs.setdefault(
+        reward_id,
+        {
+            "rewardId": reward_id,
+            "family": str(measure["family"]),
+            "label": str(measure["label"]),
+            "requiredFragments": required,
+            "durationHours": duration_hours,
+            "source": source,
+            "expectedFragmentsPerDay": 0.0,
+            "possibleFragmentsPerDay": 0.0,
+            "kitEquivalentsPerDay": 0.0,
+            "possibleKitEquivalentsPerDay": 0.0,
+            "valuePerDay": 0.0,
+            "possibleValuePerDay": 0.0,
+        },
+    )
+    if current["source"] != source:
+        current["source"] = "mixed"
+    current["expectedFragmentsPerDay"] += expected_fragments
+    current["possibleFragmentsPerDay"] += possible_fragments
+    current["kitEquivalentsPerDay"] += expected_kits
+    current["possibleKitEquivalentsPerDay"] += possible_kits
+    current["valuePerDay"] += expected_value
+    current["possibleValuePerDay"] += possible_value
+
+
+def collect_kit_product(
+    outputs: Dict[str, Dict[str, Any]],
+    product: Any,
+    time_factor: float,
+    probability: float,
+    reward_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> None:
+    if not isinstance(product, dict):
+        return
+
+    resolved_product = resolved_reward(product, reward_lookup)
+    direct_measure = kit_reward_measure(resolved_product)
+    if direct_measure:
+        add_kit_output(outputs, direct_measure, time_factor, probability)
+        return
+
+    reward = product.get("reward")
+    if isinstance(reward, dict):
+        resolved = resolved_reward(reward, reward_lookup)
+        measure = kit_reward_measure(resolved)
+        if measure:
+            add_kit_output(outputs, measure, time_factor, probability)
+
+    nested_product = product.get("product")
+    if isinstance(nested_product, dict):
+        collect_kit_product(outputs, nested_product, time_factor, probability, reward_lookup)
+
+    for key in ("products", "possible_rewards", "possibleRewards", "rewards"):
+        values = product.get(key)
+        if not isinstance(values, list):
+            continue
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            nested_probability = probability * probability_factor(item)
+            nested = item.get("product") or item.get("reward") or item
+            collect_kit_product(outputs, nested, time_factor, nested_probability, reward_lookup)
+
+
+def kit_outputs_by_family(
+    outputs: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    grouped: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for reward_id, item in outputs.items():
+        grouped.setdefault(str(item["family"]), {})[reward_id] = item
+    return grouped
+
+
+def kit_outputs_value(outputs: Dict[str, Dict[str, Any]]) -> float:
+    return sum(float(item["valuePerDay"]) for item in outputs.values())
+
+
+def merge_kit_outputs(
+    target: Dict[str, Dict[str, Any]],
+    source: Dict[str, Dict[str, Any]],
+) -> None:
+    numeric_fields = (
+        "expectedFragmentsPerDay",
+        "possibleFragmentsPerDay",
+        "kitEquivalentsPerDay",
+        "possibleKitEquivalentsPerDay",
+        "valuePerDay",
+        "possibleValuePerDay",
+    )
+    for reward_id, item in source.items():
+        if reward_id not in target:
+            target[reward_id] = {**item}
+            continue
+        current = target[reward_id]
+        if current["source"] != item["source"]:
+            current["source"] = "mixed"
+        for field in numeric_fields:
+            current[field] = float(current[field]) + float(item[field])
+
+
+def serialize_kit_production(
+    outputs_by_family: Dict[str, Dict[str, Dict[str, Any]]],
+) -> Dict[str, Dict[str, Any]]:
+    production: Dict[str, Dict[str, Any]] = {}
+    for family in KIT_FAMILY_DEFINITIONS:
+        outputs = outputs_by_family.get(family, {})
+        if not outputs:
+            continue
+        items = []
+        for item in sorted(outputs.values(), key=lambda value: str(value["label"])):
+            possible = float(item["possibleValuePerDay"])
+            chance = float(item["valuePerDay"]) / possible if possible > 0 else 1.0
+            serialized = {**item, "chance": max(0.0, min(1.0, chance))}
+            if not serialized["durationHours"]:
+                serialized.pop("durationHours")
+            items.append(serialized)
+        production[family] = {
+            "valuePerDay": sum(float(item["valuePerDay"]) for item in items),
+            "possibleValuePerDay": sum(float(item["possibleValuePerDay"]) for item in items),
+            "expectedFragmentsPerDay": sum(float(item["expectedFragmentsPerDay"]) for item in items),
+            "possibleFragmentsPerDay": sum(float(item["possibleFragmentsPerDay"]) for item in items),
+            "kitEquivalentsPerDay": sum(float(item["kitEquivalentsPerDay"]) for item in items),
+            "possibleKitEquivalentsPerDay": sum(
+                float(item["possibleKitEquivalentsPerDay"]) for item in items
+            ),
+            "items": items,
+        }
+    return production
+
+
+def extract_kit_production(entity: Dict[str, Any], era: str) -> Dict[str, Dict[str, Any]]:
+    production_sets: List[Tuple[Any, Dict[str, Dict[str, Any]]]] = []
+    chain_products: List[Tuple[Any, Dict[str, Dict[str, Any]]]] = []
+    for _component_key, component in selected_components(entity, era):
+        production = component.get("production")
+        if isinstance(production, dict):
+            production_sets.append((production.get("options", []), component_reward_lookup(component)))
+        chain = component.get("chain")
+        if isinstance(chain, dict):
+            config = chain.get("config")
+            bonuses = config.get("bonuses") if isinstance(config, dict) else None
+            if isinstance(bonuses, list):
+                reward_lookup = component_reward_lookup(component)
+                for bonus in bonuses:
+                    if isinstance(bonus, dict):
+                        chain_products.append((bonus.get("productions", []), reward_lookup))
+
+    available_products = entity.get("available_products")
+    if isinstance(available_products, list) and not is_regular_timed_factory(entity):
+        production_sets.append((available_products, {}))
+
+    best_by_family: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for options, reward_lookup in production_sets:
+        if not isinstance(options, list):
+            continue
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            option_outputs: Dict[str, Dict[str, Any]] = {}
+            time_factor = option_time_factor(option)
+            for key in ("product", "products", "reward"):
+                value = option.get(key)
+                if isinstance(value, list):
+                    for item in value:
+                        collect_kit_product(option_outputs, item, time_factor, 1.0, reward_lookup)
+                elif isinstance(value, dict):
+                    collect_kit_product(option_outputs, value, time_factor, 1.0, reward_lookup)
+            for family, outputs in kit_outputs_by_family(option_outputs).items():
+                current = best_by_family.get(family)
+                if current is None or kit_outputs_value(outputs) > kit_outputs_value(current):
+                    best_by_family[family] = outputs
+
+    chain_outputs: Dict[str, Dict[str, Any]] = {}
+    for products, reward_lookup in chain_products:
+        if not isinstance(products, list):
+            continue
+        for product in products:
+            collect_kit_product(chain_outputs, product, 1.0, 1.0, reward_lookup)
+    for family, outputs in kit_outputs_by_family(chain_outputs).items():
+        merge_kit_outputs(best_by_family.setdefault(family, {}), outputs)
+
+    return serialize_kit_production(best_by_family)
 
 
 def fragment_display_name(reward: Dict[str, Any]) -> str:
@@ -2540,6 +2854,10 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
             continue
         width, length, area = extract_size(entity, era)
         attrs = extract_attributes(entity, era, area)
+        kit_production = extract_kit_production(entity, era)
+        for family, production in kit_production.items():
+            attr_key = str(KIT_FAMILY_DEFINITIONS[family]["attrKey"])
+            attrs[attr_key] = float(production["valuePerDay"])
         if (
             math.isclose(float(attrs.get("generic_rankingpoints_specialfactor", 0.0)), 0.0)
             and math.isclose(float(attrs.get("generic_rankingpoints_typefactor", 0.0)), 0.0)
@@ -2561,6 +2879,7 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
                 "area": area,
                 "environment_effect": extract_environment_effect(entity, era),
                 "fragment_production": extract_fragment_production(entity, era),
+                "kit_production": kit_production,
                 "reward_production": "; ".join(
                     part
                     for part in (
@@ -2831,6 +3150,9 @@ SHARED_MODEL_NAMES = (
     "BOOST_GUILD_GOODS_ATTR",
     "BOOST_MEDALS_ATTR",
     "NET_HAPPINESS_ATTR",
+    "KIT_FAMILY_DEFINITIONS",
+    "KIT_REWARD_DEFINITIONS",
+    "KIT_ATTR_TO_FAMILY",
     "FARMING_FP_GOODS_COMBINED_RAW_WEIGHT",
     "FARMING_SECONDARY_RAW_WEIGHTS",
     "load_payload",
@@ -2857,6 +3179,9 @@ SHARED_MODEL_NAMES = (
     "is_road_connection_attr_key",
     "require_road_connection_label",
     "adjusted_area",
+    "kit_reward_measure",
+    "collect_kit_product",
+    "extract_kit_production",
     "collect_records",
     "build_age_records",
 )

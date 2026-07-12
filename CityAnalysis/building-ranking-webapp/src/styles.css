@@ -674,7 +674,7 @@ input[aria-invalid="true"] {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 16px;
 }
@@ -1128,6 +1128,13 @@ tbody tr:hover {
   border-color: rgba(184, 239, 219, 0.42);
 }
 
+.badge.kit {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(160deg, #2f8f87, #23645f);
+  border-color: rgba(184, 239, 226, 0.46);
+}
+
 .compare-panel {
   margin-top: 16px;
   padding: 16px;
@@ -1327,6 +1334,64 @@ tbody tr:hover {
   margin: 0 0 14px;
   color: var(--ink);
   line-height: 1.45;
+}
+
+.detail-section-note {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.kit-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.kit-detail-card {
+  min-width: 0;
+  padding: 12px;
+  background: rgba(232, 245, 243, 0.62);
+  border: 1px solid rgba(133, 190, 181, 0.58);
+  border-radius: 8px;
+  box-shadow: var(--inner-glow);
+}
+
+.kit-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.kit-detail-heading > strong {
+  color: #245f59;
+  font-size: 13px;
+  text-align: right;
+}
+
+.kit-detail-items {
+  display: grid;
+  gap: 9px;
+}
+
+.kit-detail-items > div + div {
+  padding-top: 9px;
+  border-top: 1px solid rgba(133, 190, 181, 0.42);
+}
+
+.kit-detail-items strong {
+  font-size: 13px;
+}
+
+.kit-detail-items p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.42;
 }
 
 .detail-info-list {
@@ -1678,7 +1743,10 @@ tbody tr:hover {
 }
 
 @media (min-width: 761px) and (max-width: 1100px) {
-  .tabs,
+  .tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .summary-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -1706,6 +1774,10 @@ tbody tr:hover {
   }
 
   .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kit-detail-grid {
     grid-template-columns: 1fr;
   }
 }

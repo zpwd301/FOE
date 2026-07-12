@@ -1,9 +1,10 @@
 {
-  "compressedSha256": "d70110501805f2a07b1335bc48539720e0e744a90c2ba88785d767481380e37c",
-  "modelSha256": "44784f9ac5970cd1780727c218186d84fb4eb4936b5c1ae63a92eb07b908da1f",
-  "modelVersion": "1.0.42",
-  "schemaVersion": 1,
-  "scriptSha256": "9a663702c3c5e6a73e3ac88db0a30b207a2ae3a73d04ba3fbce9fd23262a99f9",
+  "compressedSha256": "3414beba3842b3e70d6ba4dea41f0f38dc663cf1ea3f8440c60b09975eafb683",
+  "exporterSha256": "de86139cbb952ef691d07eca97b6d7a0221340c0d8faa609244127645bcf5c05",
+  "modelSha256": "4fc0498c37344fc5fcc7e9d46bcfaf5586a256ade80ac10cfa5789677cb8c02b",
+  "modelVersion": "1.0.43",
+  "schemaVersion": 2,
+  "scriptSha256": "84d222f4ce1fe54972959c527b0a1974d19ce9a6c51bbc20f9d2f27012305a2a",
   "source": "input/ref/zpwd-ref",
   "sourceSha256": "a220e215cbd03e25030cb9eadb667f20437a5348c8df1df541892d95117cdd63"
 }
