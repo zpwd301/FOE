@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import math
 from collections import defaultdict
 from dataclasses import dataclass
@@ -57,6 +56,8 @@ FIELDNAMES = [
     "Total Expected Goods",
     "Expected Guild Goods Per Collection",
     "Total Expected Guild Goods",
+    "Expected Special Goods Per Collection",
+    "Total Expected Special Goods",
     "Expected Troop Units Per Collection",
     "Total Expected Troop Units",
     "Unit Breakdown Per Collection",
@@ -75,11 +76,14 @@ NUMERIC_FIELDS = {
     "Total Expected Goods",
     "Expected Guild Goods Per Collection",
     "Total Expected Guild Goods",
+    "Expected Special Goods Per Collection",
+    "Total Expected Special Goods",
     "Expected Troop Units Per Collection",
     "Total Expected Troop Units",
     "Passive FP Boost",
 }
 UNIT_KEYS = ("prod_unit_current_age", "prod_unit_next_age", "prod_unit_rogue", "prod_units", "prod_resource_unit")
+PROD_SPECIAL_GOODS_ATTR = "prod_resource_special_goods_up_to_age"
 TITLE_FILL = "D6EAF7"
 HEADER_FILL = "E7F4DC"
 TOP_FILL = "FFF4CC"
@@ -94,6 +98,7 @@ class ProductionTotals:
     medals: float = 0.0
     goods: float = 0.0
     guild_goods: float = 0.0
+    special_goods: float = 0.0
     units: float = 0.0
     current_age_units: float = 0.0
     next_age_units: float = 0.0
@@ -104,6 +109,7 @@ class ProductionTotals:
         self.medals += other.medals * factor
         self.goods += other.goods * factor
         self.guild_goods += other.guild_goods * factor
+        self.special_goods += other.special_goods * factor
         self.units += other.units * factor
         self.current_age_units += other.current_age_units * factor
         self.next_age_units += other.next_age_units * factor
@@ -114,8 +120,8 @@ class ProductionTotals:
         out.add(self, factor)
         return out
 
-    def score(self) -> Tuple[float, float, float, float, float]:
-        return (self.fp, self.medals, self.goods, self.guild_goods, self.units)
+    def score(self) -> Tuple[float, float, float, float, float, float]:
+        return (self.fp, self.medals, self.goods, self.guild_goods, self.special_goods, self.units)
 
 
 @dataclass
@@ -129,7 +135,7 @@ def parse_args() -> argparse.Namespace:
     output_dir = base_dir / "output"
     parser = argparse.ArgumentParser(
         description=(
-            "Generate a comprehensive city production report for FP, medals, goods, guild goods, and units "
+            "Generate a comprehensive city production report for FP, medals, goods, guild goods, special goods, and units "
             "without applying percentage production boosts."
         )
     )
@@ -154,11 +160,7 @@ def parse_args() -> argparse.Namespace:
         default=output_dir,
         help="Directory for generated reports.",
     )
-    parser.add_argument(
-        "--xlsx-only",
-        action="store_true",
-        help="Write only the Excel workbook and skip keeping the TSV.",
-    )
+    parser.add_argument("--xlsx-only", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -200,6 +202,7 @@ def attrs_to_totals(attrs: Dict[str, float]) -> ProductionTotals:
         medals=attrs.get("prod_resource_medals", 0.0),
         goods=attrs.get(PROD_GOODS_ATTR, 0.0),
         guild_goods=attrs.get(PROD_GUILD_GOODS_ATTR, 0.0),
+        special_goods=attrs.get(PROD_SPECIAL_GOODS_ATTR, 0.0),
         units=units,
         current_age_units=current_units,
         next_age_units=next_units,
@@ -290,6 +293,7 @@ def best_totals(options: Sequence[ProductionOption]) -> ProductionTotals:
         best.medals = max(best.medals, option.totals.medals)
         best.goods = max(best.goods, option.totals.goods)
         best.guild_goods = max(best.guild_goods, option.totals.guild_goods)
+        best.special_goods = max(best.special_goods, option.totals.special_goods)
         best.units = max(best.units, option.totals.units)
         best.current_age_units = max(best.current_age_units, option.totals.current_age_units)
         best.next_age_units = max(best.next_age_units, option.totals.next_age_units)
@@ -322,6 +326,8 @@ def option_summary(options: Sequence[ProductionOption]) -> str:
             values.append(f"{format_amount(option.totals.goods)} goods")
         if option.totals.guild_goods:
             values.append(f"{format_amount(option.totals.guild_goods)} guild goods")
+        if option.totals.special_goods:
+            values.append(f"{format_amount(option.totals.special_goods)} special goods")
         if option.totals.units:
             values.append(f"{format_amount(option.totals.units)} units")
         if values:
@@ -406,13 +412,14 @@ def build_report_rows(
         fp_row = fp_rows.get(key)
         fallback_summary = fp_row.production if fp_row else "no production found in input/ref/zpwd-ref for this age"
         summary = production_summary(entity_def, era_name, name_by_id, options, fallback_summary)
-        if chain_bonuses[key].score() != (0.0, 0.0, 0.0, 0.0, 0.0):
+        if chain_bonuses[key].score() != (0.0, 0.0, 0.0, 0.0, 0.0, 0.0):
             summary += (
                 " || chain bonus counted on this row: "
                 f"{numeric(chain_bonuses[key].fp)} FP, "
                 f"{numeric(chain_bonuses[key].medals)} medals, "
                 f"{numeric(chain_bonuses[key].goods)} goods, "
                 f"{numeric(chain_bonuses[key].guild_goods)} guild goods, "
+                f"{numeric(chain_bonuses[key].special_goods)} special goods, "
                 f"{numeric(chain_bonuses[key].units)} units"
             )
         rows.append(
@@ -430,6 +437,8 @@ def build_report_rows(
                 "Total Expected Goods": numeric(total.goods),
                 "Expected Guild Goods Per Collection": numeric(per_collection.guild_goods),
                 "Total Expected Guild Goods": numeric(total.guild_goods),
+                "Expected Special Goods Per Collection": numeric(per_collection.special_goods),
+                "Total Expected Special Goods": numeric(total.special_goods),
                 "Expected Troop Units Per Collection": numeric(per_collection.units),
                 "Total Expected Troop Units": numeric(total.units),
                 "Unit Breakdown Per Collection": unit_breakdown(per_collection),
@@ -444,18 +453,12 @@ def build_report_rows(
             -float(row["Total Expected Medals"] or 0),
             -float(row["Total Expected Goods"] or 0),
             -float(row["Total Expected Guild Goods"] or 0),
+            -float(row["Total Expected Special Goods"] or 0),
             -float(row["Total Expected Troop Units"] or 0),
             row["Name"],
         )
     )
     return rows
-
-
-def write_tsv(rows: Sequence[Dict[str, str]], output_path: Path) -> None:
-    with output_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=FIELDNAMES, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def city_name_from_input(map_file: Path) -> str:
@@ -481,6 +484,7 @@ def write_excel(rows: Sequence[Dict[str, str]], output_path: Path, map_file: Pat
         ("Total expected medals", totals["Total Expected Medals"]),
         ("Total expected goods", totals["Total Expected Goods"]),
         ("Total expected guild goods", totals["Total Expected Guild Goods"]),
+        ("Total expected special goods", totals["Total Expected Special Goods"]),
         ("Total expected troop units", totals["Total Expected Troop Units"]),
     ]
     summary["A1"] = f"{city_name} City Comprehensive Production Summary"
@@ -567,6 +571,7 @@ def apply_detail_styles(sheet, row_count: int) -> None:
             "Total Expected Medals",
             "Total Expected Goods",
             "Total Expected Guild Goods",
+            "Total Expected Special Goods",
             "Total Expected Troop Units",
         ):
             col_idx = FIELDNAMES.index(header) + 1
@@ -589,14 +594,9 @@ def main() -> None:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     base_name = output_basename(map_file)
-    tsv_path = args.output_dir / f"{base_name}_comprehensive_production_without_percentage_boost_report.tsv"
     xlsx_path = args.output_dir / f"{base_name}_comprehensive_production_without_percentage_boost_report.xlsx"
-    if not args.xlsx_only:
-        write_tsv(rows, tsv_path)
     write_excel(rows, xlsx_path, map_file)
     print(f"Wrote {xlsx_path}")
-    if not args.xlsx_only:
-        print(f"Wrote {tsv_path}")
 
 
 if __name__ == "__main__":
