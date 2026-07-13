@@ -6,7 +6,7 @@
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
     <link rel="preload" href="data/ranking-data.json.gz?v=20260712-1" as="fetch" type="application/gzip" crossorigin="anonymous">
-    <link rel="stylesheet" href="src/styles.css?v=20260712-1">
+    <link rel="stylesheet" href="src/styles.css?v=20260712-12">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -143,33 +143,34 @@
             <div id="tableFiltersInfo" class="section-note info-text" hidden>
               <p>Filters only hide or show rows. They do not recalculate scores or rank numbers, so a building keeps the same rank when you narrow the list.</p>
               <ul>
-                <li><strong>Strength</strong> checks all recorded building benefits, even when that strength is not one of the three badges shown in the table.</li>
+                <li><strong>Strengths</strong> checks all recorded building benefits, even when a strength is not one of the six badges shown in the table. When you choose several, a building must have every selected strength.</li>
                 <li><strong>Area</strong> is the building footprint plus one tile when a road is required.</li>
                 <li><strong>Rows shown</strong> limits the table without removing matches from the result count.</li>
               </ul>
             </div>
-            <label>
-              Strength
-              <select id="strengthFilter">
-                <option value="">Any strength</option>
-                <option value="combat">Combat</option>
-                <option value="qi">QI</option>
-                <option value="fp">FP</option>
-                <option value="goods">Goods</option>
-                <option value="units">Units</option>
-                <option value="diamonds">Diamonds</option>
-                <option value="blueprints">Blueprints</option>
-                <optgroup label="Kit production">
-                  <option value="kit-oneUp">One-Up</option>
-                  <option value="kit-renovation">Renovation</option>
-                  <option value="kit-specialFinish">FSP</option>
-                  <option value="kit-supplyFinish">Supply Finish</option>
-                  <option value="kit-goodsFinish">Goods Finish</option>
-                  <option value="kit-massAid">Mass Aid</option>
-                  <option value="kit-store">Store</option>
-                </optgroup>
-              </select>
-            </label>
+            <fieldset class="strength-filter-fieldset">
+              <legend>Strengths</legend>
+              <details class="strength-multiselect" id="strengthFilter">
+                <summary><span id="strengthFilterSummary">Any strength</span></summary>
+                <div class="strength-options">
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="combat" data-label="Combat"> Combat</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="qi" data-label="QI"> QI</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="fp" data-label="FP"> FP</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="goods" data-label="Goods"> Goods</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="units" data-label="Units"> Units</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="diamonds" data-label="Diamonds"> Diamonds</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="blueprints" data-label="Blueprints"> Blueprints</label>
+                  <span class="strength-option-group">Kit production</span>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="kit-oneUp" data-label="One-Up"> One-Up</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="kit-renovation" data-label="Renovation"> Renovation</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="kit-specialFinish" data-label="FSP"> FSP</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="kit-supplyFinish" data-label="Supply Finish"> Supply Finish</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="kit-goodsFinish" data-label="Goods Finish"> Goods Finish</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="kit-massAid" data-label="Mass Aid"> Mass Aid</label>
+                  <label class="checkbox-label strength-option"><input type="checkbox" value="kit-store" data-label="Store Building"> Store Building</label>
+                </div>
+              </details>
+            </fieldset>
             <div class="split-inputs">
               <label>Min area <input id="minAreaFilter" type="number" min="0" step="1" aria-describedby="areaFilterError"></label>
               <label>Max area <input id="maxAreaFilter" type="number" min="0" step="1" aria-describedby="areaFilterError"></label>
@@ -223,20 +224,24 @@
       </aside>
 
       <section class="content">
-        <nav class="tabs" role="tablist" aria-label="Ranking profile">
-          <button class="tab active" id="profileTab-overallEfficiency" role="tab" aria-selected="true" aria-controls="rankingPanel" tabindex="0" data-profile="overallEfficiency">Overall Efficiency</button>
-          <button class="tab" id="profileTab-fightingEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="fightingEfficiency">Fighting Efficiency</button>
-          <button class="tab" id="profileTab-farmingEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="farmingEfficiency">Farming Efficiency</button>
-          <button class="tab" id="profileTab-qiEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="qiEfficiency">QI Efficiency</button>
-          <button class="tab" id="profileTab-kitEfficiency" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="kitEfficiency">Kit Efficiency</button>
-          <button class="tab" id="profileTab-overall" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="overall">Overall</button>
-          <button class="tab" id="profileTab-fighting" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="fighting">Fighting</button>
-          <button class="tab" id="profileTab-farming" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="farming">Farming</button>
-          <button class="tab" id="profileTab-qi" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="qi">QI</button>
-          <button class="tab" id="profileTab-kit" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile="kit">Kit Producers</button>
-        </nav>
+        <div class="profile-switcher">
+          <nav class="tabs profile-tabs" role="tablist" aria-label="Ranking profile">
+            <button class="tab active" id="profileTab-overall" role="tab" aria-selected="true" aria-controls="rankingPanel" tabindex="0" data-profile-family="overall">Overall</button>
+            <button class="tab" id="profileTab-fighting" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile-family="fighting">Fighting</button>
+            <button class="tab" id="profileTab-farming" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile-family="farming">Farming</button>
+            <button class="tab" id="profileTab-qi" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile-family="qi">QI</button>
+            <button class="tab" id="profileTab-kit" role="tab" aria-selected="false" aria-controls="rankingPanel" tabindex="-1" data-profile-family="kit">Kit Producers</button>
+          </nav>
+          <div class="ranking-mode-control">
+            <span id="rankingModeLabel">Rank by</span>
+            <div class="ranking-mode" role="group" aria-labelledby="rankingModeLabel">
+              <button class="ranking-mode-button" type="button" aria-pressed="false" data-efficiency="false">Total</button>
+              <button class="ranking-mode-button active" type="button" aria-pressed="true" data-efficiency="true">Efficiency</button>
+            </div>
+          </div>
+        </div>
 
-        <div id="rankingPanel" class="ranking-panel" role="tabpanel" aria-labelledby="profileTab-overallEfficiency">
+        <div id="rankingPanel" class="ranking-panel" role="tabpanel" aria-labelledby="profileTab-overall">
         <section class="summary-grid" id="summaryGrid"></section>
 
         <section class="table-panel">
@@ -256,7 +261,7 @@
             </div>
           </div>
           <div id="strengthLegend" class="strength-legend info-text" role="region" aria-label="Strength badge explanations" hidden></div>
-          <p class="table-scroll-hint" id="tableScrollHint">Swipe or scroll sideways to see scores, strengths, and details <span aria-hidden="true">→</span></p>
+          <p class="table-scroll-hint" id="tableScrollHint">Swipe up or down to browse rows, or sideways to see scores, strengths, and details <span aria-hidden="true">→</span></p>
           <div class="table-wrap" role="region" aria-label="Building ranking table" aria-describedby="tableScrollHint" tabindex="0">
             <table>
               <thead>
@@ -337,7 +342,7 @@
     <script
       src="src/bootstrap.js?v=20260711-2"
       data-data-version="20260712-2"
-      data-app-version="20260712-4"
+      data-app-version="20260712-13"
     ></script>
   </body>
 </html>

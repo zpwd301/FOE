@@ -241,7 +241,7 @@ KIT_FAMILY_DEFINITIONS = {
     "store": {
         "attrKey": "prod_kit_store_building",
         "label": "Store Building Kit",
-        "strength": "Store",
+        "strength": "Store Building",
         "description": "Expected Store Building Kit equivalents produced per day.",
         "unit": "kits/day",
     },

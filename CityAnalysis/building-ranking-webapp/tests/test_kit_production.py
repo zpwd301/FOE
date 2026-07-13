@@ -52,6 +52,7 @@ class KitProductionTests(unittest.TestCase):
         )
         self.assertEqual(len(model.KIT_ATTR_TO_FAMILY), 7)
         self.assertEqual(model.KIT_FAMILY_DEFINITIONS["specialFinish"]["strength"], "FSP")
+        self.assertEqual(model.KIT_FAMILY_DEFINITIONS["store"]["strength"], "Store Building")
 
     def test_fragment_probability_and_recipe_size_are_applied(self) -> None:
         entity = entity_with_options(

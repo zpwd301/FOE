@@ -1,6 +1,7 @@
 const DATA = window.FOE_BUILDING_RANKING_DATA;
 const ALL_CATEGORIES = "All Building Categories";
 const PRESET_PROFILES_ENABLED = false;
+const MAX_STRENGTH_BADGES = 6;
 
 const PROFILE_CONFIG = {
   overallEfficiency: {
@@ -140,10 +141,12 @@ const STRENGTH_INFO = {
   "Supply Finish": { cls: "kit", description: "Produces timed or all-supply production rush rewards." },
   "Goods Finish": { cls: "kit", description: "Produces rewards that finish a goods-building production." },
   "Mass Aid": { cls: "kit", description: "Produces Mass Self-Aid Kit fragments or completed kits." },
-  Store: { cls: "kit", description: "Produces Store Building fragments or completed kits." },
+  "Store Building": { cls: "kit", description: "Produces Store Building fragments or completed kits." },
 };
 
-const KIT_FAMILIES = DATA.kitFamilies || [];
+const KIT_FAMILIES = (DATA.kitFamilies || []).map((family) => (
+  family.key === "store" ? { ...family, strength: "Store Building" } : family
+));
 const KIT_FAMILY_BY_KEY = Object.fromEntries(KIT_FAMILIES.map((family) => [family.key, family]));
 
 const el = {
@@ -175,6 +178,7 @@ const el = {
   medalEstimate: document.getElementById("medalEstimate"),
   specialGoodsEstimate: document.getElementById("specialGoodsEstimate"),
   strengthFilter: document.getElementById("strengthFilter"),
+  strengthFilterSummary: document.getElementById("strengthFilterSummary"),
   minAreaFilter: document.getElementById("minAreaFilter"),
   maxAreaFilter: document.getElementById("maxAreaFilter"),
   areaFilterError: document.getElementById("areaFilterError"),
@@ -306,6 +310,36 @@ function focusValueText(value, leftLabel, rightLabel) {
   return "Balanced";
 }
 
+function strengthFilterInputs() {
+  return Array.from(el.strengthFilter.querySelectorAll('input[type="checkbox"]'));
+}
+
+function selectedStrengths() {
+  return strengthFilterInputs().filter((input) => input.checked).map((input) => input.value);
+}
+
+function strengthFilterLabel(value) {
+  return strengthFilterInputs().find((input) => input.value === value)?.dataset.label || value;
+}
+
+function setSelectedStrengths(values) {
+  const selected = new Set(values);
+  strengthFilterInputs().forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
+}
+
+function syncStrengthFilterSummary() {
+  const strengths = selectedStrengths();
+  const labels = strengths.map(strengthFilterLabel);
+  el.strengthFilterSummary.textContent = strengths.length === 0
+    ? "Any strength"
+    : strengths.length === 1
+      ? labels[0]
+      : `${strengths.length} strengths selected`;
+  el.strengthFilterSummary.title = labels.join(", ");
+}
+
 function controls() {
   return {
     age: el.ageSelect.value,
@@ -322,7 +356,7 @@ function controls() {
     estimatedGuildGoodsProduction: numberValue(el.guildGoodsEstimate.value),
     estimatedMedalProduction: numberValue(el.medalEstimate.value),
     estimatedSpecialGoodsProduction: numberValue(el.specialGoodsEstimate.value),
-    strength: el.strengthFilter.value,
+    strengths: selectedStrengths(),
     minArea: el.minAreaFilter.value === "" ? null : numberValue(el.minAreaFilter.value),
     maxArea: el.maxAreaFilter.value === "" ? null : numberValue(el.maxAreaFilter.value),
     noRoadOnly: el.noRoadFilter.checked,
@@ -371,6 +405,20 @@ function attrLabel(key) {
 
 function isKitProfile(profile = state.profile) {
   return PROFILE_CONFIG[profile]?.weightProfile === "kits";
+}
+
+function profileUsesBaseProduction(profile = state.profile) {
+  return ["overall", "overallEfficiency", "farming", "farmingEfficiency"].includes(profile);
+}
+
+function profileFamily(profile = state.profile) {
+  const weightProfile = PROFILE_CONFIG[profile]?.weightProfile;
+  return weightProfile === "kits" ? "kit" : weightProfile;
+}
+
+function profileForSelection(family, efficiency) {
+  const profile = efficiency ? `${family}Efficiency` : family;
+  return PROFILE_CONFIG[profile] ? profile : null;
 }
 
 function kitFamilyForAttr(key) {
@@ -744,7 +792,7 @@ function strengthBadges(record, contributions) {
       const family = kitFamilyForAttr(item.key);
       if (!family || item.value <= 0) continue;
       addBadge(family.strength, "kit");
-      if (labels.length >= 3) break;
+      if (labels.length >= MAX_STRENGTH_BADGES) break;
     }
     return labels;
   }
@@ -753,7 +801,7 @@ function strengthBadges(record, contributions) {
   if (rawAttr(record, "prod_resource_blueprint") > 0) addBadge("Blueprint", "blueprint");
 
   for (const item of contributions) {
-    if (labels.length >= 3) break;
+    if (labels.length >= MAX_STRENGTH_BADGES) break;
     if (item.scorePoints <= 0.05) continue;
     const label = item.label;
     if (label.includes("QI")) {
@@ -836,7 +884,7 @@ function filteredRows(rows) {
     if (areaFiltersValid && c.minArea !== null && row.record.adjustedArea < c.minArea) return false;
     if (areaFiltersValid && c.maxArea !== null && row.record.adjustedArea > c.maxArea) return false;
     if (c.noRoadOnly && row.record.requiresRoad) return false;
-    if (!rowHasStrength(row, c.strength)) return false;
+    if (c.strengths.length && !c.strengths.every((strength) => rowHasStrength(row, strength))) return false;
     return true;
   });
 }
@@ -942,7 +990,7 @@ function renderBuildingList() {
 
 function renderStrengthLegend() {
   el.strengthLegend.innerHTML = `
-    <p class="strength-legend-intro">Strength badges are quick highlights, not a complete list. Up to three appear in each row; open <strong>View</strong> to see the full scoring breakdown.</p>
+    <p class="strength-legend-intro">Strength badges are quick highlights, not a complete list. Up to six appear in each row; open <strong>View</strong> to see the full scoring breakdown.</p>
     <div class="strength-legend-grid">
       ${Object.entries(STRENGTH_INFO).map(([label, info]) => `
         <div class="strength-legend-item">
@@ -960,7 +1008,7 @@ function filterChips(c) {
   if (PRESET_PROFILES_ENABLED && el.presetSelect.value) chips.push(`Preset: ${presetLabel(el.presetSelect.value)}`);
   if (c.search) chips.push(`Search: ${el.searchInput.value.trim()}`);
   if (c.category !== ALL_CATEGORIES) chips.push(c.category);
-  if (c.strength) chips.push(`Strength: ${el.strengthFilter.selectedOptions[0]?.textContent || c.strength}`);
+  c.strengths.forEach((strength) => chips.push(`Strength: ${strengthFilterLabel(strength)}`));
   if (areaValidation.message) {
     chips.push("Area filters paused");
   } else {
@@ -992,15 +1040,19 @@ function syncFocusOutputs() {
 function renderControlState(rows, visibleRows) {
   const c = controls();
   const kitProfile = isKitProfile();
+  const usesBaseProduction = profileUsesBaseProduction();
   const areaValidation = areaFilterValidation(c);
   syncFocusOutputs();
+  syncStrengthFilterSummary();
   syncLongValuePresentation();
 
-  el.baseProductionControls.hidden = kitProfile;
+  el.baseProductionControls.hidden = !usesBaseProduction;
   el.focusControls.hidden = kitProfile;
   el.settingsSummaryText.textContent = kitProfile
     ? "City, kit priorities and filters"
-    : "City, production, focus and filters";
+    : usesBaseProduction
+      ? "City, production, focus and filters"
+      : "City, focus and filters";
   el.scoreColumnLabel.textContent = kitProfile ? "Kit score" : "Score";
   el.efficiencyColumnLabel.textContent = kitProfile ? "Kit efficiency" : "Efficiency";
 
@@ -1030,7 +1082,11 @@ function renderControlState(rows, visibleRows) {
     ? chips.map((chip) => `<span class="filter-chip">${escapeHtml(chip)}</span>`).join("")
     : `<span class="filter-chip muted-chip">No filters</span>`;
   const limit = c.topN === "all" ? visibleRows.length : Math.min(Number(c.topN), visibleRows.length);
-  el.resultMeta.textContent = `Showing ${limit.toLocaleString()} of ${visibleRows.length.toLocaleString()} matches · ${rows.length.toLocaleString()} total · Sorted by ${sortLabel()}`;
+  el.resultMeta.textContent = `Showing ${limit.toLocaleString()} of ${visibleRows.length.toLocaleString()} matches · `;
+  const sortStatus = document.createElement("span");
+  sortStatus.className = "sort-status";
+  sortStatus.textContent = `Sorted by ${sortLabel()}`;
+  el.resultMeta.append(sortStatus);
 }
 
 function renderCustomWeights() {
@@ -1594,7 +1650,6 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
     </div>
     <h3>Summary</h3>
     <p class="detail-summary">${escapeHtml(explainRanking(row))}</p>
-    ${renderKitProductionDetails(row.record)}
     <h3>Ranking Attributes</h3>
     <div class="attribute-table-wrap">
       <table class="attribute-table signal-table">
@@ -1614,6 +1669,7 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
         <tbody>${attrTableRows}</tbody>
       </table>
     </div>
+    ${renderKitProductionDetails(row.record)}
     <h3>Additional Building Details</h3>
     <div class="detail-info-list">${detailRows}</div>
     <h3>Report Discrepancy</h3>
@@ -1710,7 +1766,8 @@ function resetDefaults() {
   el.guildGoodsEstimate.value = defaults.estimatedGuildGoodsProduction;
   el.medalEstimate.value = defaults.estimatedMedalProduction;
   el.specialGoodsEstimate.value = defaults.estimatedSpecialGoodsProduction;
-  el.strengthFilter.value = "";
+  setSelectedStrengths([]);
+  el.strengthFilter.open = false;
   el.minAreaFilter.value = "";
   el.maxAreaFilter.value = "";
   el.noRoadFilter.checked = false;
@@ -1734,12 +1791,19 @@ function setActiveProfile(profile) {
 
 function syncProfileTabs() {
   let activeTab = null;
+  const activeFamily = profileFamily();
+  const efficiency = PROFILE_CONFIG[state.profile].efficiency;
   document.querySelectorAll(".tab").forEach((tab) => {
-    const selected = tab.dataset.profile === state.profile;
+    const selected = tab.dataset.profileFamily === activeFamily;
     tab.classList.toggle("active", selected);
     tab.setAttribute("aria-selected", selected ? "true" : "false");
     tab.tabIndex = selected ? 0 : -1;
     if (selected) activeTab = tab;
+  });
+  document.querySelectorAll(".ranking-mode-button").forEach((button) => {
+    const selected = (button.dataset.efficiency === "true") === efficiency;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
   });
   if (activeTab) {
     document.getElementById("rankingPanel")?.setAttribute("aria-labelledby", activeTab.id);
@@ -1799,7 +1863,7 @@ function buildUrlParams() {
   params.set("guildGoods", c.estimatedGuildGoodsProduction);
   params.set("medals", c.estimatedMedalProduction);
   params.set("specialGoods", c.estimatedSpecialGoodsProduction);
-  if (c.strength) params.set("strength", c.strength);
+  if (c.strengths.length) params.set("strength", c.strengths.join(","));
   if (c.minArea !== null) params.set("minArea", c.minArea);
   if (c.maxArea !== null) params.set("maxArea", c.maxArea);
   if (c.noRoadOnly) params.set("noRoad", "1");
@@ -1843,7 +1907,7 @@ function applyUrlState() {
   if (params.get("guildGoods")) el.guildGoodsEstimate.value = params.get("guildGoods");
   if (params.get("medals")) el.medalEstimate.value = params.get("medals");
   if (params.get("specialGoods")) el.specialGoodsEstimate.value = params.get("specialGoods");
-  if (params.get("strength")) el.strengthFilter.value = params.get("strength");
+  if (params.get("strength")) setSelectedStrengths(params.getAll("strength").flatMap((value) => value.split(",")).filter(Boolean));
   if (params.get("minArea")) el.minAreaFilter.value = params.get("minArea");
   if (params.get("maxArea")) el.maxAreaFilter.value = params.get("maxArea");
   el.noRoadFilter.checked = params.get("noRoad") === "1";
@@ -1899,7 +1963,16 @@ function init() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
       el.presetSelect.value = "";
-      setActiveProfile(button.dataset.profile);
+      setActiveProfile(profileForSelection(button.dataset.profileFamily, PROFILE_CONFIG[state.profile].efficiency));
+      state.sort = { key: "profile", dir: "desc" };
+      renderImmediately();
+    });
+  });
+
+  document.querySelectorAll(".ranking-mode-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      el.presetSelect.value = "";
+      setActiveProfile(profileForSelection(profileFamily(), button.dataset.efficiency === "true"));
       state.sort = { key: "profile", dir: "desc" };
       renderImmediately();
     });
@@ -1908,7 +1981,7 @@ function init() {
   document.querySelector(".tabs").addEventListener("keydown", (event) => {
     const current = event.target.closest('[role="tab"]');
     if (!current) return;
-    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const tabs = Array.from(document.querySelectorAll('.tabs [role="tab"]'));
     const currentIndex = tabs.indexOf(current);
     let nextIndex = null;
     if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
