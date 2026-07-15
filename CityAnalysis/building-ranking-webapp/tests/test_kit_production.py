@@ -236,5 +236,35 @@ class FragmentRewardSearchTests(unittest.TestCase):
         self.assertEqual(index["producer"]["overrides"], {"StoneAge": []})
 
 
+class SplitExportTests(unittest.TestCase):
+    def test_core_and_age_records_are_separated(self) -> None:
+        payload = {
+            "metadata": {"defaultAge": "VirtualFuture"},
+            "ages": [{"key": "VirtualFuture", "label": "Virtual Future"}],
+            "recordsByAge": {
+                "VirtualFuture": [{"entityId": "building"}],
+            },
+        }
+
+        core, records_by_age = export_data.split_data(payload)
+
+        self.assertNotIn("recordsByAge", core)
+        self.assertEqual(core["metadata"]["defaultAge"], "VirtualFuture")
+        self.assertEqual(records_by_age["VirtualFuture"], [{"entityId": "building"}])
+
+    def test_compressed_json_is_deterministic_and_round_trips(self) -> None:
+        import gzip
+        import json
+
+        payload = {"age": "VirtualFuture", "records": [{"name": "Building"}]}
+
+        text, first = export_data.compressed_json(payload)
+        _, second = export_data.compressed_json(payload)
+
+        self.assertEqual(first, second)
+        self.assertEqual(json.loads(text), payload)
+        self.assertEqual(json.loads(gzip.decompress(first)), payload)
+
+
 if __name__ == "__main__":
     unittest.main()

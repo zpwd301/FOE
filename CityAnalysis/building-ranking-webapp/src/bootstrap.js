@@ -2,6 +2,7 @@
   const dataVersion = script?.dataset.dataVersion || "1";
   const appVersion = script?.dataset.appVersion || "1";
   const loadStatus = document.getElementById("loadStatus");
+  const ageLoads = new Map();
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -13,35 +14,104 @@
     });
   }
 
-  async function loadCompressedData() {
+  async function fetchJson(src) {
+    const response = await fetch(src, { cache: "force-cache" });
+    if (!response.ok) throw new Error(`${src} returned ${response.status}.`);
+    return response.json();
+  }
+
+  async function fetchCompressedJson(src) {
     if (!("DecompressionStream" in window)) {
       throw new Error("This browser does not support streamed gzip decompression.");
     }
-    const response = await fetch(`data/ranking-data.json.gz?v=${encodeURIComponent(dataVersion)}`, {
-      cache: "force-cache",
-      credentials: "omit",
-    });
+    const response = await fetch(src, { cache: "force-cache" });
     if (!response.ok || !response.body) {
-      throw new Error(`Compressed ranking data returned ${response.status}.`);
+      throw new Error(`${src} returned ${response.status}.`);
     }
     const contentEncoding = response.headers.get("content-encoding");
     const jsonResponse = contentEncoding
       ? response
       : new Response(response.body.pipeThrough(new DecompressionStream("gzip")));
-    window.FOE_BUILDING_RANKING_DATA = await jsonResponse.json();
+    return jsonResponse.json();
+  }
+
+  async function loadJsonAsset(compressedPath, fallbackPath, label) {
+    const version = encodeURIComponent(dataVersion);
+    try {
+      return await fetchCompressedJson(`${compressedPath}?v=${version}`);
+    } catch (compressedError) {
+      console.warn(`Compressed ${label} unavailable; loading the JSON fallback.`, compressedError);
+      return fetchJson(`${fallbackPath}?v=${version}`);
+    }
+  }
+
+  async function loadCoreData() {
+    const data = await loadJsonAsset(
+      "data/ranking-core.json.gz",
+      "data/ranking-core.json",
+      "ranking core"
+    );
+    if (!data || typeof data !== "object" || !Array.isArray(data.ages)) {
+      throw new Error("Ranking core data did not initialize.");
+    }
+    data.recordsByAge = {};
+    window.FOE_BUILDING_RANKING_DATA = data;
+  }
+
+  async function loadAgeData(age) {
+    const data = window.FOE_BUILDING_RANKING_DATA;
+    if (!data?.ages?.some((item) => item.key === age)) throw new Error(`Unknown city age: ${age}`);
+    if (Array.isArray(data.recordsByAge?.[age])) return data.recordsByAge[age];
+    if (ageLoads.has(age)) return ageLoads.get(age);
+
+    const load = (async () => {
+      const encodedAge = encodeURIComponent(age);
+      const payload = await loadJsonAsset(
+        `data/ages/${encodedAge}.json.gz`,
+        `data/ages/${encodedAge}.json`,
+        `${age} ranking data`
+      );
+      if (payload?.age !== age || !Array.isArray(payload.records)) {
+        throw new Error(`Ranking data for ${age} is invalid.`);
+      }
+      data.recordsByAge[age] = payload.records;
+      return payload.records;
+    })();
+    ageLoads.set(age, load);
+    try {
+      return await load;
+    } finally {
+      ageLoads.delete(age);
+    }
+  }
+
+  function browserStorage() {
+    try {
+      return window.localStorage;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function initialAge() {
+    const data = window.FOE_BUILDING_RANKING_DATA;
+    const allowedAges = new Set(data.ages.map((age) => age.key));
+    const urlAge = new URLSearchParams(window.location.search).get("age");
+    if (allowedAges.has(urlAge)) return urlAge;
+    const stored = window.FOE_BUILDING_RANKING_PREFERENCES
+      ?.createPreferenceStore(browserStorage())
+      .read();
+    if (allowedAges.has(stored?.age)) return stored.age;
+    return data.metadata.defaultAge;
   }
 
   async function start() {
-    try {
-      await loadCompressedData();
-    } catch (compressedError) {
-      console.warn("Compressed data unavailable; loading the compatibility dataset.", compressedError);
-      await loadScript(`data/ranking-data.js?v=${encodeURIComponent(dataVersion)}`);
-    }
-
-    if (!window.FOE_BUILDING_RANKING_DATA) {
-      throw new Error("Ranking data did not initialize.");
-    }
+    await Promise.all([
+      loadScript(`src/preferences.js?v=${encodeURIComponent(appVersion)}`),
+      loadCoreData(),
+    ]);
+    window.FOE_LOAD_BUILDING_RANKING_AGE = loadAgeData;
+    await loadAgeData(initialAge());
     await loadScript(`src/app.js?v=${encodeURIComponent(appVersion)}`);
     document.body.classList.remove("is-loading");
     if (loadStatus) loadStatus.hidden = true;

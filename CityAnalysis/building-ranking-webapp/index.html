@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
-    <link rel="preload" href="data/ranking-data.json.gz?v=20260715-1" as="fetch" type="application/gzip" crossorigin="anonymous">
-    <link rel="stylesheet" href="src/styles.css?v=20260715-8">
+    <link rel="stylesheet" href="src/styles.css?v=20260715-10">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -100,7 +99,10 @@
             <label>Medals <input id="medalEstimate" type="number" min="0" step="1000"></label>
             <label>Special goods <input id="specialGoodsEstimate" type="number" min="0" step="1"></label>
           </div>
-          <button id="shareButton" type="button" class="secondary-button">Copy share link</button>
+          <div class="share-settings-row">
+            <button id="shareButton" type="button" class="secondary-button">Copy share link</button>
+            <small id="preferenceStatus" class="preference-status" role="status" aria-live="polite">Settings save on this device.</small>
+          </div>
         </section>
 
         <section class="control-section" id="focusControls">
@@ -347,15 +349,15 @@
     </main>
 
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
-    <aside class="drawer" id="detailDrawer" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" tabindex="-1">
+    <aside class="drawer" id="detailDrawer" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" tabindex="-1" inert>
       <button id="closeDrawer" type="button" class="close-button">Close</button>
       <div id="detailContent"></div>
     </aside>
 
     <script
-      src="src/bootstrap.js?v=20260711-2"
-      data-data-version="20260715-1"
-      data-app-version="20260715-2"
+      src="src/bootstrap.js?v=20260715-4"
+      data-data-version="df993d329aef"
+      data-app-version="20260715-4"
     ></script>
   </body>
 </html>

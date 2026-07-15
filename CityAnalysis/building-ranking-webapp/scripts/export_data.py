@@ -6,6 +6,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime
@@ -21,7 +22,7 @@ import building_ranking_model as model  # noqa: E402
 DEFAULT_AGE = "VirtualFuture"
 DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
 # Increment when the serialized website payload shape or semantics change.
-EXPORT_SCHEMA_VERSION = 3
+EXPORT_SCHEMA_VERSION = 4
 
 
 def file_sha256(path: str) -> str:
@@ -36,10 +37,57 @@ def data_paths() -> Dict[str, str]:
     data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
     return {
         "directory": data_dir,
-        "script": os.path.join(data_dir, "ranking-data.js"),
-        "compressed": os.path.join(data_dir, "ranking-data.json.gz"),
+        "core": os.path.join(data_dir, "ranking-core.json"),
+        "coreCompressed": os.path.join(data_dir, "ranking-core.json.gz"),
+        "ages": os.path.join(data_dir, "ages"),
+        "legacyScript": os.path.join(data_dir, "ranking-data.js"),
+        "legacyCompressed": os.path.join(data_dir, "ranking-data.json.gz"),
         "state": os.path.join(data_dir, "export-state.json"),
     }
+
+
+def age_data_paths(age: str) -> Dict[str, str]:
+    directory = data_paths()["ages"]
+    return {
+        "json": os.path.join(directory, f"{age}.json"),
+        "compressed": os.path.join(directory, f"{age}.json.gz"),
+    }
+
+
+def index_path() -> str:
+    return os.path.join(os.path.dirname(__file__), "..", "index.html")
+
+
+def data_version() -> str:
+    paths = data_paths()
+    digest = hashlib.sha256()
+    digest.update(file_sha256(paths["coreCompressed"]).encode("ascii"))
+    for age in model.AGE_ORDER:
+        digest.update(file_sha256(age_data_paths(age)["compressed"]).encode("ascii"))
+    return digest.hexdigest()[:12]
+
+
+def index_data_version() -> str:
+    with open(index_path(), "r", encoding="utf-8") as handle:
+        match = re.search(r'data-data-version="([^"]+)"', handle.read())
+    return match.group(1) if match else ""
+
+
+def update_index_data_version(version: str) -> None:
+    path = index_path()
+    with open(path, "r", encoding="utf-8") as handle:
+        current = handle.read()
+    updated, count = re.subn(
+        r'data-data-version="[^"]+"',
+        f'data-data-version="{version}"',
+        current,
+        count=1,
+    )
+    if count != 1:
+        raise ValueError("data-data-version was not found exactly once in index.html")
+    if updated != current:
+        atomic_write(path, updated)
+        print(f"Updated the dashboard data cache version to {version}.")
 
 
 def atomic_write(path: str, content: Any, binary: bool = False) -> None:
@@ -61,12 +109,6 @@ def read_wrapped_data(path: str) -> tuple[str, Dict[str, Any]]:
     return json_text, json.loads(json_text)
 
 
-def semantic_payload(data: Dict[str, Any]) -> Dict[str, Any]:
-    metadata = dict(data.get("metadata", {}))
-    metadata.pop("generatedAt", None)
-    return {**data, "metadata": metadata}
-
-
 def export_fingerprint(reference_file: str) -> Dict[str, Any]:
     return {
         "schemaVersion": EXPORT_SCHEMA_VERSION,
@@ -80,26 +122,55 @@ def export_fingerprint(reference_file: str) -> Dict[str, Any]:
 
 def matching_export_state(fingerprint: Dict[str, Any]) -> bool:
     paths = data_paths()
-    if not all(os.path.exists(paths[key]) for key in ("script", "compressed", "state")):
+    if not all(os.path.exists(paths[key]) for key in ("core", "coreCompressed", "state")):
         return False
     try:
         with open(paths["state"], "r", encoding="utf-8") as handle:
             state = json.load(handle)
     except (OSError, ValueError):
         return False
-    return (
-        all(state.get(key) == value for key, value in fingerprint.items())
-        and state.get("scriptSha256") == file_sha256(paths["script"])
-        and state.get("compressedSha256") == file_sha256(paths["compressed"])
-    )
+    if not all(state.get(key) == value for key, value in fingerprint.items()):
+        return False
+    if state.get("coreSha256") != file_sha256(paths["core"]):
+        return False
+    if state.get("coreCompressedSha256") != file_sha256(paths["coreCompressed"]):
+        return False
+    age_assets = state.get("ageAssets")
+    if not isinstance(age_assets, dict) or set(age_assets) != set(model.AGE_ORDER):
+        return False
+    for age in model.AGE_ORDER:
+        age_paths = age_data_paths(age)
+        if not all(os.path.exists(age_paths[key]) for key in ("json", "compressed")):
+            return False
+        if age_assets[age].get("sha256") != file_sha256(age_paths["json"]):
+            return False
+        if age_assets[age].get("compressedSha256") != file_sha256(age_paths["compressed"]):
+            return False
+    current_version = data_version()
+    if state.get("dataVersion") != current_version:
+        return False
+    if index_data_version() != current_version:
+        update_index_data_version(current_version)
+    return True
 
 
 def write_export_state(fingerprint: Dict[str, Any]) -> None:
     paths = data_paths()
+    version = data_version()
+    update_index_data_version(version)
+    age_assets = {}
+    for age in model.AGE_ORDER:
+        age_paths = age_data_paths(age)
+        age_assets[age] = {
+            "sha256": file_sha256(age_paths["json"]),
+            "compressedSha256": file_sha256(age_paths["compressed"]),
+        }
     state = {
         **fingerprint,
-        "scriptSha256": file_sha256(paths["script"]),
-        "compressedSha256": file_sha256(paths["compressed"]),
+        "coreSha256": file_sha256(paths["core"]),
+        "coreCompressedSha256": file_sha256(paths["coreCompressed"]),
+        "ageAssets": age_assets,
+        "dataVersion": version,
     }
     atomic_write(paths["state"], json.dumps(state, indent=2, sort_keys=True) + "\n")
 
@@ -204,45 +275,82 @@ def attr_metadata(attr_keys: List[str]) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def write_data_files(data: Dict[str, Any]) -> bool:
+def split_data(data: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, List[Dict[str, Any]]]]:
+    records_by_age = data.get("recordsByAge")
+    if not isinstance(records_by_age, dict) or not records_by_age:
+        raise ValueError("recordsByAge is missing from the ranking payload")
+    core = {key: value for key, value in data.items() if key != "recordsByAge"}
+    return core, records_by_age
+
+
+def compressed_json(data: Any) -> tuple[str, bytes]:
+    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return text, gzip.compress(text.encode("utf-8"), compresslevel=9, mtime=0)
+
+
+def write_data_files(data: Dict[str, Any]) -> None:
     paths = data_paths()
-    out_dir = paths["directory"]
-    json_text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    if os.path.exists(paths["script"]):
-        try:
-            existing_json_text, existing_data = read_wrapped_data(paths["script"])
-        except (OSError, ValueError, json.JSONDecodeError):
-            existing_json_text, existing_data = "", {}
-        if semantic_payload(existing_data) == semantic_payload(data):
-            expected_compressed = gzip.compress(existing_json_text.encode("utf-8"), compresslevel=9, mtime=0)
-            repaired = not os.path.exists(paths["compressed"]) or file_sha256(paths["compressed"]) != hashlib.sha256(expected_compressed).hexdigest()
-            if repaired:
-                atomic_write(paths["compressed"], expected_compressed, binary=True)
-                print(f"Repaired {os.path.relpath(paths['compressed'], PROJECT_ROOT)}")
-            print("No ranking changes; kept the existing data files and generation timestamp.")
-            return False
+    core, records_by_age = split_data(data)
+    if set(records_by_age) != set(model.AGE_ORDER):
+        missing = sorted(set(model.AGE_ORDER) - set(records_by_age))
+        extra = sorted(set(records_by_age) - set(model.AGE_ORDER))
+        raise ValueError(f"Age payload mismatch; missing={missing}, extra={extra}")
+    core_text, core_compressed = compressed_json(core)
+    atomic_write(paths["core"], core_text + "\n")
+    atomic_write(paths["coreCompressed"], core_compressed, binary=True)
 
-    script_text = f"{DATA_PREFIX}{json_text};\n"
-    compressed_bytes = gzip.compress(json_text.encode("utf-8"), compresslevel=9, mtime=0)
-    atomic_write(paths["script"], script_text)
-    atomic_write(paths["compressed"], compressed_bytes, binary=True)
+    expected_age_files = set()
+    total_age_json = 0
+    total_age_compressed = 0
+    for age, records in records_by_age.items():
+        if age not in model.AGE_ORDER:
+            continue
+        age_paths = age_data_paths(age)
+        age_payload = {"age": age, "records": records}
+        age_text, age_compressed = compressed_json(age_payload)
+        atomic_write(age_paths["json"], age_text + "\n")
+        atomic_write(age_paths["compressed"], age_compressed, binary=True)
+        expected_age_files.update(age_paths.values())
+        total_age_json += len(age_text.encode("utf-8")) + 1
+        total_age_compressed += len(age_compressed)
 
-    script_size = os.path.getsize(paths["script"])
-    compressed_size = os.path.getsize(paths["compressed"])
-    print(f"Wrote {os.path.relpath(paths['script'], PROJECT_ROOT)} ({script_size:,} bytes)")
-    print(f"Wrote {os.path.relpath(paths['compressed'], PROJECT_ROOT)} ({compressed_size:,} bytes)")
-    return True
+    if os.path.isdir(paths["ages"]):
+        for filename in os.listdir(paths["ages"]):
+            candidate = os.path.join(paths["ages"], filename)
+            if os.path.isfile(candidate) and candidate not in expected_age_files:
+                os.remove(candidate)
+
+    for legacy_key in ("legacyScript", "legacyCompressed"):
+        if os.path.exists(paths[legacy_key]):
+            os.remove(paths[legacy_key])
+
+    print(
+        "Wrote split ranking data: "
+        f"core {len(core_text.encode('utf-8')) + 1:,} bytes JSON / {len(core_compressed):,} bytes gzip; "
+        f"ages {total_age_json:,} bytes JSON / {total_age_compressed:,} bytes gzip."
+    )
 
 
 def compress_existing_data() -> None:
     paths = data_paths()
-    json_text, _ = read_wrapped_data(paths["script"])
-    atomic_write(
-        paths["compressed"],
-        gzip.compress(json_text.encode("utf-8"), compresslevel=9, mtime=0),
-        binary=True,
-    )
-    print(f"Wrote {os.path.relpath(paths['compressed'], PROJECT_ROOT)} ({os.path.getsize(paths['compressed']):,} bytes)")
+    if os.path.exists(paths["legacyScript"]):
+        _, data = read_wrapped_data(paths["legacyScript"])
+        write_data_files(data)
+        write_export_state(export_fingerprint(os.path.abspath(model.DEFAULT_REFERENCE)))
+        return
+
+    with open(paths["core"], "r", encoding="utf-8") as handle:
+        core = json.load(handle)
+    _, core_compressed = compressed_json(core)
+    atomic_write(paths["coreCompressed"], core_compressed, binary=True)
+    for age in model.AGE_ORDER:
+        age_paths = age_data_paths(age)
+        with open(age_paths["json"], "r", encoding="utf-8") as handle:
+            age_payload = json.load(handle)
+        _, age_compressed = compressed_json(age_payload)
+        atomic_write(age_paths["compressed"], age_compressed, binary=True)
+    write_export_state(export_fingerprint(os.path.abspath(model.DEFAULT_REFERENCE)))
+    print("Rebuilt compressed core and age assets from the existing JSON files.")
 
 
 def main() -> None:
@@ -336,7 +444,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--compress-existing",
         action="store_true",
-        help="Create the compressed JSON asset from the current ranking-data.js without rebuilding data.",
+        help="Migrate legacy data or rebuild compressed core and age assets without rebuilding the model.",
     )
     args = parser.parse_args()
     if args.compress_existing:

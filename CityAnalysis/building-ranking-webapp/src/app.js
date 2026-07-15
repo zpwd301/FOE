@@ -109,6 +109,7 @@ const state = {
   sort: { key: "profile", dir: "desc" },
   detailSort: { key: "score", dir: "desc" },
   suppressUrlUpdate: false,
+  loadedAge: null,
   customWeights: {
     overall: {},
     fighting: {},
@@ -204,6 +205,7 @@ const el = {
   resultMeta: document.getElementById("resultMeta"),
   summaryGrid: document.getElementById("summaryGrid"),
   resetButton: document.getElementById("resetButton"),
+  preferenceStatus: document.getElementById("preferenceStatus"),
   detailDrawer: document.getElementById("detailDrawer"),
   drawerBackdrop: document.getElementById("drawerBackdrop"),
   detailContent: document.getElementById("detailContent"),
@@ -217,6 +219,25 @@ const el = {
 let renderTimer = null;
 let pendingAfterRender = null;
 let announceTimer = null;
+let preferenceTimer = null;
+let preferenceIdleHandle = null;
+
+function browserStorage() {
+  try {
+    return window.localStorage;
+  } catch (_error) {
+    return null;
+  }
+}
+
+const preferenceApi = window.FOE_BUILDING_RANKING_PREFERENCES;
+const preferenceStore = preferenceApi?.createPreferenceStore(browserStorage()) || {
+  available: false,
+  read: () => null,
+  remember: () => {},
+  save: () => "unavailable",
+  clear: () => "unavailable",
+};
 
 function fmt(value, digits = 2) {
   if (!Number.isFinite(value)) return "";
@@ -265,11 +286,13 @@ function sanitizeCustomWeight(profile, value) {
 
 function sanitizeCustomWeightState(value) {
   const profiles = ["overall", "fighting", "farming", "qi", "kits"];
+  const attributeKeys = new Set(DATA.attrKeys || []);
   const sanitized = Object.fromEntries(profiles.map((profile) => [profile, {}]));
   for (const profile of profiles) {
     const weights = value?.[profile];
     if (!weights || typeof weights !== "object" || Array.isArray(weights)) continue;
     for (const [key, weight] of Object.entries(weights)) {
+      if (!attributeKeys.has(key)) continue;
       if (!Number.isFinite(Number(weight))) continue;
       sanitized[profile][key] = sanitizeCustomWeight(profile, weight);
     }
@@ -368,6 +391,132 @@ function controls() {
     noRoadOnly: el.noRoadFilter.checked,
     topN: el.topNSelect.value,
   };
+}
+
+function preferenceAllowlist() {
+  return {
+    profiles: Object.keys(PROFILE_CONFIG),
+    ages: DATA.ages.map((age) => age.key),
+    categories: DATA.categories,
+    searchModes: [SEARCH_MODE_BUILDING, SEARCH_MODE_FRAGMENT],
+    qiRoles: Array.from(el.qiRoleSelect.options).map((option) => option.value),
+    strengths: strengthFilterInputs().map((input) => input.value),
+    topNs: Array.from(el.topNSelect.options).map((option) => option.value),
+    weightModes: Array.from(el.weightModeSelect.options).map((option) => option.value),
+    weightProfiles: ["overall", "fighting", "farming", "qi", "kits"],
+    attributeKeys: DATA.attrKeys || [],
+    sortKeys: ["profile", "name", "score", "efficiency", "area"],
+  };
+}
+
+function preferenceSnapshot() {
+  const c = controls();
+  return {
+    profile: state.profile,
+    age: c.age,
+    category: c.category,
+    searchMode: c.searchMode,
+    qiRole: c.qiRole,
+    focus: {
+      gbgGe: c.gbgGeFocus,
+      redBlue: c.redBlueFocus,
+      attackDefense: c.attackDefenseFocus,
+      unitAge: c.unitAgeFocus,
+      fpGoods: c.fpGoodsFocus,
+    },
+    production: {
+      fp: c.estimatedFpProduction,
+      goods: c.estimatedGoodsProduction,
+      guildGoods: c.estimatedGuildGoodsProduction,
+      medals: c.estimatedMedalProduction,
+      specialGoods: c.estimatedSpecialGoodsProduction,
+    },
+    filters: {
+      strengths: c.strengths,
+      minArea: c.minArea,
+      maxArea: c.maxArea,
+      noRoadOnly: c.noRoadOnly,
+      topN: c.topN,
+    },
+    weightMode: el.weightModeSelect.value,
+    customWeights: sanitizeCustomWeightState(state.customWeights),
+    sort: { ...state.sort },
+  };
+}
+
+function sanitizedPreferences(value) {
+  if (!preferenceApi?.sanitizePreferences) return {};
+  return preferenceApi.sanitizePreferences(value, preferenceAllowlist());
+}
+
+function applyPreferences(preferences) {
+  if (!preferences || typeof preferences !== "object") return;
+  if (preferences.profile) setActiveProfile(preferences.profile);
+  if (preferences.age) el.ageSelect.value = preferences.age;
+  if (preferences.category) el.categorySelect.value = preferences.category;
+  if (preferences.searchMode) el.searchModeSelect.value = preferences.searchMode;
+  if (preferences.qiRole) el.qiRoleSelect.value = preferences.qiRole;
+
+  const focus = preferences.focus || {};
+  if (focus.gbgGe !== undefined) el.gbgGeFocus.value = focus.gbgGe;
+  if (focus.redBlue !== undefined) el.redBlueFocus.value = focus.redBlue;
+  if (focus.attackDefense !== undefined) el.attackDefenseFocus.value = focus.attackDefense;
+  if (focus.unitAge !== undefined) el.unitAgeFocus.value = focus.unitAge;
+  if (focus.fpGoods !== undefined) el.fpGoodsFocus.value = focus.fpGoods;
+
+  const production = preferences.production || {};
+  if (production.fp !== undefined) el.fpEstimate.value = production.fp;
+  if (production.goods !== undefined) el.goodsEstimate.value = production.goods;
+  if (production.guildGoods !== undefined) el.guildGoodsEstimate.value = production.guildGoods;
+  if (production.medals !== undefined) el.medalEstimate.value = production.medals;
+  if (production.specialGoods !== undefined) el.specialGoodsEstimate.value = production.specialGoods;
+
+  const filters = preferences.filters || {};
+  if (filters.strengths) setSelectedStrengths(filters.strengths);
+  if (filters.minArea !== undefined) el.minAreaFilter.value = filters.minArea ?? "";
+  if (filters.maxArea !== undefined) el.maxAreaFilter.value = filters.maxArea ?? "";
+  if (filters.noRoadOnly !== undefined) el.noRoadFilter.checked = filters.noRoadOnly;
+  if (filters.topN) el.topNSelect.value = filters.topN;
+  if (preferences.weightMode) el.weightModeSelect.value = preferences.weightMode;
+  if (preferences.customWeights) state.customWeights = sanitizeCustomWeightState(preferences.customWeights);
+  if (preferences.sort) state.sort = { ...preferences.sort };
+}
+
+function setPreferenceStatus(message, status = "ready") {
+  if (!el.preferenceStatus) return;
+  el.preferenceStatus.textContent = message;
+  el.preferenceStatus.dataset.status = status;
+}
+
+function cancelPreferenceSave() {
+  window.clearTimeout(preferenceTimer);
+  preferenceTimer = null;
+  if (preferenceIdleHandle !== null && "cancelIdleCallback" in window) {
+    window.cancelIdleCallback(preferenceIdleHandle);
+  }
+  preferenceIdleHandle = null;
+}
+
+function savePreferences() {
+  preferenceIdleHandle = null;
+  const result = preferenceStore.save(sanitizedPreferences(preferenceSnapshot()));
+  if (result === "saved") {
+    setPreferenceStatus("Settings saved on this device.", "saved");
+  } else if (result === "error" || result === "unavailable") {
+    setPreferenceStatus("Settings cannot be saved in this browser.", "error");
+  }
+}
+
+function schedulePreferenceSave() {
+  cancelPreferenceSave();
+  preferenceTimer = window.setTimeout(() => {
+    preferenceTimer = null;
+    if ("requestIdleCallback" in window) {
+      preferenceIdleHandle = window.requestIdleCallback(savePreferences, { timeout: 800 });
+    } else {
+      savePreferences();
+    }
+  }, 350);
 }
 
 function areaFilterValidation(c = controls()) {
@@ -1754,6 +1903,7 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
       <textarea id="reportOutput" rows="8" readonly placeholder="Copied report text will appear here. Please send it to me as an in-game PM. Thanks! 😊 -- zpwd"></textarea>
     </div>
   `;
+  el.detailDrawer.inert = false;
   el.detailDrawer.classList.add("open");
   el.detailDrawer.setAttribute("aria-hidden", "false");
   el.drawerBackdrop.hidden = false;
@@ -1778,6 +1928,7 @@ function closeDetail() {
   if (!el.detailDrawer.classList.contains("open")) return;
   const returnFocus = state.detailReturnFocus;
   if (el.detailDrawer.contains(document.activeElement)) document.activeElement.blur();
+  el.detailDrawer.inert = true;
   el.detailDrawer.classList.remove("open");
   el.detailDrawer.setAttribute("aria-hidden", "true");
   el.drawerBackdrop.hidden = true;
@@ -1801,6 +1952,7 @@ function render() {
   renderCustomWeights();
   renderCompare();
   updateUrl();
+  schedulePreferenceSave();
 }
 
 function renderImmediately() {
@@ -1968,7 +2120,7 @@ function applyUrlState() {
     applyPreset(params.get("preset"));
   }
   setActiveProfile(params.get("profile") || state.profile);
-  if (params.get("age")) el.ageSelect.value = params.get("age");
+  if (DATA.ages.some((age) => age.key === params.get("age"))) el.ageSelect.value = params.get("age");
   if (params.get("category")) el.categorySelect.value = params.get("category");
   if ([SEARCH_MODE_BUILDING, SEARCH_MODE_FRAGMENT].includes(params.get("searchMode"))) {
     el.searchModeSelect.value = params.get("searchMode");
@@ -2015,12 +2167,47 @@ function initMobileCollapsibles() {
   mobileQuery.addEventListener("change", sync);
 }
 
+async function changeAge() {
+  const requestedAge = el.ageSelect.value;
+  const previousAge = state.loadedAge;
+  if (requestedAge === previousAge) {
+    renderImmediately();
+    return;
+  }
+  cancelPreferenceSave();
+  el.ageSelect.disabled = true;
+  el.ageSelect.setAttribute("aria-busy", "true");
+  announce(`Loading ${ageLabel(requestedAge)} buildings.`);
+  try {
+    await window.FOE_LOAD_BUILDING_RANKING_AGE?.(requestedAge);
+    if (!Array.isArray(DATA.recordsByAge[requestedAge])) throw new Error("Age data did not load.");
+    state.loadedAge = requestedAge;
+    renderImmediately();
+    announce(`${ageLabel(requestedAge)} buildings loaded.`);
+  } catch (error) {
+    console.error(error);
+    el.ageSelect.value = previousAge;
+    announce(`${ageLabel(requestedAge)} buildings could not be loaded. Your previous age is still selected.`);
+  } finally {
+    el.ageSelect.disabled = false;
+    el.ageSelect.removeAttribute("aria-busy");
+    syncLongValuePresentation();
+  }
+}
+
 function init() {
   el.versionLabel.textContent = `Model ${DATA.metadata.workbookModelVersion} · Last updated ${DATA.metadata.generatedAt}`;
   el.ageSelect.innerHTML = DATA.ages.map((age) => `<option value="${escapeHtml(age.key)}" title="${escapeHtml(age.label)}">${escapeHtml(age.label)}</option>`).join("");
   el.categorySelect.innerHTML = DATA.categories.map((category) => `<option value="${escapeHtml(category)}" title="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("");
   resetDefaults();
+  applyPreferences(sanitizedPreferences(preferenceStore.read()));
   applyUrlState();
+  state.loadedAge = el.ageSelect.value;
+  preferenceStore.remember(sanitizedPreferences(preferenceSnapshot()));
+  setPreferenceStatus(
+    preferenceStore.available ? "Settings save on this device." : "Settings cannot be saved in this browser.",
+    preferenceStore.available ? "ready" : "error"
+  );
   initMobileCollapsibles();
   renderStrengthLegend();
 
@@ -2073,7 +2260,6 @@ function init() {
   });
 
   [
-    el.ageSelect,
     el.categorySelect,
     el.searchModeSelect,
     el.qiRoleSelect,
@@ -2082,6 +2268,8 @@ function init() {
     el.topNSelect,
     el.weightModeSelect,
   ].forEach((input) => input.addEventListener("change", renderImmediately));
+
+  el.ageSelect.addEventListener("change", changeAge);
 
   el.searchInput.addEventListener("input", () => scheduleRender(160));
 
@@ -2123,10 +2311,35 @@ function init() {
     });
   });
 
-  el.resetButton.addEventListener("click", () => {
+  el.resetButton.addEventListener("click", async () => {
+    cancelPreferenceSave();
+    preferenceStore.clear();
+    const previousAge = state.loadedAge;
     resetDefaults();
+    const defaultAge = el.ageSelect.value;
+    let ageLoadFailed = false;
+    if (defaultAge !== state.loadedAge) {
+      el.ageSelect.disabled = true;
+      el.ageSelect.setAttribute("aria-busy", "true");
+      try {
+        await window.FOE_LOAD_BUILDING_RANKING_AGE?.(defaultAge);
+        if (!Array.isArray(DATA.recordsByAge[defaultAge])) throw new Error("Default age data did not load.");
+        state.loadedAge = defaultAge;
+      } catch (error) {
+        console.error(error);
+        ageLoadFailed = true;
+        el.ageSelect.value = previousAge;
+      } finally {
+        el.ageSelect.disabled = false;
+        el.ageSelect.removeAttribute("aria-busy");
+      }
+    }
+    preferenceStore.remember(sanitizedPreferences(preferenceSnapshot()));
     renderImmediately();
-    announce("Dashboard defaults restored.");
+    setPreferenceStatus("Saved settings cleared. New changes will save on this device.", "cleared");
+    announce(ageLoadFailed
+      ? "Defaults were restored, but the default city age could not be loaded."
+      : "Dashboard defaults restored and saved settings cleared.");
   });
   el.shareButton.addEventListener("click", async () => {
     updateUrl();
