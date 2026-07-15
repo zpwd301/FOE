@@ -2198,7 +2198,10 @@ def collect_fragment_product(
             collect_fragment_product(fragments, nested, time_factor, nested_probability, reward_lookup)
 
 
-def extract_fragment_production(entity: Dict[str, Any], era: str) -> str:
+def fragment_production_values(
+    entity: Dict[str, Any],
+    era: str,
+) -> Dict[str, Tuple[float, float, float]]:
     fragments: Dict[str, Tuple[float, float, float]] = {}
 
     production_sets: List[Tuple[Any, Dict[str, Dict[str, Any]]]] = []
@@ -2226,10 +2229,32 @@ def extract_fragment_production(entity: Dict[str, Any], era: str) -> str:
                 elif isinstance(value, dict):
                     collect_fragment_product(fragments, value, time_factor, 1.0, reward_lookup)
 
-    return "; ".join(
-        f"{name}: {named_amount_label(daily, possible, probability)}"
+    return fragments
+
+
+def extract_fragment_production_items(entity: Dict[str, Any], era: str) -> List[Dict[str, Any]]:
+    fragments = fragment_production_values(entity, era)
+    return [
+        {
+            "name": name,
+            "summary": named_amount_label(daily, possible, probability),
+            "expectedPerDay": daily,
+            "possiblePerDay": possible,
+            "probability": probability,
+        }
         for name, (daily, possible, probability) in sorted(fragments.items())
+    ]
+
+
+def fragment_production_text(items: Sequence[Dict[str, Any]]) -> str:
+    return "; ".join(
+        f"{item['name']}: {item['summary']}"
+        for item in items
     )
+
+
+def extract_fragment_production(entity: Dict[str, Any], era: str) -> str:
+    return fragment_production_text(extract_fragment_production_items(entity, era))
 
 
 def reward_set_display_name(reward: Dict[str, Any]) -> Optional[str]:
@@ -2868,6 +2893,8 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
             continue
         attrs = {key: value for key, value in attrs.items() if should_include_attribute(key)}
         size = f"{width}x{length}" if width and length else ""
+        fragment_rewards = extract_fragment_production_items(entity, era)
+        fragment_production = fragment_production_text(fragment_rewards)
         records.append(
             {
                 "entity_id": entity_id,
@@ -2878,12 +2905,13 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
                 "size": size,
                 "area": area,
                 "environment_effect": extract_environment_effect(entity, era),
-                "fragment_production": extract_fragment_production(entity, era),
+                "fragment_production": fragment_production,
+                "fragment_rewards": fragment_rewards,
                 "kit_production": kit_production,
                 "reward_production": "; ".join(
                     part
                     for part in (
-                        extract_fragment_production(entity, era),
+                        fragment_production,
                         extract_reward_set_production(entity, era),
                         extract_consumable_production(entity, era),
                         extract_fp_package_production(entity, era),
@@ -3182,6 +3210,7 @@ SHARED_MODEL_NAMES = (
     "kit_reward_measure",
     "collect_kit_product",
     "extract_kit_production",
+    "extract_fragment_production_items",
     "collect_records",
     "build_age_records",
 )

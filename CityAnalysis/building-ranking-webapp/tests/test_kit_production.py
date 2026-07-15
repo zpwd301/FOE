@@ -176,5 +176,65 @@ class KitProductionTests(unittest.TestCase):
         self.assertEqual(index["building"]["overrides"], {"StoneAge": {}})
 
 
+class FragmentRewardSearchTests(unittest.TestCase):
+    def test_fragment_details_use_the_assembled_reward_name(self) -> None:
+        entity = entity_with_options(
+            [
+                {
+                    "time": 86400,
+                    "products": [
+                        {
+                            "type": "genericReward",
+                            "reward": fragment_reward(
+                                "tourney_grounds_active",
+                                "Tourney Grounds - Active",
+                                10,
+                                100,
+                            ),
+                        },
+                    ],
+                },
+            ]
+        )
+
+        details = model.extract_fragment_production_items(entity, "VirtualFuture")
+
+        self.assertEqual(len(details), 1)
+        self.assertEqual(details[0]["name"], "Tourney Grounds - Active")
+        self.assertEqual(details[0]["summary"], "10/day")
+        self.assertEqual(details[0]["expectedPerDay"], 10.0)
+
+    def test_fragment_index_deduplicates_age_invariant_search_data(self) -> None:
+        fragments = [
+            {
+                "name": "Tourney Grounds - Active",
+                "summary": "10/day",
+                "expectedPerDay": 10.0,
+                "possiblePerDay": 10.0,
+                "probability": 1.0,
+            },
+        ]
+        records = {
+            "BronzeAge": [
+                {"entity_id": "producer", "fragment_rewards": fragments},
+                {"entity_id": "no-fragments", "fragment_rewards": []},
+            ],
+            "IronAge": [
+                {"entity_id": "producer", "fragment_rewards": fragments},
+                {"entity_id": "no-fragments", "fragment_rewards": []},
+            ],
+            "StoneAge": [
+                {"entity_id": "producer", "fragment_rewards": []},
+                {"entity_id": "no-fragments", "fragment_rewards": []},
+            ],
+        }
+
+        index = export_data.fragment_reward_index(records)
+
+        self.assertNotIn("no-fragments", index)
+        self.assertEqual(index["producer"]["default"], fragments)
+        self.assertEqual(index["producer"]["overrides"], {"StoneAge": []})
+
+
 if __name__ == "__main__":
     unittest.main()

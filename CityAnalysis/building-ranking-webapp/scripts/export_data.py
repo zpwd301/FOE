@@ -21,7 +21,7 @@ import building_ranking_model as model  # noqa: E402
 DEFAULT_AGE = "VirtualFuture"
 DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
 # Increment when the serialized website payload shape or semantics change.
-EXPORT_SCHEMA_VERSION = 2
+EXPORT_SCHEMA_VERSION = 3
 
 
 def file_sha256(path: str) -> str:
@@ -128,37 +128,49 @@ def record_payload(record: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def kit_production_index(records_by_age: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+def age_variant_index(
+    records_by_age: Dict[str, List[Dict[str, Any]]],
+    field: str,
+    expected_type: type,
+) -> Dict[str, Dict[str, Any]]:
     variants_by_entity: Dict[str, Dict[str, Any]] = {}
     for age, records in records_by_age.items():
         for record in records:
             entity_id = str(record["entity_id"])
-            production = record.get("kit_production")
-            if not isinstance(production, dict):
-                production = {}
-            variants_by_entity.setdefault(entity_id, {})[age] = production
+            value = record.get(field)
+            if not isinstance(value, expected_type):
+                value = expected_type()
+            variants_by_entity.setdefault(entity_id, {})[age] = value
 
     index: Dict[str, Dict[str, Any]] = {}
     for entity_id, values_by_age in variants_by_entity.items():
         if not any(values_by_age.values()):
             continue
         grouped: Dict[str, Dict[str, Any]] = {}
-        for age, production in values_by_age.items():
-            token = json.dumps(production, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-            group = grouped.setdefault(token, {"production": production, "ages": []})
+        for age, value in values_by_age.items():
+            token = json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            group = grouped.setdefault(token, {"value": value, "ages": []})
             group["ages"].append(age)
         default_group = max(grouped.values(), key=lambda group: len(group["ages"]))
-        default_production = default_group["production"]
+        default_value = default_group["value"]
         overrides = {
-            age: production
-            for age, production in values_by_age.items()
-            if production != default_production
+            age: value
+            for age, value in values_by_age.items()
+            if value != default_value
         }
-        entry: Dict[str, Any] = {"default": default_production}
+        entry: Dict[str, Any] = {"default": default_value}
         if overrides:
             entry["overrides"] = overrides
         index[entity_id] = entry
     return index
+
+
+def kit_production_index(records_by_age: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+    return age_variant_index(records_by_age, "kit_production", dict)
+
+
+def fragment_reward_index(records_by_age: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+    return age_variant_index(records_by_age, "fragment_rewards", list)
 
 
 def attr_metadata(attr_keys: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -271,6 +283,7 @@ def main() -> None:
             for key, definition in model.KIT_FAMILY_DEFINITIONS.items()
         ],
         "kitProductionByEntity": kit_production_index(records_by_age),
+        "fragmentRewardsByEntity": fragment_reward_index(records_by_age),
         "attrKeys": attr_keys,
         "attrs": attr_metadata(attr_keys),
         "constants": {

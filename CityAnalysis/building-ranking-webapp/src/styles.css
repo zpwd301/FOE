@@ -294,6 +294,68 @@ label {
   font-size: 13px;
 }
 
+.search-control {
+  min-width: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.search-control legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.search-control-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.search-control-row label {
+  min-width: 0;
+  margin: 0;
+}
+
+.search-mode-label {
+  position: relative;
+}
+
+.search-mode-label::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  pointer-events: none;
+  transform: translateY(-70%) rotate(45deg);
+}
+
+.search-mode-label select {
+  appearance: none;
+  padding-right: 18px;
+  padding-left: 5px;
+  color: var(--ink);
+  background: rgba(255, 253, 253, 0.82);
+  border-color: rgba(202, 184, 197, 0.78);
+}
+
+.search-mode-label select:hover,
+.search-mode-label select:focus {
+  color: var(--ink);
+  background: rgba(255, 253, 253, 0.96);
+  border-color: rgba(186, 143, 162, 0.9);
+}
+
+.search-control .selection-preview {
+  margin-top: 6px;
+}
+
 select,
 input:not([type="checkbox"]),
 textarea {
@@ -1248,6 +1310,19 @@ tbody tr:hover {
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.fragment-search-match {
+  margin-top: 5px;
+  padding-left: 7px;
+  color: #725065;
+  border-left: 2px solid rgba(166, 61, 105, 0.46);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.fragment-search-match strong {
+  color: var(--accent-dark);
 }
 
 .badges {

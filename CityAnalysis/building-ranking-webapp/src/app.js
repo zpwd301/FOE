@@ -2,6 +2,8 @@ const DATA = window.FOE_BUILDING_RANKING_DATA;
 const ALL_CATEGORIES = "All Building Categories";
 const PRESET_PROFILES_ENABLED = false;
 const MAX_STRENGTH_BADGES = 6;
+const SEARCH_MODE_BUILDING = "building";
+const SEARCH_MODE_FRAGMENT = "fragment";
 
 const PROFILE_CONFIG = {
   overallEfficiency: {
@@ -156,7 +158,10 @@ const el = {
   ageSelect: document.getElementById("ageSelect"),
   categorySelect: document.getElementById("categorySelect"),
   categorySelectionPreview: document.getElementById("categorySelectionPreview"),
+  searchModeSelect: document.getElementById("searchModeSelect"),
   searchInput: document.getElementById("searchInput"),
+  searchInputLabel: document.getElementById("searchInputLabel"),
+  searchHint: document.getElementById("searchHint"),
   shareButton: document.getElementById("shareButton"),
   settingsSummaryText: document.getElementById("settingsSummaryText"),
   baseProductionControls: document.getElementById("baseProductionControls"),
@@ -344,7 +349,8 @@ function controls() {
   return {
     age: el.ageSelect.value,
     category: el.categorySelect.value,
-    search: el.searchInput.value.trim().toLowerCase(),
+    searchMode: el.searchModeSelect.value,
+    search: el.searchInput.value.trim(),
     qiRole: el.qiRoleSelect.value,
     gbgGeFocus: numberValue(el.gbgGeFocus.value),
     redBlueFocus: numberValue(el.redBlueFocus.value),
@@ -395,6 +401,19 @@ function syncLongValuePresentation() {
   el.compareB.title = el.compareB.value;
 }
 
+function syncSearchModePresentation() {
+  const fragmentMode = el.searchModeSelect.value === SEARCH_MODE_FRAGMENT;
+  const inputLabel = fragmentMode ? "Reward fragment name" : "Building name";
+  el.searchInputLabel.textContent = inputLabel;
+  el.searchInput.setAttribute("aria-label", inputLabel);
+  el.searchInput.placeholder = fragmentMode
+    ? "e.g. Legends of Camelot"
+    : "e.g. Neo Globe";
+  el.searchHint.textContent = fragmentMode
+    ? "Find buildings that produce fragments for the named reward."
+    : "Find a building by its name.";
+}
+
 function attrInfo(key) {
   return DATA.attrs[key] || {};
 }
@@ -431,12 +450,46 @@ function recordHasKitProduction(record) {
 }
 
 function kitProductionForRecord(record) {
-  const entry = DATA.kitProductionByEntity?.[record.entityId];
-  if (!entry) return {};
+  return ageVariantForRecord(DATA.kitProductionByEntity, record, {});
+}
+
+function ageVariantForRecord(index, record, fallback) {
+  const entry = index?.[record.entityId];
+  if (!entry) return fallback;
   if (entry.overrides && Object.prototype.hasOwnProperty.call(entry.overrides, record.selectedAge)) {
-    return entry.overrides[record.selectedAge] || {};
+    return entry.overrides[record.selectedAge] ?? fallback;
   }
-  return entry.default || {};
+  return entry.default ?? fallback;
+}
+
+function fragmentRewardsForRecord(record) {
+  return ageVariantForRecord(DATA.fragmentRewardsByEntity, record, []);
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function matchingFragmentRewards(record, search) {
+  const query = normalizeSearchText(search);
+  if (!query) return [];
+  return fragmentRewardsForRecord(record).filter((reward) => (
+    normalizeSearchText(reward.name).includes(query)
+  ));
+}
+
+function recordMatchesSearch(record, search, searchMode) {
+  const query = normalizeSearchText(search);
+  if (!query) return true;
+  if (searchMode === SEARCH_MODE_FRAGMENT) {
+    return matchingFragmentRewards(record, query).length > 0;
+  }
+  return normalizeSearchText(record.name).includes(query);
 }
 
 function rawAttr(record, key) {
@@ -880,7 +933,7 @@ function filteredRows(rows) {
   const areaFiltersValid = !areaFilterValidation(c).message;
   return rows.filter((row) => {
     if (c.category !== ALL_CATEGORIES && row.record.category !== c.category) return false;
-    if (c.search && !row.record.name.toLowerCase().includes(c.search)) return false;
+    if (c.search && !recordMatchesSearch(row.record, c.search, c.searchMode)) return false;
     if (areaFiltersValid && c.minArea !== null && row.record.adjustedArea < c.minArea) return false;
     if (areaFiltersValid && c.maxArea !== null && row.record.adjustedArea > c.maxArea) return false;
     if (c.noRoadOnly && row.record.requiresRoad) return false;
@@ -956,21 +1009,40 @@ function renderTable(rows) {
   const sorted = displayRows(rows);
   const limit = c.topN === "all" ? sorted.length : Number(c.topN);
   const visible = sorted.slice(0, limit);
-  el.emptyState.textContent = isKitProfile()
-    ? "No kit-producing buildings match the current filters."
-    : "No buildings match the current filters.";
+  el.emptyState.textContent = c.searchMode === SEARCH_MODE_FRAGMENT && c.search
+    ? `No buildings produce fragments matching "${c.search}". Try a shorter reward name.`
+    : isKitProfile()
+      ? "No kit-producing buildings match the current filters."
+      : "No buildings match the current filters.";
   el.emptyState.hidden = visible.length > 0;
   el.rankingBody.innerHTML = visible.map((row) => {
     const badges = row.badges.map((badge) => {
       const description = STRENGTH_INFO[badge.text]?.description || "A leading strength for this building in the active profile.";
       return `<span class="badge ${badge.cls}" title="${escapeHtml(description)}" aria-label="${escapeHtml(`${badge.text}: ${description}`)}">${badge.text}</span>`;
     }).join("");
+    const fragmentMatches = c.searchMode === SEARCH_MODE_FRAGMENT && c.search
+      ? matchingFragmentRewards(row.record, c.search)
+      : [];
+    const fragmentMatchText = fragmentMatches
+      .map((reward) => `${reward.name}: ${reward.summary}`)
+      .join("; ");
+    const visibleFragmentMatches = fragmentMatches
+      .slice(0, 2)
+      .map((reward) => `${escapeHtml(reward.name)}: ${escapeHtml(reward.summary)}`)
+      .join("; ");
+    const additionalFragmentMatches = fragmentMatches.length > 2
+      ? `; +${fragmentMatches.length - 2} more`
+      : "";
+    const fragmentMatch = fragmentMatches.length
+      ? `<div class="fragment-search-match" title="${escapeHtml(fragmentMatchText)}"><strong>Fragment reward:</strong> ${visibleFragmentMatches}${additionalFragmentMatches}</div>`
+      : "";
     return `
       <tr data-entity-id="${row.record.entityId}">
         <td class="rank">${row.rank}</td>
         <td>
           <div class="building-name">${escapeHtml(row.record.name)}</div>
           <div class="building-meta">${escapeHtml(row.record.category)}</div>
+          ${fragmentMatch}
         </td>
         <td>${fmt(row.score)}</td>
         <td>${fmt(row.efficiency, 3)}</td>
@@ -1006,7 +1078,7 @@ function filterChips(c) {
   const chips = [];
   const areaValidation = areaFilterValidation(c);
   if (PRESET_PROFILES_ENABLED && el.presetSelect.value) chips.push(`Preset: ${presetLabel(el.presetSelect.value)}`);
-  if (c.search) chips.push(`Search: ${el.searchInput.value.trim()}`);
+  if (c.search) chips.push(`${c.searchMode === SEARCH_MODE_FRAGMENT ? "Reward fragment" : "Building"}: ${el.searchInput.value.trim()}`);
   if (c.category !== ALL_CATEGORIES) chips.push(c.category);
   c.strengths.forEach((strength) => chips.push(`Strength: ${strengthFilterLabel(strength)}`));
   if (areaValidation.message) {
@@ -1045,6 +1117,7 @@ function renderControlState(rows, visibleRows) {
   syncFocusOutputs();
   syncStrengthFilterSummary();
   syncLongValuePresentation();
+  syncSearchModePresentation();
 
   el.baseProductionControls.hidden = !usesBaseProduction;
   el.focusControls.hidden = kitProfile;
@@ -1754,6 +1827,7 @@ function resetDefaults() {
   el.presetSelect.value = "";
   el.ageSelect.value = DATA.metadata.defaultAge;
   el.categorySelect.value = ALL_CATEGORIES;
+  el.searchModeSelect.value = SEARCH_MODE_BUILDING;
   el.searchInput.value = "";
   el.qiRoleSelect.value = defaults.qiFighterRole;
   el.gbgGeFocus.value = defaults.fightingGbgGeFocus;
@@ -1851,6 +1925,7 @@ function buildUrlParams() {
   if (PRESET_PROFILES_ENABLED && el.presetSelect.value) params.set("preset", el.presetSelect.value);
   params.set("age", c.age);
   if (c.category !== ALL_CATEGORIES) params.set("category", c.category);
+  if (c.searchMode !== SEARCH_MODE_BUILDING) params.set("searchMode", c.searchMode);
   if (c.search) params.set("search", c.search);
   params.set("role", c.qiRole);
   params.set("gbgGe", c.gbgGeFocus);
@@ -1895,6 +1970,9 @@ function applyUrlState() {
   setActiveProfile(params.get("profile") || state.profile);
   if (params.get("age")) el.ageSelect.value = params.get("age");
   if (params.get("category")) el.categorySelect.value = params.get("category");
+  if ([SEARCH_MODE_BUILDING, SEARCH_MODE_FRAGMENT].includes(params.get("searchMode"))) {
+    el.searchModeSelect.value = params.get("searchMode");
+  }
   if (params.get("search")) el.searchInput.value = params.get("search");
   if (params.get("role")) el.qiRoleSelect.value = params.get("role");
   if (params.get("gbgGe")) el.gbgGeFocus.value = params.get("gbgGe");
@@ -1997,6 +2075,7 @@ function init() {
   [
     el.ageSelect,
     el.categorySelect,
+    el.searchModeSelect,
     el.qiRoleSelect,
     el.strengthFilter,
     el.noRoadFilter,

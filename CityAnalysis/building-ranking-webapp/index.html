@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
-    <link rel="preload" href="data/ranking-data.json.gz?v=20260712-3" as="fetch" type="application/gzip" crossorigin="anonymous">
-    <link rel="stylesheet" href="src/styles.css?v=20260712-12">
+    <link rel="preload" href="data/ranking-data.json.gz?v=20260715-1" as="fetch" type="application/gzip" crossorigin="anonymous">
+    <link rel="stylesheet" href="src/styles.css?v=20260715-8">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -43,7 +43,7 @@
             <ul>
               <li><strong>City age</strong> updates age-based goods and unit values.</li>
               <li><strong>Source category</strong> shows every reward building or only one event or game-mode group.</li>
-              <li><strong>Search</strong> finds a building by name.</li>
+              <li><strong>Search</strong> can find a building by its name or find buildings that produce fragments for a named reward.</li>
             </ul>
           </div>
           <label class="is-hidden">
@@ -68,10 +68,23 @@
             <select id="categorySelect" aria-describedby="categorySelectionPreview"></select>
             <small id="categorySelectionPreview" class="selection-preview" hidden></small>
           </label>
-          <label>
-            Search building
-            <input id="searchInput" type="search" placeholder="Search by name">
-          </label>
+          <fieldset class="search-control">
+            <legend>Search building by</legend>
+            <div class="search-control-row">
+              <label class="search-mode-label">
+                <span class="sr-only">Search by</span>
+                <select id="searchModeSelect" aria-label="Search by">
+                  <option value="building">Name</option>
+                  <option value="fragment">Reward frag.</option>
+                </select>
+              </label>
+              <label class="search-input-label">
+                <span id="searchInputLabel" class="sr-only">Building name</span>
+                <input id="searchInput" type="search" placeholder="e.g. Neo Globe" autocomplete="off" aria-describedby="searchHint">
+              </label>
+            </div>
+            <small id="searchHint" class="selection-preview">Find a building by its name.</small>
+          </fieldset>
           <div class="base-production-controls compact" id="baseProductionControls">
             <div class="info-heading">
               <h3>Base Production</h3>
@@ -341,8 +354,8 @@
 
     <script
       src="src/bootstrap.js?v=20260711-2"
-      data-data-version="20260712-3"
-      data-app-version="20260712-13"
+      data-data-version="20260715-1"
+      data-app-version="20260715-2"
     ></script>
   </body>
 </html>
