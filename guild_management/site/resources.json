@@ -1,0 +1,18 @@
+{
+  "resources": [
+    {
+      "slug": "guild-expedition-lottery-rules",
+      "title": "Official GoE Guild Expedition Lottery Rules",
+      "shortTitle": "Guild Expedition Lottery Rules",
+      "description": "The official standing rules for eligibility, number selection, weekly drawings, prizes, duplicate-number provisions, and sponsor awards.",
+      "category": "Guild Expedition",
+      "status": "Official",
+      "owner": "GoE Guild Leader Board",
+      "effectiveDate": "July 19, 2026",
+      "lastReviewed": "July 19, 2026",
+      "version": "1.1",
+      "audience": "All GoE guild members",
+      "contentFile": "guild-expedition-lottery-rules.html"
+    }
+  ]
+}

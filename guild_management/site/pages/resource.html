@@ -1,0 +1,28 @@
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><a href="/resources/">Resources</a><span aria-hidden="true">/</span><span>{{category}}</span></nav>
+      <header class="policy-hero">
+        <p class="eyebrow">{{category}} &middot; Guild policy</p>
+        <h1>{{title}}</h1>
+        <p class="hero-copy">{{description}}</p>
+        <dl class="policy-meta">
+          <div><dt>Status</dt><dd><span class="status-chip status-chip--prominent{{status_class}}">{{status}}</span></dd></div>
+          <div><dt>Effective</dt><dd>{{effective_date}}</dd></div>
+          <div><dt>Last reviewed</dt><dd>{{last_reviewed}}</dd></div>
+          <div><dt>Owner</dt><dd>{{owner}}</dd></div>
+          <div><dt>Version</dt><dd>{{version}}</dd></div>
+          <div><dt>Audience</dt><dd>{{audience}}</dd></div>
+        </dl>
+      </header>
+      <div class="policy-review-row">{{review_notice}}</div>
+      <details class="policy-toc-mobile">
+        <summary>On this page</summary>
+        <nav aria-label="On this page">{{table_of_contents}}</nav>
+      </details>
+      <div class="policy-layout">
+        <aside class="policy-sidebar">
+          <nav class="policy-toc" aria-label="On this page"><strong>On this page</strong>{{table_of_contents}}</nav>
+          <p class="print-note">This page is formatted for printing from your browser.</p>
+        </aside>
+        <article class="policy-article">
+{{article}}
+        </article>
+      </div>
