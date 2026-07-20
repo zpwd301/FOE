@@ -1,13 +1,15 @@
-# Guild Treasury Report Script
+# GoE Guild Portal
 
 This project provides `generate_treasury_report.py`, which creates:
 - A guild-member PDF report (polished, visual, 2 pages)
 - A technical Markdown report (detailed metrics and tables)
 
-It also includes `dashboard/`, a no-build static treasury dashboard ready for
-Cloudflare Pages. It provides an overview, 7/30/90-day period controls, age
-drill-downs, and a short goods watch list. Bronze Age goods are excluded using
-the same rule as the PDF report.
+It also includes the no-runtime static GoE Guild Portal in `dashboard/`,
+ready for Cloudflare Pages. The portal provides a home page, a treasury module,
+and a resource library. The first library entry is the Official GoE Guild
+Expedition Lottery Rules. Treasury tools include 7/30/90-day period controls,
+age drill-downs, and a short goods watch list. Bronze Age goods are excluded
+using the same rule as the PDF report.
 
 ## Prerequisites
 
@@ -30,17 +32,28 @@ This uses defaults:
 
 ## Static Dashboard
 
+Build the portal from the templates and content in `site/` without changing
+treasury data:
+
+```bash
+python3 build_dashboard.py
+```
+
 Refresh the dashboard after adding a treasury export to `input/`:
 
 ```bash
 python3 generate_treasury_dashboard.py
 ```
 
-The script selects the newest CSV by modified time and writes
-`dashboard/data.js`. It supports both the older comma-delimited exports and
-the current semicolon-delimited FoE export format. The current site uses all
-available data up to 90 days; when fewer than three months are present it says
-so in the overview.
+The refresh script selects the newest CSV by modified time, writes
+`dashboard/data.js`, and rebuilds every portal page. The build publishes
+content-fingerprinted copies of the dashboard CSS, JavaScript, and data and
+removes obsolete fingerprinted copies. This lets browsers cache assets
+efficiently without showing an older dashboard after a deployment.
+The script supports both the older comma-delimited exports and the current
+semicolon-delimited FoE export format. The current site uses all available
+data up to 90 days; when fewer than three months are present it says so in the
+overview.
 
 Treasury data is operational guild information. Protect the deployed dashboard
 with a Cloudflare Access policy before adding a public custom domain. Static
@@ -51,6 +64,17 @@ For a local preview:
 ```bash
 python3 -m http.server 8001 --directory dashboard
 ```
+
+Portal routes:
+
+- `/` — Guild Portal home
+- `/treasury/` — live treasury dashboard
+- `/resources/` — guild resource library
+- `/resources/guild-expedition-lottery-rules/` — lottery rules
+
+Resource metadata lives in `site/resources.json`; policy text lives in
+`site/content/`. Add a resource entry and an HTML content fragment to extend
+the library without changing the shared navigation or page layout.
 
 ## Common Examples
 

@@ -5,3 +5,30 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   X-Robots-Tag: noindex, nofollow, noarchive
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/treasury/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/resources/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/styles.*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/data.*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/app.*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/GOE.*.png
+  Cache-Control: public, max-age=31536000, immutable
+
+/portal-banner.*.jpg
+  Cache-Control: public, max-age=31536000, immutable

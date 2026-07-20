@@ -12,8 +12,9 @@ import argparse
 import csv
 import datetime as dt
 import json
-import re
 from pathlib import Path
+
+from build_dashboard import publish_dashboard
 
 
 AGE_ORDER = [
@@ -118,7 +119,9 @@ def main() -> None:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("window.TREASURY_DATA = " + json.dumps(payload, separators=(",", ":")) + ";\n", encoding="utf-8")
+    assets = publish_dashboard(args.output.parent)
     print(f"Dashboard data generated: {args.output}")
+    print("Published assets: " + ", ".join(path.name for path in assets.values()))
     print(f"Source: {source} ({len(rows)} snapshots, {len(included_goods)} non-Bronze goods)")
 
 

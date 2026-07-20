@@ -1,0 +1,54 @@
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>Treasury</span></nav>
+      <section class="intro treasury-intro" id="treasury-dashboard" aria-labelledby="treasury-title">
+        <div>
+          <p class="eyebrow">Live operations</p>
+          <h1 id="treasury-title">Treasury</h1>
+          <p class="intro-copy" id="coverage-copy"></p>
+          <p class="data-freshness" id="as-of"></p>
+        </div>
+        <div class="range-control" role="group" aria-label="Treasury analysis period">
+          <button type="button" data-range="7">7 days</button>
+          <button type="button" data-range="30">30 days</button>
+          <button type="button" data-range="90">3 months</button>
+        </div>
+      </section>
+
+      <section class="critical-alert" id="critical-alert" role="status" aria-atomic="true" hidden>
+        <div class="alert-mark" id="critical-mark" aria-hidden="true">!</div>
+        <div><p class="alert-label" id="critical-label">Treasury status</p><h2 id="critical-summary">-</h2><p id="critical-guidance"></p></div>
+      </section>
+
+      <section class="metrics" aria-label="Treasury summary">
+        <article class="metric-card"><span class="metric-label">Treasury now</span><strong id="total-value">-</strong><span class="metric-sub" id="goods-count">-</span></article>
+        <article class="metric-card"><span class="metric-label">Net movement</span><strong id="net-value">-</strong><span class="metric-sub" id="net-sub">-</span></article>
+        <article class="metric-card"><span class="metric-label">Daily pace</span><strong id="pace-value">-</strong><span class="metric-sub" id="pace-sub">-</span></article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel trend-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Whole treasury</p><h2>Balance over time</h2></div><span class="panel-note" id="trend-note"></span></div>
+          <div class="chart-wrap"><svg id="trend-chart" role="img" aria-label="Treasury balance trend chart"></svg><div class="chart-tooltip" id="chart-tooltip" hidden></div></div>
+          <div class="chart-axis"><span id="chart-start"></span><span id="chart-end"></span></div>
+        </article>
+        <aside class="panel insights-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Period highlights</p><h2>Where to look</h2></div></div>
+          <div id="insights" class="insights"></div>
+        </aside>
+      </section>
+
+      <section class="panel ages-panel" aria-labelledby="age-title">
+        <div class="panel-heading"><div><p class="eyebrow">Drill down</p><h2 id="age-title">Age performance</h2></div><span class="panel-note">Select an age to see its five goods</span></div>
+        <div id="age-list" class="age-list"></div>
+      </section>
+
+      <section class="panel goods-panel" aria-labelledby="goods-title">
+        <div class="panel-heading goods-heading"><div><p class="eyebrow">Inventory watch</p><h2 id="goods-title">Goods to monitor</h2></div><label class="sort-control">Sort <select id="goods-sort"><option value="delta">Largest decline</option><option value="stock">Lowest stock</option><option value="gain">Largest gain</option></select></label></div>
+        <div class="table-scroll"><table class="goods-monitor-table goods-monitor-table--overview"><caption class="sr-only">Treasury goods inventory watch list</caption><thead><tr><th scope="col">Good</th><th scope="col">Age</th><th scope="col">Current stock</th><th scope="col">Period change</th><th scope="col">Lowest in period</th></tr></thead><tbody id="goods-list"></tbody></table></div>
+      </section>
+
+      <dialog id="detail-dialog" aria-labelledby="detail-title">
+        <button class="dialog-close" type="button" aria-label="Close details" title="Close" id="detail-close">&#215;</button>
+        <p class="eyebrow">Age detail</p><h2 id="detail-title"></h2><p class="detail-summary" id="detail-summary"></p>
+        <div class="detail-chart-wrap"><svg id="detail-chart" role="img" aria-label="Selected age balance trend chart"></svg></div>
+        <div class="table-scroll"><table class="goods-monitor-table goods-monitor-table--detail"><caption class="sr-only">Goods for the selected age</caption><thead><tr><th scope="col">Good</th><th scope="col">Current stock</th><th scope="col">Period change</th><th scope="col">Low point</th></tr></thead><tbody id="detail-goods"></tbody></table></div>
+      </dialog>
