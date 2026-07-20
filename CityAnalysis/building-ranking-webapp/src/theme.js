@@ -140,14 +140,17 @@
 
   function connectThemeToggle(controller, documentObject) {
     const button = documentObject?.getElementById("themeToggle");
+    const icon = documentObject?.getElementById("themeToggleIcon");
+    const label = documentObject?.getElementById("themeToggleLabel");
     if (!controller || !button) return () => {};
 
     const unsubscribe = controller.subscribe((theme) => {
       const darkMode = theme === DARK_THEME;
       const targetTheme = darkMode ? LIGHT_THEME : DARK_THEME;
-      button.setAttribute("aria-pressed", darkMode ? "true" : "false");
-      button.setAttribute("aria-label", "Dark mode");
+      button.setAttribute("aria-label", `Switch to ${targetTheme} mode`);
       button.title = `Switch to ${targetTheme} mode`;
+      if (icon) icon.textContent = darkMode ? "☀" : "☾";
+      if (label) label.textContent = darkMode ? "Light Mode" : "Dark Mode";
     });
     button.addEventListener("click", () => controller.toggle());
     return unsubscribe;

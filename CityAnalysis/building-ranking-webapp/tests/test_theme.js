@@ -138,9 +138,14 @@ test("subscribers receive initial and changed themes", () => {
 
 test("theme toggle stays synchronized and changes the selected theme", () => {
   const button = themeButton();
+  const icon = { textContent: "" };
+  const label = { textContent: "" };
   const documentObject = {
     getElementById(id) {
-      return id === "themeToggle" ? button : null;
+      if (id === "themeToggle") return button;
+      if (id === "themeToggleIcon") return icon;
+      if (id === "themeToggleLabel") return label;
+      return null;
     },
   };
   const controller = createThemeController({
@@ -151,13 +156,15 @@ test("theme toggle stays synchronized and changes the selected theme", () => {
 
   controller.start();
   connectThemeToggle(controller, documentObject);
-  assert.equal(button.getAttribute("aria-pressed"), "false");
-  assert.equal(button.getAttribute("aria-label"), "Dark mode");
+  assert.equal(button.getAttribute("aria-label"), "Switch to dark mode");
   assert.equal(button.title, "Switch to dark mode");
+  assert.equal(icon.textContent, "☾");
+  assert.equal(label.textContent, "Dark Mode");
 
   button.click();
   assert.equal(controller.theme, "dark");
-  assert.equal(button.getAttribute("aria-pressed"), "true");
-  assert.equal(button.getAttribute("aria-label"), "Dark mode");
+  assert.equal(button.getAttribute("aria-label"), "Switch to light mode");
   assert.equal(button.title, "Switch to light mode");
+  assert.equal(icon.textContent, "☀");
+  assert.equal(label.textContent, "Light Mode");
 });

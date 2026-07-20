@@ -42,7 +42,6 @@
   --header-shadow: 0 14px 36px rgba(36, 28, 47, 0.22);
   --header-control: rgba(255, 255, 255, 0.08);
   --header-control-hover: rgba(255, 255, 255, 0.16);
-  --header-control-active: rgba(200, 103, 145, 0.3);
   --sidebar: rgba(255, 250, 251, 0.64);
   --line-soft: rgba(222, 211, 220, 0.78);
   --line-subtle: rgba(238, 227, 234, 0.9);
@@ -352,11 +351,6 @@ a:focus-visible {
 
 .theme-toggle:active {
   transform: translateY(1px);
-}
-
-.theme-toggle[aria-pressed="true"] {
-  background: var(--header-control-active);
-  border-color: rgba(255, 194, 220, 0.52);
 }
 
 .theme-toggle-icon {
