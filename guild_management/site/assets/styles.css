@@ -260,7 +260,8 @@ body {
   content:"";
   background:linear-gradient(90deg,rgba(5,9,6,.99) 0%,rgba(5,9,6,.97) 34%,rgba(5,9,6,.82) 47%,rgba(5,9,6,.2) 72%,rgba(5,9,6,.08) 100%);
 }
-.portal-hero__art { position:absolute; inset:0; z-index:-2; width:100%; height:100%; object-fit:cover; object-position:center; }
+.portal-hero__art { position:absolute; inset:0; z-index:-2; display:block; width:100%; height:100%; }
+.portal-hero__art img { display:block; width:100%; height:100%; object-fit:cover; object-position:center; }
 .portal-hero__content { width:min(640px,58vw); }
 .portal-hero .eyebrow { display:flex; align-items:center; gap:12px; margin-bottom:18px; color:#8cad69; font-size:13px; letter-spacing:.2em; }
 .portal-hero .eyebrow::after { width:95px; height:1px; background:linear-gradient(90deg,#8cad69,transparent); content:""; }
@@ -301,13 +302,13 @@ body {
   .portal-hero { min-height:515px; padding-top:52px; padding-bottom:52px; }
   .portal-hero__content { width:min(590px,67vw); }
   .portal-hero h1 { font-size:58px; }
-  .portal-hero__art { object-position:58% center; }
+  .portal-hero__art img { object-position:58% center; }
 }
 
 @media (max-width:680px) {
   .portal-hero { min-height:550px; padding:48px 6vw 44px; }
   .portal-hero::after { background:linear-gradient(90deg,rgba(5,9,6,.97) 0%,rgba(5,9,6,.9) 64%,rgba(5,9,6,.58) 100%); }
-  .portal-hero__art { object-position:69% center; }
+  .portal-hero__art img { object-position:69% center; }
   .portal-hero__content { width:100%; max-width:540px; }
   .portal-hero h1 { max-width:510px; font-size:50px; }
   .hero-actions { max-width:480px; }
@@ -319,7 +320,7 @@ body {
   .site-header { min-height:64px; }
   .portal-hero { min-height:620px; padding:43px 20px 38px; align-items:flex-end; }
   .portal-hero::after { background:linear-gradient(180deg,rgba(4,8,5,.35) 0%,rgba(4,8,5,.78) 35%,rgba(4,8,5,.98) 73%,#050906 100%); }
-  .portal-hero__art { object-position:67% center; }
+  .portal-hero__art img { object-position:67% center; }
   .portal-hero .eyebrow { font-size:12px; }
   .portal-hero h1 { font-size:46px; }
   .portal-hero .hero-copy { font-size:15px; }

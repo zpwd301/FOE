@@ -14,7 +14,7 @@ import datetime as dt
 import json
 from pathlib import Path
 
-from build_dashboard import publish_dashboard
+from build_dashboard import DEFAULT_DATA_SOURCE, publish_dashboard
 
 
 AGE_ORDER = [
@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Refresh static dashboard data from a treasury export.")
     parser.add_argument("--input-dir", type=Path, default=Path("input"))
     parser.add_argument("--csv", type=Path, help="Use a specific CSV instead of the newest export.")
-    parser.add_argument("--output", type=Path, default=Path("dashboard/data.js"))
+    parser.add_argument("--output", type=Path, default=DEFAULT_DATA_SOURCE)
     parser.add_argument("--guild-name", default="GoE")
     return parser.parse_args()
 
@@ -119,7 +119,7 @@ def main() -> None:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("window.TREASURY_DATA = " + json.dumps(payload, separators=(",", ":")) + ";\n", encoding="utf-8")
-    assets = publish_dashboard(args.output.parent)
+    assets = publish_dashboard(data_source=args.output)
     print(f"Dashboard data generated: {args.output}")
     print("Published assets: " + ", ".join(path.name for path in assets.values()))
     print(f"Source: {source} ({len(rows)} snapshots, {len(included_goods)} non-Bronze goods)")

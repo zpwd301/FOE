@@ -16,11 +16,15 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 SITE_DIR = ROOT / "site"
+ASSET_SOURCE_DIR = SITE_DIR / "assets"
+DEFAULT_DATA_SOURCE = SITE_DIR / "data" / "treasury-data.js"
 DEFAULT_OUTPUT_DIR = ROOT / "dashboard"
 FINGERPRINT_LENGTH = 12
 MINIMUM_FONT_SIZE_PX = 12
+BANNER_WIDTHS = (720, 1200, 1956)
+BANNER_FORMATS = ("avif", "webp", "jpg")
 CACHEABLE_ASSET_SUFFIXES = frozenset(
-    {".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".png", ".svg", ".webp", ".woff", ".woff2"}
+    {".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".png", ".svg", ".webp", ".woff", ".woff2"}
 )
 FINGERPRINTED_ASSET_PATTERN = re.compile(
     rf"\.[0-9a-f]{{{FINGERPRINT_LENGTH}}}\.[^.]+$", re.IGNORECASE
@@ -58,6 +62,12 @@ class PageInspector(HTMLParser):
         for name in ("href", "src"):
             if values.get(name):
                 self.references.append(str(values[name]))
+        if values.get("srcset"):
+            self.references.extend(
+                candidate.strip().split()[0]
+                for candidate in str(values["srcset"]).split(",")
+                if candidate.strip()
+            )
         if values.get("aria-labelledby"):
             self.label_references.extend(str(values["aria-labelledby"]).split())
 
@@ -91,12 +101,12 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
 
 
-def validate_minimum_font_size(output_dir: Path) -> None:
+def validate_minimum_font_size() -> None:
     """Reject published CSS or script-rendered labels below the accessibility floor."""
     errors: list[str] = []
     assets = (
-        (output_dir / "styles.css", CSS_FONT_SIZE_PATTERNS),
-        (output_dir / "app.js", SCRIPT_FONT_SIZE_PATTERNS),
+        (ASSET_SOURCE_DIR / "styles.css", CSS_FONT_SIZE_PATTERNS),
+        (ASSET_SOURCE_DIR / "app.js", SCRIPT_FONT_SIZE_PATTERNS),
     )
     for path, patterns in assets:
         if not path.is_file():
@@ -182,44 +192,60 @@ def load_resources() -> list[dict[str, object]]:
     return resources
 
 
-def fingerprinted_asset(source: Path) -> Path:
-    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:FINGERPRINT_LENGTH]
-    target = source.with_name(f"{source.stem}.{digest}{source.suffix}")
-    target.write_bytes(source.read_bytes())
+def minify_css(content: str) -> str:
+    content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
+    content = re.sub(r"\s+", " ", content)
+    content = re.sub(r"\s*([{}:;,>])\s*", r"\1", content)
+    return content.replace(";}", "}").strip() + "\n"
+
+
+def fingerprinted_asset(source: Path, output_dir: Path, output_stem: str, content: bytes | None = None) -> Path:
+    payload = source.read_bytes() if content is None else content
+    digest = hashlib.sha256(payload).hexdigest()[:FINGERPRINT_LENGTH]
+    target = output_dir / f"{output_stem}.{digest}{source.suffix}"
+    target.write_bytes(payload)
     return target
 
 
-def remove_stale_fingerprints(source: Path, current: Path) -> None:
-    pattern = re.compile(
-        rf"{re.escape(source.stem)}\.[0-9a-f]{{{FINGERPRINT_LENGTH}}}{re.escape(source.suffix)}"
-    )
-    for candidate in source.parent.iterdir():
-        if candidate != current and candidate.is_file() and pattern.fullmatch(candidate.name):
+def remove_stale_published_assets(output_dir: Path, current: set[Path]) -> None:
+    legacy_names = {"GOE.png", "app.js", "data.js", "portal-banner.jpg", "styles.css"}
+    for candidate in output_dir.iterdir():
+        if not candidate.is_file() or candidate in current:
+            continue
+        if candidate.name in legacy_names or FINGERPRINTED_ASSET_PATTERN.search(candidate.name):
             candidate.unlink()
 
 
-def publish_assets(output_dir: Path) -> dict[str, Path]:
-    sources = {
-        "styles": output_dir / "styles.css",
-        "data": output_dir / "data.js",
-        "app": output_dir / "app.js",
-        "banner": output_dir / "portal-banner.jpg",
-        "icon": output_dir / "GOE.png",
+def publish_assets(output_dir: Path, data_source: Path = DEFAULT_DATA_SOURCE) -> dict[str, Path]:
+    sources: dict[str, tuple[Path, str]] = {
+        "styles": (ASSET_SOURCE_DIR / "styles.css", "styles"),
+        "data": (data_source, "data"),
+        "app": (ASSET_SOURCE_DIR / "app.js", "app"),
+        "icon": (ASSET_SOURCE_DIR / "GOE.png", "GOE"),
     }
-    missing = [path.name for path in sources.values() if not path.is_file()]
+    for image_format in BANNER_FORMATS:
+        for width in BANNER_WIDTHS:
+            sources[f"banner_{image_format}_{width}"] = (
+                ASSET_SOURCE_DIR / f"portal-banner-{width}.{image_format}",
+                f"portal-banner-{width}",
+            )
+    missing = [path.name for path, _ in sources.values() if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"Missing dashboard asset files: {', '.join(missing)}")
-    targets = {name: fingerprinted_asset(source) for name, source in sources.items()}
-    for name, source in sources.items():
-        remove_stale_fingerprints(source, targets[name])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    targets: dict[str, Path] = {}
+    for name, (source, output_stem) in sources.items():
+        content = minify_css(read_text(source)).encode() if name == "styles" else None
+        targets[name] = fingerprinted_asset(source, output_dir, output_stem, content)
+    remove_stale_published_assets(output_dir, set(targets.values()))
     return targets
 
 
-def load_treasury_summary(output_dir: Path) -> dict[str, str]:
-    raw = read_text(output_dir / "data.js").strip()
+def load_treasury_summary(data_source: Path = DEFAULT_DATA_SOURCE) -> dict[str, str]:
+    raw = read_text(data_source).strip()
     prefix = "window.TREASURY_DATA = "
     if not raw.startswith(prefix) or not raw.endswith(";"):
-        raise ValueError("dashboard/data.js is not a TREASURY_DATA payload")
+        raise ValueError(f"{data_source} is not a TREASURY_DATA payload")
     payload = json.loads(raw[len(prefix):-1])
     goods = payload["goods"]
     current_values = [good["values"][-1] for good in goods]
@@ -323,12 +349,16 @@ def page(
     )
 
 
-def publish_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR) -> dict[str, Path]:
+def publish_dashboard(
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    data_source: Path = DEFAULT_DATA_SOURCE,
+) -> dict[str, Path]:
     output_dir = output_dir.resolve()
+    data_source = data_source.resolve()
     resources = load_resources()
-    validate_minimum_font_size(output_dir)
-    assets = publish_assets(output_dir)
-    summary = load_treasury_summary(output_dir)
+    validate_minimum_font_size()
+    assets = publish_assets(output_dir, data_source)
+    summary = load_treasury_summary(data_source)
     base_template = read_text(SITE_DIR / "templates" / "base.html")
     styles_asset = f"/{assets['styles'].name}"
     icon_asset = f"/{assets['icon'].name}"
@@ -338,7 +368,16 @@ def publish_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR) -> dict[str, Path]:
         {
             **summary,
             "resource_cards": resource_cards(resources, compact=True),
-            "banner_asset": f"/{assets['banner'].name}",
+            "banner_jpg_asset": f"/{assets['banner_jpg_1956'].name}",
+            "banner_jpg_srcset": ", ".join(
+                f"/{assets[f'banner_jpg_{width}'].name} {width}w" for width in BANNER_WIDTHS
+            ),
+            "banner_webp_srcset": ", ".join(
+                f"/{assets[f'banner_webp_{width}'].name} {width}w" for width in BANNER_WIDTHS
+            ),
+            "banner_avif_srcset": ", ".join(
+                f"/{assets[f'banner_avif_{width}'].name} {width}w" for width in BANNER_WIDTHS
+            ),
         },
     )
     write_text(

@@ -9,6 +9,8 @@
   const shortDateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   let selectedDays = 90;
   let sortMode = "delta";
+  let periodCache = null;
+  let resizeFrame = 0;
 
   const asDate = (value) => new Date(`${value}T00:00:00Z`);
   const formatDate = (value, short = false) => (short ? shortDateFmt : dateFmt).format(asDate(value));
@@ -16,18 +18,29 @@
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   const ageNames = [...new Set(data.goods.map((good) => good.age))];
   const currentIndex = () => data.dates.length - 1;
-  const startIndex = () => {
+  const sum = (values) => values.reduce((total, value) => total + value, 0);
+  const calculateStartIndex = () => {
     const end = asDate(data.dates.at(-1));
     const cutoff = new Date(end);
     cutoff.setUTCDate(cutoff.getUTCDate() - (selectedDays - 1));
     const index = data.dates.findIndex((date) => asDate(date) >= cutoff);
     return index === -1 ? 0 : index;
   };
-  const periodGoods = () => data.goods.map((good) => ({ ...good, start: good.values[startIndex()], current: good.values[currentIndex()], min: Math.min(...good.values.slice(startIndex())), delta: good.values[currentIndex()] - good.values[startIndex()] }));
-  const sum = (values) => values.reduce((total, value) => total + value, 0);
-  const totalAt = (index) => sum(data.goods.map((good) => good.values[index]));
-  const totalSeries = () => data.dates.slice(startIndex()).map((date, offset) => ({ date, value: totalAt(startIndex() + offset) }));
-  const ageRows = () => ageNames.map((age) => { const goods = periodGoods().filter((good) => good.age === age); return { age, goods, start: sum(goods.map((good) => good.start)), current: sum(goods.map((good) => good.current)), delta: sum(goods.map((good) => good.delta)) }; }).sort((a, b) => a.delta - b.delta);
+  const periodModel = () => {
+    if (periodCache && periodCache.days === selectedDays) return periodCache;
+    const start = calculateStartIndex();
+    const current = currentIndex();
+    const goods = data.goods.map((good) => ({ ...good, start: good.values[start], current: good.values[current], min: Math.min(...good.values.slice(start)), delta: good.values[current] - good.values[start] }));
+    const goodsByAge = new Map(ageNames.map((age) => [age, []]));
+    goods.forEach((good) => goodsByAge.get(good.age).push(good));
+    const ages = ageNames.map((age) => { const ageGoods = goodsByAge.get(age); return { age, goods: ageGoods, start: sum(ageGoods.map((good) => good.start)), current: sum(ageGoods.map((good) => good.current)), delta: sum(ageGoods.map((good) => good.delta)) }; }).sort((a, b) => a.delta - b.delta);
+    const series = data.dates.slice(start).map((date, offset) => ({ date, value: sum(goods.map((good) => good.values[start + offset])) }));
+    periodCache = { days: selectedDays, start, goods, ages, series };
+    return periodCache;
+  };
+  const periodGoods = () => periodModel().goods;
+  const totalSeries = () => periodModel().series;
+  const ageRows = () => periodModel().ages;
 
   function drawLineChart(svg, series, color, fill) {
     const rect = svg.getBoundingClientRect(); const width = Math.max(300, Math.round(rect.width)); const height = Math.max(130, Math.round(rect.height));
@@ -79,13 +92,13 @@
   }
 
   function renderGoods() {
-    let goods = periodGoods();
+    const goods = [...periodGoods()];
     if (sortMode === "stock") goods.sort((a, b) => a.current - b.current); else if (sortMode === "gain") goods.sort((a, b) => b.delta - a.delta); else goods.sort((a, b) => a.delta - b.delta);
     $("#goods-list").innerHTML = goods.slice(0, 12).map((good) => `<tr><td><strong>${escapeHtml(good.name)}</strong></td><td>${escapeHtml(good.age)}</td><td class="${good.current < data.meta.lowStockThreshold ? "stock-low" : ""}">${fmt.format(good.current)}</td><td class="${good.delta >= 0 ? "positive" : "negative"}">${signed(good.delta)}</td><td>${fmt.format(good.min)}</td></tr>`).join("");
   }
 
   function openDetail(age) {
-    const row = ageRows().find((item) => item.age === age); const series = data.dates.slice(startIndex()).map((date, index) => ({ date, value: sum(row.goods.map((good) => good.values[startIndex() + index])) }));
+    const model = periodModel(); const row = model.ages.find((item) => item.age === age); const series = data.dates.slice(model.start).map((date, index) => ({ date, value: sum(row.goods.map((good) => good.values[model.start + index])) }));
     $("#detail-title").textContent = age; $("#detail-summary").textContent = `${fmt.format(row.current)} goods in stock, ${signed(row.delta)} over the selected period.`; drawLineChart($("#detail-chart"), series, "#3c7556", "rgba(60,117,86,.13)");
     $("#detail-goods").innerHTML = [...row.goods].sort((a, b) => a.delta - b.delta).map((good) => `<tr><td><strong>${escapeHtml(good.name)}</strong></td><td class="${good.current < data.meta.lowStockThreshold ? "stock-low" : ""}">${fmt.format(good.current)}</td><td class="${good.delta >= 0 ? "positive" : "negative"}">${signed(good.delta)}</td><td>${fmt.format(good.min)}</td></tr>`).join("");
     $("#detail-dialog").showModal();
@@ -97,7 +110,11 @@
   }
 
   $("#as-of").textContent = `Data through ${formatDate(data.meta.latestDate)}`;
-  document.querySelectorAll("[data-range]").forEach((button) => button.addEventListener("click", () => { selectedDays = Number(button.dataset.range); render(); }));
+  document.querySelectorAll("[data-range]").forEach((button) => button.addEventListener("click", () => { selectedDays = Number(button.dataset.range); periodCache = null; render(); }));
   $("#goods-sort").addEventListener("change", (event) => { sortMode = event.target.value; renderGoods(); }); $("#detail-close").addEventListener("click", () => $("#detail-dialog").close());
-  window.addEventListener("resize", renderTrend); render();
+  window.addEventListener("resize", () => {
+    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; renderTrend(); });
+  }, { passive: true });
+  render();
 }());

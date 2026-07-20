@@ -13,14 +13,14 @@ using the same rule as the PDF report.
 
 ## Prerequisites
 
-- Python 3 with `matplotlib` installed
+- The shared `../CityAnalysis/.venv` environment with the project dependencies installed
 
 ## How To Run
 
 From this folder:
 
 ```bash
-python3 generate_treasury_report.py
+../CityAnalysis/.venv/bin/python generate_treasury_report.py
 ```
 
 This uses defaults:
@@ -36,20 +36,21 @@ Build the portal from the templates and content in `site/` without changing
 treasury data:
 
 ```bash
-python3 build_dashboard.py
+../CityAnalysis/.venv/bin/python build_dashboard.py
 ```
 
 Refresh the dashboard after adding a treasury export to `input/`:
 
 ```bash
-python3 generate_treasury_dashboard.py
+../CityAnalysis/.venv/bin/python generate_treasury_dashboard.py
 ```
 
 The refresh script selects the newest CSV by modified time, writes
-`dashboard/data.js`, and rebuilds every portal page. The build publishes
-content-fingerprinted copies of the dashboard CSS, JavaScript, and data and
-removes obsolete fingerprinted copies. This lets browsers cache assets
-efficiently without showing an older dashboard after a deployment.
+`site/data/treasury-data.js`, and rebuilds every portal page. Source assets stay
+under `site/`; the deployable `dashboard/` directory contains only
+content-fingerprinted CSS, JavaScript, data, icons, and responsive banner files.
+This lets browsers cache assets efficiently without showing an older dashboard
+after a deployment.
 The script supports both the older comma-delimited exports and the current
 semicolon-delimited FoE export format. The current site uses all available
 data up to 90 days; when fewer than three months are present it says so in the
@@ -59,10 +60,33 @@ Treasury data is operational guild information. Protect the deployed dashboard
 with a Cloudflare Access policy before adding a public custom domain. Static
 headers prevent indexing, but they do not authenticate visitors.
 
+### Cloudflare Pages deployment
+
+The production portal is served from the root of `https://goe.z301.uk/`. Use
+these Cloudflare Pages build settings:
+
+```text
+Build command: [leave empty]
+Build output directory: dashboard
+Root directory: guild_management
+```
+
+The committed `dashboard/` directory is the complete, deploy-ready site. Portal
+links and fingerprinted assets are intentionally rooted at `/`. The included
+`dashboard/_redirects` file permanently redirects old `/guild-management/...`
+bookmarks to their corresponding root URLs, while `dashboard/_headers` defines
+the production security and caching policy. Run the local build and commit its
+generated dashboard files before deploying because Cloudflare does not run a
+build command in this configuration.
+
+In the Cloudflare dashboard, add `goe.z301.uk` under the Pages project's
+**Custom domains** settings. If the `z301.uk` zone is managed by the same
+Cloudflare account, Cloudflare creates the required DNS record during setup.
+
 For a local preview:
 
 ```bash
-python3 -m http.server 8001 --directory dashboard
+../CityAnalysis/.venv/bin/python -m http.server 8001 --directory dashboard
 ```
 
 Portal routes:
@@ -81,25 +105,25 @@ the library without changing the shared navigation or page layout.
 Run with a custom guild name:
 
 ```bash
-python3 generate_treasury_report.py --guild-name "GoE"
+../CityAnalysis/.venv/bin/python generate_treasury_report.py --guild-name "GoE"
 ```
 
 Run a different window:
 
 ```bash
-python3 generate_treasury_report.py --guild-name "GoE" --days 30
+../CityAnalysis/.venv/bin/python generate_treasury_report.py --guild-name "GoE" --days 30
 ```
 
 Run against a specific CSV:
 
 ```bash
-python3 generate_treasury_report.py --csv "input/guild-treasury-daily (6).csv"
+../CityAnalysis/.venv/bin/python generate_treasury_report.py --csv "input/guild-treasury-daily (6).csv"
 ```
 
 Use a custom dip threshold:
 
 ```bash
-python3 generate_treasury_report.py --dip-threshold 125000
+../CityAnalysis/.venv/bin/python generate_treasury_report.py --dip-threshold 125000
 ```
 
 ## Input Rules

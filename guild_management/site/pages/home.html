@@ -1,5 +1,9 @@
       <section class="portal-hero" aria-labelledby="page-title">
-        <img class="portal-hero__art" src="{{banner_asset}}" alt="">
+        <picture class="portal-hero__art">
+          <source type="image/avif" srcset="{{banner_avif_srcset}}" sizes="100vw">
+          <source type="image/webp" srcset="{{banner_webp_srcset}}" sizes="100vw">
+          <img src="{{banner_jpg_asset}}" srcset="{{banner_jpg_srcset}}" sizes="100vw" width="1956" height="804" fetchpriority="high" alt="">
+        </picture>
         <div class="portal-hero__content">
           <p class="eyebrow">Guardians of Elysium</p>
           <h1 id="page-title">One guild.<br>One hub.<br>Everything <em>GoE.</em></h1>

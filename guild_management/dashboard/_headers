@@ -30,5 +30,5 @@
 /GOE.*.png
   Cache-Control: public, max-age=31536000, immutable
 
-/portal-banner.*.jpg
+/portal-banner-*.*
   Cache-Control: public, max-age=31536000, immutable
