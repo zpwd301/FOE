@@ -37,7 +37,7 @@ const allowed = {
   categories: ["All Building Categories", "CARE 2026 Event Rewards"],
   searchModes: ["building", "fragment"],
   qiRoles: ["Both", "Blue", "Red"],
-  strengths: ["combat", "kit-oneUp"],
+  strengths: ["combat", "special-goods", "kit-oneUp"],
   topNs: ["50", "200", "all"],
   weightModes: ["default", "custom"],
   weightProfiles: ["overall", "kits"],
@@ -108,7 +108,7 @@ test("sanitizer keeps valid settings and removes untrusted values", () => {
     focus: { gbgGe: 1, redBlue: 6, attackDefense: 3.5, unitAge: 5, fpGoods: 3 },
     production: { fp: 30000, goods: -1, guildGoods: 20000, medals: Infinity, specialGoods: 120 },
     filters: {
-      strengths: ["combat", "unknown", "combat", "kit-oneUp"],
+      strengths: ["combat", "unknown", "combat", "special-goods", "kit-oneUp"],
       minArea: 2,
       maxArea: 20,
       noRoadOnly: true,
@@ -133,7 +133,7 @@ test("sanitizer keeps valid settings and removes untrusted values", () => {
     focus: { gbgGe: 1, unitAge: 5, fpGoods: 3 },
     production: { fp: 30000, guildGoods: 20000, specialGoods: 120 },
     filters: {
-      strengths: ["combat", "kit-oneUp"],
+      strengths: ["combat", "special-goods", "kit-oneUp"],
       minArea: 2,
       maxArea: 20,
       noRoadOnly: true,

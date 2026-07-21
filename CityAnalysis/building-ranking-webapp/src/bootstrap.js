@@ -108,6 +108,7 @@
   async function start() {
     await Promise.all([
       loadScript(`src/preferences.js?v=${encodeURIComponent(appVersion)}`),
+      loadScript(`src/strengths.js?v=${encodeURIComponent(appVersion)}`),
       loadCoreData(),
     ]);
     window.FOE_LOAD_BUILDING_RANKING_AGE = loadAgeData;

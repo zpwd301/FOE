@@ -4,6 +4,7 @@ const PRESET_PROFILES_ENABLED = false;
 const MAX_STRENGTH_BADGES = 6;
 const SEARCH_MODE_BUILDING = "building";
 const SEARCH_MODE_FRAGMENT = "fragment";
+const { recordProducesSpecialGoods } = window.FOE_BUILDING_RANKING_STRENGTHS;
 
 const PROFILE_CONFIG = {
   overallEfficiency: {
@@ -1033,6 +1034,7 @@ function strengthBadges(record, contributions) {
 
 function rowHasStrength(row, strength) {
   if (!strength) return true;
+  if (strength === "special-goods") return recordProducesSpecialGoods(row.record);
   const requestedKitFamily = strength.startsWith("kit-") ? strength.slice(4) : "";
   return Object.entries(row.record.attrs).some(([key, value]) => {
     if (Number(value || 0) <= 0) return false;
