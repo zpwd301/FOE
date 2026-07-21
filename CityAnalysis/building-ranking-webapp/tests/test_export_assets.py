@@ -54,6 +54,23 @@ class ExportAssetTests(unittest.TestCase):
         self.assertIn("/data/*\n  Cache-Control: public, max-age=31536000, immutable", headers)
         self.assertIn("Content-Security-Policy:", headers)
 
+    def test_strength_filters_are_alphabetical_within_sections(self) -> None:
+        index = (WEBAPP_ROOT / "index.html").read_text(encoding="utf-8")
+        options = re.search(
+            r'<div class="strength-options">(.*?)</div>',
+            index,
+            flags=re.DOTALL,
+        )
+
+        self.assertIsNotNone(options)
+        general_options, kit_options = options.group(1).split(
+            '<span class="strength-option-group">Kit production</span>',
+            maxsplit=1,
+        )
+        for section in (general_options, kit_options):
+            labels = re.findall(r'data-label="([^"]+)"', section)
+            self.assertEqual(labels, sorted(labels, key=str.casefold))
+
 
 if __name__ == "__main__":
     unittest.main()

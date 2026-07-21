@@ -81,7 +81,7 @@ XLSX_MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 # Increment this version before each pushed code change to this workbook generator.
-WORKBOOK_VERSION = "1.0.48"
+WORKBOOK_VERSION = "1.0.49"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
@@ -111,6 +111,7 @@ CITY_AGE_LIST_NAME = "CityAgeList"
 BUILDING_CATEGORY_FILTER_CELL = "$B$5"
 BUILDING_CATEGORY_LIST_NAME = "BuildingCategoryList"
 ALL_BUILDING_CATEGORIES = "All Building Categories"
+CULTURAL_SETTLEMENT_REWARDS = "Cultural Settlement Rewards"
 QI_FIGHTER_ROLE_CELL = "$B$10"
 FIGHTING_GBG_GE_FOCUS_CELL = "$B$13"
 FIGHTING_RED_BLUE_FOCUS_CELL = "$B$15"
@@ -537,6 +538,8 @@ def building_category_label(entity_id: str) -> str:
     if entity_id.startswith(GE_REWARD_PREFIXES):
         return "GE Rewards"
     if event_label := event_reward_category_label(entity_id):
+        if event_label.startswith("COP 2"):
+            return CULTURAL_SETTLEMENT_REWARDS
         return event_label
     return "Other Buildings"
 
@@ -547,6 +550,7 @@ def building_category_sort_key(label: str) -> Tuple[int, int, str]:
         "QI Rewards": 1,
         "GBG Rewards": 2,
         "GE Rewards": 3,
+        CULTURAL_SETTLEMENT_REWARDS: 4,
         "Other Buildings": 99,
     }
     if event_match := re.match(r"^(.+) ([0-9]{4}) Event Rewards$", label):
