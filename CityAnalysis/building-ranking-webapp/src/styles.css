@@ -1827,6 +1827,32 @@ tbody tr:hover {
   margin-top: 3px;
 }
 
+.detail-stat-label {
+  display: flex !important;
+  align-items: center;
+  gap: 2px;
+}
+
+.detail-stat-label .info-button {
+  flex-basis: 22px;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+}
+
+.detail-stat-label .info-button::before {
+  inset: 3px;
+}
+
+.detail-stat-info {
+  padding-top: 8px;
+  margin: 8px 0 0;
+  color: var(--ink) !important;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
 .detail-summary {
   margin: 0 0 14px;
   color: var(--ink);

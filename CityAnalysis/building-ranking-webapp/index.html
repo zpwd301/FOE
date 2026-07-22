@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
-    <script src="src/theme.js?v=20260720-2"></script>
-    <link rel="stylesheet" href="src/styles.css?v=20260720-2">
+    <script src="src/theme.js?v=20260721-2"></script>
+    <link rel="stylesheet" href="src/styles.css?v=20260721-2">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -166,7 +166,7 @@
               <p>Filters only hide or show rows. They do not recalculate scores or rank numbers, so a building keeps the same rank when you narrow the list.</p>
               <ul>
                 <li><strong>Strengths</strong> checks all recorded building benefits, even when a strength is not one of the six badges shown in the table. Special Goods means direct production for the selected age, not a percentage boost. When you choose several, a building must have every selected strength.</li>
-                <li><strong>Area</strong> is the building footprint plus one tile when a road is required.</li>
+                <li><strong>Area</strong> is the building footprint plus half its shorter side, rounded up to whole tiles, when a road is required.</li>
                 <li><strong>Rows shown</strong> limits the table without removing matches from the result count.</li>
               </ul>
             </div>
@@ -337,7 +337,7 @@
             <section>
               <h2>Reading scores</h2>
               <p>A score is a comparison number, not an amount you receive in the game. The dashboard compares each benefit with the full building list for your selected age, then combines those benefits using the active profile and focus choices.</p>
-              <p>Efficiency means score per adjusted tile. A building that needs a road counts as using one extra tile. Filters do not change either score.</p>
+              <p>Efficiency means score per adjusted tile. A road-required building adds half its shorter side, rounded up to whole tiles. Filters do not change either score.</p>
             </section>
             <section>
               <h2>Goods and happiness</h2>
@@ -363,9 +363,9 @@
     </aside>
 
     <script
-      src="src/bootstrap.js?v=20260720-2"
-      data-data-version="99b68ae9d54d"
-      data-app-version="20260720-2"
+      src="src/bootstrap.js?v=20260721-2"
+      data-data-version="b62a9024a748"
+      data-app-version="20260721-2"
     ></script>
   </body>
 </html>

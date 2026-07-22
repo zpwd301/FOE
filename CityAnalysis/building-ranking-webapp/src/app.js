@@ -9,7 +9,7 @@ const { recordProducesSpecialGoods } = window.FOE_BUILDING_RANKING_STRENGTHS;
 const PROFILE_CONFIG = {
   overallEfficiency: {
     title: "Overall Efficiency",
-    subtitle: "Best for finding well-rounded buildings that give strong value for their space. It uses the Overall score, then divides by adjusted area. A building that needs a road counts as using one extra tile.",
+    subtitle: "Best for finding well-rounded buildings that give strong value for their space. It uses the Overall score, then divides by adjusted area. A road-required building adds half its shorter side, rounded up to whole tiles.",
     weightProfile: "overall",
     efficiency: true,
   },
@@ -27,7 +27,7 @@ const PROFILE_CONFIG = {
   },
   fightingEfficiency: {
     title: "Fighting Efficiency",
-    subtitle: "Uses the same combat priorities as Fighting Ranking, but favors buildings that provide more combat value per tile. A required road adds one tile to the area.",
+    subtitle: "Uses the same combat priorities as Fighting Ranking, but favors buildings that provide more combat value per tile. A road-required building adds half its shorter side, rounded up to whole tiles.",
     weightProfile: "fighting",
     efficiency: true,
   },
@@ -39,7 +39,7 @@ const PROFILE_CONFIG = {
   },
   farmingEfficiency: {
     title: "Farming Efficiency",
-    subtitle: "Shows the Farming value delivered per tile, with one extra tile for a required road. The Farming model is still being tuned, especially for goods and diamonds, so treat the results as a guide.",
+    subtitle: "Shows the Farming value delivered per tile. A road-required building adds half its shorter side, rounded up to whole tiles. The Farming model is still being tuned, especially for goods and diamonds, so treat the results as a guide.",
     weightProfile: "farming",
     efficiency: true,
   },
@@ -51,7 +51,7 @@ const PROFILE_CONFIG = {
   },
   qiEfficiency: {
     title: "QI Efficiency",
-    subtitle: "Shows Quantum Incursions value per tile using your selected QI fighter role. A building that needs a road counts as using one extra tile.",
+    subtitle: "Shows Quantum Incursions value per tile using your selected QI fighter role. A road-required building adds half its shorter side, rounded up to whole tiles.",
     weightProfile: "qi",
     efficiency: true,
   },
@@ -63,7 +63,7 @@ const PROFILE_CONFIG = {
   },
   kitEfficiency: {
     title: "Kit Efficiency",
-    subtitle: "Uses the same kit-production score as Kit Producers, then divides it by adjusted area. A required road adds one tile to the area.",
+    subtitle: "Uses the same kit-production score as Kit Producers, then divides it by adjusted area. A road-required building adds half its shorter side, rounded up to whole tiles.",
     weightProfile: "kits",
     efficiency: true,
   },
@@ -1138,7 +1138,7 @@ function renderSummary(rows) {
         ? "A comparison score across the seven supported kit families. It is not a literal number of kits produced."
         : "The active profile score of the top building. This is a comparison number, not an amount produced in the game."],
     [kitProfile ? "Kit efficiency" : "Top efficiency", top ? fmt(top.efficiency, 3) : "", config.efficiency
-      ? "The top building's score per adjusted tile, including one extra tile when a road is required."
+      ? "The top building's score per adjusted tile. Road allowance is half the shorter side, rounded up to whole tiles."
       : "The efficiency of the top-ranked building. Choose an Efficiency tab to rank buildings by value per tile."],
   ].map(([label, value, help], index) => `
     <div class="summary-card">
@@ -1409,8 +1409,9 @@ function explainRanking(row) {
   const top = row.contributions.filter((item) => item.scorePoints > 0).slice(0, 3);
   const strengths = plainStrengths(top).join(", ");
   const rankText = `#${row.rank} in ${config.title}`;
+  const roadAllowance = Number(row.record.adjustedArea || 0) - Number(row.record.area || 0);
   const areaText = row.record.adjustedArea
-    ? `Its adjusted area is ${fmt(row.record.adjustedArea, 0)} tiles${row.record.requiresRoad ? ", including one tile for the road" : ""}.`
+    ? `Its adjusted area is ${fmt(row.record.adjustedArea, 0)} tiles${row.record.requiresRoad ? `, including ${fmt(roadAllowance, 0)} tiles for road access` : ""}.`
     : "Its building area is not available.";
   const hasCompactFootprint = Number(row.record.adjustedArea || 0) > 0 && row.record.adjustedArea < 18;
   if (!top.length) {
@@ -1423,6 +1424,20 @@ function explainRanking(row) {
     return `${row.record.name} ranks ${rankText}. Its main strengths are ${strengths}. ${efficiencyReason} ${areaText}`;
   }
   return `${row.record.name} ranks ${rankText}. Its main strengths are ${strengths}, giving it a profile score of ${fmt(row.score)}. Building size does not affect this ranking. ${areaText}`;
+}
+
+function adjustedAreaExplanation(record) {
+  const realArea = Number(record.area || 0);
+  const adjustedArea = Number(record.adjustedArea || 0);
+  if (!Number.isFinite(realArea) || !Number.isFinite(adjustedArea) || adjustedArea <= 0) {
+    return "Adjusted area is unavailable because this building's footprint dimensions are missing.";
+  }
+  if (!record.requiresRoad) {
+    return `No road is required, so adjusted area equals the real footprint: ${fmt(realArea, 0)} tiles.`;
+  }
+  const roadAllowance = Math.max(0, adjustedArea - realArea);
+  const sizeText = record.size ? ` for this ${record.size} building` : "";
+  return `Real area ${fmt(realArea, 0)} + road allowance ${fmt(roadAllowance, 0)} = ${fmt(adjustedArea, 0)} tiles. The road allowance${sizeText} is half the shorter side, rounded up to a whole tile.`;
 }
 
 function plainStrengthForLabel(label, key = "") {
@@ -1869,7 +1884,14 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
       <div class="detail-stat"><span>Score</span><strong>${fmt(row.score)}</strong></div>
       <div class="detail-stat"><span>Efficiency</span><strong>${fmt(row.efficiency, 3)}</strong></div>
       <div class="detail-stat"><span>Size</span><strong>${row.record.size || "Unknown"}</strong></div>
-      <div class="detail-stat"><span>Adjusted area</span><strong>${row.record.adjustedArea || ""}</strong></div>
+      <div class="detail-stat adjusted-area-stat">
+        <span class="detail-stat-label">
+          Adjusted area
+          <button class="info-button compact-info-button" type="button" aria-expanded="false" aria-controls="adjustedAreaInfo" aria-label="Show Adjusted area information" data-info-label="Adjusted area">i</button>
+        </span>
+        <strong>${row.record.adjustedArea || ""}</strong>
+        <p id="adjustedAreaInfo" class="detail-stat-info info-text" hidden>${escapeHtml(adjustedAreaExplanation(row.record))}</p>
+      </div>
       <div class="detail-stat"><span>Road connection</span><strong>${row.record.requiresRoad ? "Required" : "No"}</strong></div>
     </div>
     <h3>Summary</h3>

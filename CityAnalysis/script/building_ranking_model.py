@@ -81,7 +81,7 @@ XLSX_MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 # Increment this version before each pushed code change to this workbook generator.
-WORKBOOK_VERSION = "1.0.49"
+WORKBOOK_VERSION = "1.0.50"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
@@ -753,7 +753,10 @@ def attr_description(key: str) -> str:
     if key == "area":
         return "Footprint in tiles; lower is usually better."
     if is_road_connection_attr_key(key):
-        return "Road requirement flag. Buildings that require a road are treated as one extra tile in efficiency rankings."
+        return (
+            "Road requirement flag. For efficiency rankings, a road-required building adds half "
+            "its shorter side, rounded up to whole tiles, to its footprint."
+        )
     if key in KIT_ATTR_TO_FAMILY:
         return str(KIT_FAMILY_DEFINITIONS[KIT_ATTR_TO_FAMILY[key]]["description"])
     if key.startswith("boost_att_boost_") or key.startswith("boost_def_boost_"):
@@ -2908,6 +2911,8 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
                 "available": "Yes" if available else "No",
                 "size": size,
                 "area": area,
+                "width": width,
+                "length": length,
                 "environment_effect": extract_environment_effect(entity, era),
                 "fragment_production": fragment_production,
                 "fragment_rewards": fragment_rewards,
@@ -3112,11 +3117,27 @@ def require_road_connection_label(record: Dict[str, Any]) -> str:
     return "Y" if building_requires_road(record) else "N"
 
 
+def road_area_allowance(record: Dict[str, Any]) -> float:
+    """Return the whole-tile road allowance based on half the shorter side."""
+    if not building_requires_road(record):
+        return 0.0
+
+    width = as_float(record.get("width"))
+    length = as_float(record.get("length"))
+    if not width or not length:
+        size = str(record.get("size") or "")
+        match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*", size)
+        if match:
+            width = float(match.group(1))
+            length = float(match.group(2))
+    if not width or not length:
+        return 1.0
+    return float(math.ceil(min(width, length) / 2.0))
+
+
 def adjusted_area(record: Dict[str, Any]) -> float:
     area = float(record.get("area") or 0.0)
-    if building_requires_road(record):
-        area += 1.0
-    return area
+    return area + road_area_allowance(record)
 
 
 def building_category_match_formula(category_cell: str) -> str:
@@ -3210,6 +3231,7 @@ SHARED_MODEL_NAMES = (
     "is_qi_attr",
     "is_road_connection_attr_key",
     "require_road_connection_label",
+    "road_area_allowance",
     "adjusted_area",
     "kit_reward_measure",
     "collect_kit_product",

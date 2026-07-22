@@ -1812,7 +1812,7 @@ def write_fighting_efficiency_sheet(
     sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
     sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-    sheet["A2"] = "Fighting efficiency is Fighting Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection."
+    sheet["A2"] = "Fighting efficiency is Fighting Score divided by adjusted area. A road-required building adds half its shorter side, rounded up to whole tiles."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
     header_row = 4
@@ -2834,7 +2834,7 @@ def write_qi_efficiency_sheet(
     sheet["A1"].font = Font(bold=True, size=15, color=TITLE_FONT_COLOR)
     sheet["A1"].fill = title_fill
     sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-    sheet["A2"] = "QI efficiency is QI Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection."
+    sheet["A2"] = "QI efficiency is QI Score divided by adjusted area. A road-required building adds half its shorter side, rounded up to whole tiles."
     sheet["A2"].alignment = Alignment(wrap_text=False)
 
     header_row = 4
@@ -2977,8 +2977,8 @@ def write_about_sheet(
         ("Happiness", "Gross Happiness shows happiness provided by the building. Net Happiness subtracts internal happiness demand; demand is still tracked as a negative scoring input but is not shown as a separate ranking column."),
         ("Overall ranking", f"Use {OVERALL_RANKING_SHEET} for a broad building comparison across production, fighting, and other weighted attributes. Overall fighting uses fixed sub-budgets for all non-QI combat, GBG, GE, QI, and unit production, and those sub-budgets follow the Main Controls fighting focus and QI fighter role settings."),
         ("Production normalization", "Major production scores are anchored to the Main Controls production assumptions so one extreme building does not define the full scoring range by itself."),
-        ("Footprint", "Overall Ranking does not directly score footprint. Overall Efficiency divides Overall Score by adjusted area, adding one tile when a road connection is required."),
-        ("Efficiency rankings", "Efficiency sheets favor buildings that score well for their footprint. Buildings that require a road connection are treated as needing one extra tile."),
+        ("Footprint", "Overall Ranking does not directly score footprint. Overall Efficiency divides Overall Score by adjusted area; a road-required building adds half its shorter side, rounded up to whole tiles."),
+        ("Efficiency rankings", "Efficiency sheets favor buildings that score well for their footprint. A road-required building adds half its shorter side, rounded up to whole tiles."),
         ("Fighting ranking", "Fighting Ranking uses your fighting focus settings and shows the top 100 fighting buildings."),
         ("Farming ranking", FARMING_RANKING_ABOUT_NOTE),
         ("QI ranking", "QI Ranking focuses on QI-related boosts, starting resources, action points, and the selected QI fighter role."),
@@ -3050,7 +3050,7 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
         "Overall Efficiency Score",
         "Overall Score",
         f"Top {min(OVERALL_TOP_N, len(records))} Overall Efficiency Buildings",
-        "Overall efficiency is Overall Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection.",
+        "Overall efficiency is Overall Score divided by adjusted area. A road-required building adds half its shorter side, rounded up to whole tiles.",
         records,
         attr_keys,
         overall_ranking_display_attr_keys(attr_keys),
@@ -3077,7 +3077,7 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
         "Fighting Efficiency Score",
         "Fighting Score",
         f"Top {min(FIGHTING_TOP_N, len(records))} Fighting Efficiency Buildings",
-        "Fighting efficiency is Fighting Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection.",
+        "Fighting efficiency is Fighting Score divided by adjusted area. A road-required building adds half its shorter side, rounded up to whole tiles.",
         records,
         attr_keys,
         [key for key in attr_keys if fighting_weight_for_attr(key)],
@@ -3127,7 +3127,7 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
         "QI Efficiency Score",
         "QI Score",
         f"Top {min(FIGHTING_TOP_N, len(records))} QI Efficiency Buildings",
-        "QI efficiency is QI Score divided by adjusted area. Adjusted area adds 1 when the building requires a road connection.",
+        "QI efficiency is QI Score divided by adjusted area. A road-required building adds half its shorter side, rounded up to whole tiles.",
         records,
         attr_keys,
         qi_display_attr_keys(attr_keys),
