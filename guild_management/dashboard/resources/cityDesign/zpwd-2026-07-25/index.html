@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>zpwd's City Design — City Map</title>
+  <style>
+    :root {
+      --ink: #f4f7fa;
+      --muted: #9daab7;
+      --panel: rgba(17, 25, 34, 0.94);
+      --panel-border: rgba(255, 255, 255, 0.11);
+      --canvas: #091015;
+      --accent: #65c8ff;
+      --focus: #fff3a3;
+      --no-road: #5b21b6;
+      --no-road-hover: #a687d8;
+      --no-road-selected: #e9d5ff;
+      --shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      height: 100%;
+      min-height: 0;
+    }
+
+    .toolbar {
+      position: relative;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(240px, 440px) auto;
+      align-items: center;
+      gap: 18px;
+      min-height: 76px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--panel-border);
+      background: #111923;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .identity {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      margin-bottom: 3px;
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      overflow: hidden;
+      margin: 0;
+      font-size: clamp(17px, 2vw, 23px);
+      font-weight: 720;
+      line-height: 1.12;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .subtitle {
+      overflow: hidden;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .search-wrap {
+      position: relative;
+    }
+
+    .search {
+      width: 100%;
+      height: 42px;
+      padding: 0 44px 0 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      outline: none;
+      background: rgba(255, 255, 255, 0.055);
+      color: var(--ink);
+      transition: border-color 140ms ease, background 140ms ease;
+    }
+
+    .search::placeholder {
+      color: #748290;
+    }
+
+    .search:focus {
+      border-color: var(--accent);
+      background: rgba(255, 255, 255, 0.075);
+    }
+
+    .search-button {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .search-button:hover {
+      background: rgba(255, 255, 255, 0.09);
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+
+    .control,
+    .print-button {
+      height: 40px;
+      padding: 0 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.055);
+      font-size: 12px;
+      font-weight: 680;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: border-color 130ms ease, background 130ms ease, transform 130ms ease;
+    }
+
+    .control.icon-only {
+      width: 40px;
+      padding: 0;
+      font-size: 18px;
+    }
+
+    .control:hover,
+    .print-button:hover {
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .control:active,
+    .print-button:active {
+      transform: translateY(1px);
+    }
+
+    .control[aria-pressed="true"] {
+      border-color: var(--accent);
+      background: rgba(101, 200, 255, 0.13);
+      color: #cbeeff;
+    }
+
+    .print-button {
+      border-color: #4aaee6;
+      background: #2795d1;
+      color: #06131a;
+    }
+
+    .print-button:hover {
+      border-color: #7bd2ff;
+      background: #64c9ff;
+    }
+
+    .map-stage {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(47, 72, 89, 0.26), transparent 46%),
+        var(--canvas);
+    }
+
+    #city-map {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+
+    #city-map.dragging {
+      cursor: grabbing;
+    }
+
+    .building-shape {
+      stroke: rgba(0, 0, 0, 0.42);
+      stroke-width: 1.15;
+      vector-effect: non-scaling-stroke;
+      transition: fill 160ms ease, opacity 100ms ease, stroke 100ms ease;
+    }
+
+    .building {
+      cursor: pointer;
+      outline: none;
+    }
+
+    #city-map:not(.has-selection) .building:hover .building-shape {
+      fill: var(--hover-fill, #fff) !important;
+    }
+
+    .building:focus-visible .building-shape {
+      stroke: rgba(255, 255, 255, 0.88);
+      stroke-width: 2;
+      stroke-dasharray: 5 3;
+    }
+
+    .building.is-selected .building-shape {
+      stroke: var(--selection-stroke, #fff);
+      stroke-width: 4.5;
+      stroke-opacity: 1;
+      stroke-dasharray: none;
+    }
+
+    .building.is-dimmed {
+      opacity: 0.16;
+    }
+
+    #city-map.highlight-no-road .building[data-road-independent="true"] .building-shape {
+      fill: var(--no-road) !important;
+    }
+
+    #city-map.highlight-no-road:not(.has-selection) .building[data-road-independent="true"]:hover .building-shape {
+      fill: var(--no-road-hover) !important;
+    }
+
+    #city-map.highlight-no-road .building.is-selected[data-road-independent="true"] .building-shape {
+      stroke: var(--no-road-selected);
+    }
+
+    #city-map.highlight-no-road .building[data-road-independent="true"] .building-label {
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.48);
+    }
+
+    .building-label-box {
+      pointer-events: none;
+    }
+
+    .building-label {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 1px;
+      color: #071018;
+      font-size: 1px;
+      font-weight: 680;
+      line-height: 1.12;
+      overflow-wrap: anywhere;
+      text-align: center;
+      text-wrap: balance;
+      pointer-events: none;
+    }
+
+    .building-label.light-text {
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.42);
+    }
+
+    .building-label .dimensions {
+      display: block;
+      margin-top: 0.22em;
+      font-size: 0.82em;
+      font-weight: 760;
+      opacity: 0.78;
+    }
+
+    .floating-panel {
+      position: absolute;
+      z-index: 10;
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .legend {
+      bottom: 16px;
+      left: 16px;
+      width: min(600px, calc(100% - 32px));
+      padding: 10px 12px;
+    }
+
+    .legend-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 7px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .legend-stats {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 560;
+      letter-spacing: normal;
+      text-align: right;
+      text-transform: none;
+    }
+
+    .road-toggle {
+      display: flex;
+      width: fit-content;
+      align-items: center;
+      gap: 7px;
+      margin: 0 0 8px;
+      color: #d9e0e6;
+      font-size: 10px;
+      font-weight: 650;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .road-toggle input {
+      position: relative;
+      width: 28px;
+      height: 16px;
+      flex: 0 0 auto;
+      margin: 0;
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 999px;
+      outline: none;
+      background: #303b46;
+      cursor: pointer;
+      transition: border-color 140ms ease, background 140ms ease;
+    }
+
+    .road-toggle input::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #dce4ea;
+      transition: transform 140ms ease, background 140ms ease;
+    }
+
+    .road-toggle input:checked {
+      border-color: #c084fc;
+      background: var(--no-road);
+    }
+
+    .road-toggle input:checked::after {
+      background: #fff;
+      transform: translateX(12px);
+    }
+
+    .road-toggle input:focus-visible {
+      box-shadow: 0 0 0 2px var(--focus);
+    }
+
+    .road-toggle-count {
+      color: var(--muted);
+      font-weight: 560;
+    }
+
+    .legend-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #ced6dd;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      border-radius: 2px;
+    }
+
+    .status {
+      top: 14px;
+      left: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 32px;
+      padding: 6px 10px;
+      color: #cbd4dc;
+      font-size: 10px;
+      pointer-events: none;
+    }
+
+    .status strong {
+      color: #fff;
+    }
+
+    .details {
+      top: 14px;
+      right: 14px;
+      width: min(295px, calc(100% - 28px));
+      padding: 12px;
+      opacity: 0;
+      transform: translateY(-5px);
+      pointer-events: none;
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    .details.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .details-category {
+      margin-bottom: 3px;
+      color: var(--accent);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .details-name {
+      margin: 0;
+      color: #fff;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+
+    .details-meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .help {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      z-index: 9;
+      color: #76838f;
+      font-size: 9px;
+      pointer-events: none;
+    }
+
+    .print-heading {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      .toolbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        min-height: 66px;
+        padding: 10px;
+      }
+
+      .search-wrap {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+
+      .controls .label-control {
+        display: none;
+      }
+
+      .subtitle,
+      .help {
+        display: none;
+      }
+
+      .legend {
+        max-height: 106px;
+        overflow: auto;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .toolbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .controls {
+        gap: 4px;
+      }
+
+      .control,
+      .print-button {
+        height: 36px;
+      }
+
+      .control.icon-only {
+        width: 36px;
+      }
+
+      .print-button {
+        width: 36px;
+        overflow: hidden;
+        padding: 0;
+        color: transparent;
+      }
+
+      .print-button::after {
+        content: "PDF";
+        display: block;
+        color: #06131a;
+        font-size: 9px;
+        font-weight: 850;
+      }
+
+      .details {
+        top: 52px;
+      }
+
+      .legend-title {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .legend-stats {
+        text-align: left;
+      }
+    }
+
+    @page {
+      size: landscape;
+      margin: 8mm;
+    }
+
+    @media print {
+      html,
+      body {
+        overflow: visible;
+        background: #fff;
+      }
+
+      .app {
+        display: block;
+        height: auto;
+      }
+
+      .toolbar,
+      .floating-panel,
+      .help {
+        display: none !important;
+      }
+
+      .print-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin: 0 0 4mm;
+        color: #111;
+      }
+
+      .print-heading h2 {
+        margin: 0;
+        font-size: 15pt;
+      }
+
+      .print-heading p {
+        margin: 0;
+        color: #555;
+        font-size: 8pt;
+      }
+
+      .map-stage {
+        width: 100%;
+        height: 174mm;
+        border: 0.25mm solid #777;
+        background: #091015 !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      .building-shape,
+      .building-label,
+      rect {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="toolbar">
+      <div class="identity">
+        <div class="eyebrow">City Design Map</div>
+        <h1 id="map-title">zpwd's City Design</h1>
+        <div class="subtitle" id="map-subtitle"></div>
+      </div>
+
+      <div class="search-wrap">
+        <label for="building-search" hidden>Find a building</label>
+        <input
+          class="search"
+          id="building-search"
+          type="search"
+          autocomplete="off"
+          placeholder="Find a building by name…"
+        >
+        <button class="search-button" id="search-button" type="button" title="Find next building" aria-label="Find next building">⌕</button>
+      </div>
+
+      <nav class="controls" aria-label="Map controls">
+        <button class="control icon-only" id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+        <button class="control icon-only" id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+        <button class="control label-control" id="fit-map" type="button" title="Fit the full map">Fit</button>
+        <button class="control" id="rotate-map" type="button" aria-pressed="true" aria-label="Current view: 45 degree side view. Switch to top view" title="Switch to top view">45° View</button>
+        <button class="print-button" id="print-map" type="button" title="Print or save this map as a PDF">Print / PDF</button>
+      </nav>
+    </header>
+
+    <section class="map-stage" aria-label="Interactive city map">
+      <div class="print-heading">
+        <h2>zpwd's City Design</h2>
+        <p id="print-subtitle"></p>
+      </div>
+      <svg class="highlight-no-road is-side-view" id="city-map" role="application" aria-label="Zoomable 2-D city map" tabindex="0">
+        <defs>
+          <pattern id="tile-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <rect width="48" height="48" fill="#fff9a9"></rect>
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#d9cd4f" stroke-width="1"></path>
+          </pattern>
+        </defs>
+        <g id="map-layer">
+          <g id="unlocked-layer"></g>
+          <g id="building-layer"></g>
+        </g>
+      </svg>
+
+      <div class="floating-panel status" aria-live="polite">
+        <span><strong id="zoom-status">100%</strong> zoom</span>
+        <span id="rotation-status">45° side view</span>
+        <span id="search-status"></span>
+      </div>
+
+      <aside class="floating-panel details" id="building-details" aria-live="polite">
+        <div class="details-category" id="details-category"></div>
+        <h2 class="details-name" id="details-name"></h2>
+        <div class="details-meta" id="details-meta"></div>
+      </aside>
+
+      <aside class="floating-panel legend" aria-label="Map color legend">
+        <div class="legend-title">
+          <span>Color key</span>
+          <span class="legend-stats" id="legend-stats"></span>
+        </div>
+        <label class="road-toggle" for="no-road-toggle">
+          <input id="no-road-toggle" type="checkbox" checked>
+          <span>Highlight no-road buildings in purple</span>
+          <span class="road-toggle-count" id="no-road-count"></span>
+        </label>
+        <div class="legend-items" id="legend-items"></div>
+      </aside>
+
+      <div class="help">Click to select/unselect · Scroll to zoom · Drag to pan · R switch view · 0 fit · P print</div>
+    </section>
+  </main>
+
+  <script id="city-map-data" type="application/json">{"sourceName":"zpwd-Plan-7252026.json","sourceFormat":"City planner export","title":"zpwd's City Design","subtitle":"VirtualFuture","buildings":[{"id":"placed-1","entityId":"H_VirtualFuture_Townhall","name":"Town Hall","type":"main_building","x":15,"y":17,"width":6,"length":7,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-2","entityId":"X_IronAge_Landmark2","name":"Lighthouse of Alexandria","type":"greatbuilding","x":10,"y":23,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":106},{"id":"placed-3","entityId":"X_BronzeAge_Landmark2","name":"Statue of Zeus","type":"greatbuilding","x":21,"y":18,"width":3,"length":2,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":130},{"id":"placed-4","entityId":"X_FutureEra_Landmark1","name":"The Arc","type":"greatbuilding","x":7,"y":47,"width":5,"length":7,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":201},{"id":"placed-5","entityId":"X_EarlyMiddleAge_Landmark2","name":"Cathedral of Aachen","type":"greatbuilding","x":0,"y":24,"width":6,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":177},{"id":"placed-6","entityId":"X_AllAge_EasterBonus4","name":"Observatory","type":"greatbuilding","x":21,"y":20,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":125},{"id":"placed-7","entityId":"M_AllAge_EasterBonus1Small","name":"Rogue Den","type":"military","x":15,"y":24,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":7},{"id":"placed-8","entityId":"X_LateMiddleAge_Landmark3","name":"Castel del Monte","type":"greatbuilding","x":10,"y":15,"width":5,"length":5,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":115},{"id":"placed-9","entityId":"X_AllAge_Expedition","name":"Temple of Relics","type":"greatbuilding","x":36,"y":24,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":112},{"id":"placed-10","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":16,"y":34,"width":1,"length":1,"era":"ProgressiveEra","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-11","entityId":"X_ProgressiveEra_Landmark1","name":"Alcatraz","type":"greatbuilding","x":31,"y":30,"width":7,"length":10,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":138},{"id":"placed-12","entityId":"W_MultiAge_COP24A9","name":"Yggdrasil - Lv. 9","type":"residential","x":10,"y":20,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-13","entityId":"W_MultiAge_HistoricalAlliesStarter24A","name":"Timeless Junction","type":"residential","x":8,"y":54,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-14","entityId":"X_ProgressiveEra_Landmark2","name":"Château Frontenac","type":"greatbuilding","x":1,"y":50,"width":6,"length":5,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":129},{"id":"placed-15","entityId":"X_OceanicFuture_Landmark3","name":"The Blue Galaxy","type":"greatbuilding","x":22,"y":30,"width":5,"length":7,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":109},{"id":"placed-16","entityId":"W_MultiAge_WIN24F4","name":"Didukh Dreams","type":"residential","x":25,"y":8,"width":1,"length":2,"era":"FutureEra","roadRequirementLevel":0,"requiresRoad":false,"level":13},{"id":"placed-17","entityId":"W_MultiAge_WIN24A13","name":"Yukitomo Imperial","type":"residential","x":24,"y":0,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-18","entityId":"X_ArcticFuture_Landmark2","name":"Arctic Orangery","type":"greatbuilding","x":8,"y":8,"width":7,"length":7,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":159},{"id":"placed-19","entityId":"W_MultiAge_GR25A2","name":"Neo Checkmate Square - Lv. 2","type":"production","x":24,"y":56,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-20","entityId":"W_MultiAge_WIN24A14","name":"Yukitomo Imperial Sky Residence","type":"residential","x":16,"y":4,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-21","entityId":"W_MultiAge_WILD25B1","name":"Koi Pond","type":"production","x":30,"y":52,"width":3,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-22","entityId":"X_VirtualFuture_Landmark1","name":"Terracotta Army","type":"greatbuilding","x":0,"y":46,"width":6,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":103},{"id":"placed-23","entityId":"X_ArcticFuture_Landmark3","name":"Seed Vault","type":"greatbuilding","x":28,"y":16,"width":6,"length":5,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":142},{"id":"placed-24","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":24,"y":16,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-25","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":24,"y":14,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-26","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":24,"y":15,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-27","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-28","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":26,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-29","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":22,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-30","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":23,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-31","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":24,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-32","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":26,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-33","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":27,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-34","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":28,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-35","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":13,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-36","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":9,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-37","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":31,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-38","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":12,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-39","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":10,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-40","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":11,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-41","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":30,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-42","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":23,"y":17,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-43","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":15,"y":14,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-44","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":15,"y":15,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-45","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":22,"y":17,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-46","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":15,"y":16,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-47","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":14,"y":23,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-48","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":14,"y":24,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-49","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":14,"y":25,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-50","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":14,"y":26,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-51","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":14,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-52","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":36,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-53","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":34,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-54","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":35,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-55","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-56","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":30,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-57","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":31,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-58","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":32,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-59","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":37,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-60","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":33,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-61","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":24,"y":17,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-62","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":27,"y":16,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-63","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":25,"y":16,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-64","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":26,"y":16,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-65","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":41,"y":20,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-66","entityId":"W_MultiAge_GR24B2","name":"Neo Sentinel Outpost - Lv. 2","type":"residential","x":7,"y":54,"width":1,"length":1,"era":"FutureEra","roadRequirementLevel":0,"requiresRoad":false,"level":13},{"id":"placed-67","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":40,"y":51,"width":1,"length":1,"era":"FutureEra","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-68","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":29,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-69","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":8,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-70","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-71","entityId":"W_MultiAge_WIN24F4","name":"Didukh Dreams","type":"residential","x":38,"y":16,"width":1,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":13},{"id":"placed-72","entityId":"W_MultiAge_PAT25A13","name":"Ascended Fortunate Celtic Goldsmith","type":"residential","x":24,"y":37,"width":5,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-73","entityId":"W_MultiAge_WIN24A13","name":"Yukitomo Imperial","type":"residential","x":20,"y":4,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-74","entityId":"W_MultiAge_ANNI25D1","name":"Aeternum Hydropool","type":"residential","x":39,"y":16,"width":5,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-75","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":28,"y":42,"width":1,"length":1,"era":"ContemporaryEra","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-76","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":41,"y":19,"width":1,"length":1,"era":"ContemporaryEra","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-77","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":25,"y":22,"width":1,"length":1,"era":"FutureEra","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-78","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":28,"y":41,"width":1,"length":1,"era":"ContemporaryEra","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-79","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":28,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-80","entityId":"W_MultiAge_GR25F2","name":"Neo Magnum Opus - Lv. 2","type":"residential","x":29,"y":37,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-81","entityId":"W_MultiAge_HIS25G3","name":"Oarcrest Fjord","type":"residential","x":7,"y":28,"width":5,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-82","entityId":"W_MultiAge_GR25F2","name":"Neo Magnum Opus - Lv. 2","type":"residential","x":42,"y":27,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-83","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":7,"y":27,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-84","entityId":"W_MultiAge_GR25F2","name":"Neo Magnum Opus - Lv. 2","type":"residential","x":16,"y":35,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-85","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":25,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-86","entityId":"W_MultiAge_HIS25G3","name":"Oarcrest Fjord","type":"residential","x":7,"y":32,"width":5,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-87","entityId":"W_MultiAge_ANNI25E1","name":"Chamber of Quantum Transcendence","type":"residential","x":40,"y":35,"width":4,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-88","entityId":"W_MultiAge_WILD21A8c","name":"Serene Moose Mountain","type":"residential","x":0,"y":32,"width":6,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-89","entityId":"W_MultiAge_SUM25E1","name":"Queen Anne's Legacy","type":"residential","x":38,"y":60,"width":6,"length":4,"era":"FutureEra","roadRequirementLevel":0,"requiresRoad":false,"level":13},{"id":"placed-90","entityId":"W_MultiAge_SUM20A12","name":"Pirate King's Conquest Villa","type":"residential","x":12,"y":52,"width":6,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-91","entityId":"W_MultiAge_GR25F2","name":"Neo Magnum Opus - Lv. 2","type":"residential","x":39,"y":21,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-92","entityId":"W_MultiAge_GR25F2","name":"Neo Magnum Opus - Lv. 2","type":"residential","x":38,"y":37,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-93","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":25,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-94","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":17,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-95","entityId":"W_MultiAge_HIS25G3","name":"Oarcrest Fjord","type":"residential","x":11,"y":36,"width":5,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-96","entityId":"W_MultiAge_HIS25A14","name":"Ascended Njord's Fjordstorm Harbor","type":"residential","x":40,"y":41,"width":4,"length":7,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-97","entityId":"W_MultiAge_GR25F2","name":"Neo Magnum Opus - Lv. 2","type":"residential","x":8,"y":15,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-98","entityId":"W_MultiAge_CARE25E2","name":"Garden of United Visions - Lv. 2","type":"residential","x":25,"y":10,"width":5,"length":6,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-99","entityId":"W_MultiAge_COP24C6","name":"Royal Bathhouse - Lv. 6","type":"residential","x":40,"y":48,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-100","entityId":"W_MultiAge_FALL25A11","name":"Breezemill Estate","type":"residential","x":12,"y":28,"width":5,"length":6,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-101","entityId":"W_MultiAge_Expedition16ePlatinum","name":"Platinum Terrace Farm","type":"production","x":16,"y":14,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-102","entityId":"W_MultiAge_GBG25D2","name":"Imperial Foundry - Lv. 2","type":"residential","x":30,"y":49,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-103","entityId":"W_MultiAge_WIN24A12","name":"Yukitomo Empire","type":"residential","x":15,"y":10,"width":4,"length":4,"era":"FutureEra","roadRequirementLevel":1,"requiresRoad":true,"level":13},{"id":"placed-104","entityId":"S_ArcticFuture_Street1","name":"Arctic Sideway","type":"street","x":6,"y":38,"width":1,"length":1,"era":"ArcticFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-105","entityId":"S_ArcticFuture_Street1","name":"Arctic Sideway","type":"street","x":6,"y":45,"width":1,"length":1,"era":"ArcticFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-106","entityId":"S_ArcticFuture_Street1","name":"Arctic Sideway","type":"street","x":6,"y":44,"width":1,"length":1,"era":"ArcticFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-107","entityId":"S_ArcticFuture_Street1","name":"Arctic Sideway","type":"street","x":6,"y":43,"width":1,"length":1,"era":"ArcticFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-108","entityId":"S_ArcticFuture_Street1","name":"Arctic Sideway","type":"street","x":6,"y":39,"width":1,"length":1,"era":"ArcticFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-109","entityId":"S_ArcticFuture_Street1","name":"Arctic Sideway","type":"street","x":6,"y":42,"width":1,"length":1,"era":"ArcticFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-110","entityId":"S_ArcticFuture_Street1","name":"Arctic Sideway","type":"street","x":6,"y":46,"width":1,"length":1,"era":"ArcticFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-111","entityId":"X_SpaceAgeAsteroidBelt_Landmark1","name":"Space Carrier","type":"greatbuilding","x":27,"y":30,"width":4,"length":7,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":101},{"id":"placed-112","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":6,"y":28,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-113","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":7,"y":40,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-114","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":11,"y":40,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-115","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":48,"y":14,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-116","entityId":"W_MultiAge_CARE24A11","name":"Eco Utopia","type":"residential","x":18,"y":37,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-117","entityId":"S_VirtualFuture_Street1","name":"Energy Preserving Road","type":"street","x":6,"y":40,"width":1,"length":1,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-118","entityId":"S_VirtualFuture_Street1","name":"Energy Preserving Road","type":"street","x":6,"y":41,"width":1,"length":1,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-119","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":48,"y":19,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-120","entityId":"W_MultiAge_GBG25H2","name":"Ironclad Provisions - Lv. 2","type":"residential","x":38,"y":35,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-121","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":6,"y":47,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-122","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":6,"y":48,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-123","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":8,"y":40,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-124","entityId":"W_MultiAge_Expedition16ePlatinum","name":"Platinum Terrace Farm","type":"production","x":6,"y":24,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-125","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":44,"y":19,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-126","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":12,"y":48,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-127","entityId":"W_MultiAge_HAL25E2","name":"Rattlebones Raveyard - Lv. 2","type":"residential","x":32,"y":47,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-128","entityId":"W_MultiAge_HAL25E2","name":"Rattlebones Raveyard - Lv. 2","type":"residential","x":36,"y":47,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-129","entityId":"W_MultiAge_HAL25E2","name":"Rattlebones Raveyard - Lv. 2","type":"residential","x":32,"y":21,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-130","entityId":"W_MultiAge_HAL25E2","name":"Rattlebones Raveyard - Lv. 2","type":"residential","x":24,"y":41,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-131","entityId":"W_MultiAge_HAL25A11","name":"Boo’loon Grand Gala","type":"residential","x":26,"y":24,"width":5,"length":5,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-132","entityId":"W_MultiAge_HAL17A4","name":"Obsidian Tower","type":"residential","x":39,"y":12,"width":5,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-133","entityId":"W_MultiAge_FALL25E2","name":"Ascended Azalea Arbor","type":"residential","x":22,"y":43,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-134","entityId":"W_MultiAge_Expedition16ePlatinum","name":"Platinum Terrace Farm","type":"production","x":20,"y":14,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-135","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":10,"y":40,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-136","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":9,"y":40,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-137","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":44,"y":14,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-138","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":49,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-139","entityId":"W_MultiAge_WIN24A14","name":"Yukitomo Imperial Sky Residence","type":"residential","x":16,"y":0,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-140","entityId":"W_MultiAge_GBG25H2","name":"Ironclad Provisions - Lv. 2","type":"residential","x":28,"y":62,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-141","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":54,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-142","entityId":"W_MultiAge_WIN25E1","name":"Penelope’s Northstar Nursery","type":"residential","x":31,"y":24,"width":5,"length":5,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-143","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":12,"y":57,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-144","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":28,"y":49,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-145","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":34,"y":50,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-146","entityId":"W_MultiAge_GBG25H2","name":"Ironclad Provisions - Lv. 2","type":"residential","x":15,"y":8,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-147","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":49,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-148","entityId":"W_MultiAge_WIN25B2","name":"Ascended Snowdrop Garden","type":"residential","x":9,"y":58,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-149","entityId":"W_MultiAge_GBG25G2","name":"Ironclad Depot - Lv. 2","type":"residential","x":30,"y":60,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-150","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":33,"y":52,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-151","entityId":"W_MultiAge_WIN24A13","name":"Yukitomo Imperial","type":"residential","x":20,"y":0,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-152","entityId":"W_MultiAge_GBG25H2","name":"Ironclad Provisions - Lv. 2","type":"residential","x":26,"y":22,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-153","entityId":"W_MultiAge_GBG25H2","name":"Ironclad Provisions - Lv. 2","type":"residential","x":39,"y":56,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-154","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":48,"y":9,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-155","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":32,"y":50,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-156","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":43,"y":51,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-157","entityId":"W_MultiAge_WILD24A15","name":"Radiant Flamingo Paradise","type":"residential","x":18,"y":59,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-158","entityId":"W_MultiAge_WILD22A12","name":"Majestic Animal Crossing","type":"residential","x":36,"y":18,"width":3,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-159","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":30,"y":40,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-160","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":48,"y":4,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-161","entityId":"W_MultiAge_GR24A2","name":"Neo Tactician's Tower - Lv. 2","type":"residential","x":24,"y":22,"width":1,"length":1,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":8},{"id":"placed-162","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":12,"y":59,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-163","entityId":"W_MultiAge_GBG25H2","name":"Ironclad Provisions - Lv. 2","type":"residential","x":12,"y":50,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-164","entityId":"W_MultiAge_WILD26C2","name":"Ascended Hippo Lagoon","type":"residential","x":22,"y":53,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-165","entityId":"W_MultiAge_HAL15A4","name":"Mad Scientist’s Dominion","type":"production","x":8,"y":64,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-166","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":44,"y":9,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-167","entityId":"W_MultiAge_WIN24B2","name":"Ascended Holly Hauler","type":"residential","x":18,"y":55,"width":2,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-168","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":12,"y":34,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-169","entityId":"W_MultiAge_PAT26E2","name":"McDough's Loaf House - Lv. 2","type":"residential","x":36,"y":10,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-170","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":0,"y":50,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-171","entityId":"W_MultiAge_WIN25B2","name":"Ascended Snowdrop Garden","type":"residential","x":36,"y":13,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-172","entityId":"W_MultiAge_GR25C10b","name":"Neo Lunara Emporium","type":"residential","x":44,"y":4,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-173","entityId":"X_OceanicFuture_Landmark2","name":"The Kraken","type":"greatbuilding","x":17,"y":30,"width":5,"length":5,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":173},{"id":"placed-174","entityId":"W_MultiAge_PAT26E2","name":"McDough's Loaf House - Lv. 2","type":"residential","x":38,"y":32,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-175","entityId":"W_MultiAge_GBG25H2","name":"Ironclad Provisions - Lv. 2","type":"residential","x":22,"y":45,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-176","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":16,"y":38,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-177","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":14,"y":34,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-178","entityId":"W_MultiAge_WIN25B2","name":"Ascended Snowdrop Garden","type":"residential","x":12,"y":61,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-179","entityId":"W_MultiAge_WILD26B2","name":"Ascended Savannah Camp","type":"residential","x":26,"y":62,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-180","entityId":"W_MultiAge_WILD21A8c","name":"Serene Moose Mountain","type":"residential","x":0,"y":28,"width":6,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-181","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":59,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-182","entityId":"X_VirtualFuture_Landmark2","name":"Himeji Castle","type":"greatbuilding","x":12,"y":40,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":126},{"id":"placed-183","entityId":"W_MultiAge_LTE24A11","name":"Eternal Market - Galactic Horizon","type":"residential","x":0,"y":58,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-184","entityId":"W_MultiAge_PAT25E2","name":"Clover Keep Ruin - Lv. 2","type":"residential","x":14,"y":57,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-185","entityId":"W_MultiAge_PAT25E2","name":"Clover Keep Ruin - Lv. 2","type":"residential","x":20,"y":55,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-186","entityId":"W_MultiAge_PAT26C1","name":"Ogham Stones","type":"residential","x":39,"y":54,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-187","entityId":"W_MultiAge_WIN25B2","name":"Ascended Snowdrop Garden","type":"residential","x":9,"y":61,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-188","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":27,"y":59,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-189","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":30,"y":54,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-190","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":31,"y":40,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-191","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":30,"y":57,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-192","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":33,"y":54,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-193","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":24,"y":4,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-194","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":41,"y":21,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-195","entityId":"W_MultiAge_PAT26B1","name":"Moorehead's Hatsmith","type":"residential","x":39,"y":10,"width":3,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-196","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":44,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-197","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":36,"y":54,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-198","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":24,"y":53,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-199","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":38,"y":50,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-200","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":18,"y":35,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-201","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":42,"y":51,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-202","entityId":"W_MultiAge_ANNI26E2","name":"Palace of Liquid Light - Lv. 2","type":"residential","x":0,"y":42,"width":6,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-203","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":20,"y":35,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-204","entityId":"W_MultiAge_PAT26B2","name":"Ascended Moorehead's Hatsmith","type":"residential","x":38,"y":30,"width":3,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-205","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":33,"y":57,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-206","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":27,"y":56,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-207","entityId":"W_MultiAge_ARCH19A14","name":"United World Expo","type":"residential","x":14,"y":46,"width":4,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-208","entityId":"W_MultiAge_ARCH19A14","name":"United World Expo","type":"residential","x":18,"y":49,"width":4,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-209","entityId":"W_MultiAge_ARCH19A14","name":"United World Expo","type":"residential","x":18,"y":43,"width":4,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-210","entityId":"W_MultiAge_ANNI26A10a","name":"Mk III Purified Anomaly Extractor","type":"residential","x":0,"y":39,"width":6,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-211","entityId":"W_MultiAge_ANNI26A10a","name":"Mk III Purified Anomaly Extractor","type":"residential","x":0,"y":36,"width":6,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-212","entityId":"W_MultiAge_PAT26B2","name":"Ascended Moorehead's Hatsmith","type":"residential","x":41,"y":30,"width":3,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-213","entityId":"W_MultiAge_ANNI26C2","name":"Ascended Meridian Sun Dial","type":"residential","x":6,"y":61,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-214","entityId":"W_MultiAge_ANNI26B2","name":"Ascended Iris Glass Gardens","type":"residential","x":42,"y":23,"width":2,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-215","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":54,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-216","entityId":"W_MultiAge_WILD26C2","name":"Ascended Hippo Lagoon","type":"residential","x":39,"y":19,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-217","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":10,"y":54,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-218","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":36,"y":50,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-219","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":59,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-220","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":36,"y":57,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-221","entityId":"W_MultiAge_GR26D2","name":"Neo Globe Fountain - Lv. 2","type":"production","x":27,"y":53,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-222","entityId":"W_MultiAge_ANNI25C2","name":"Ascended Octo Orb","type":"residential","x":8,"y":56,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-223","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":44,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-224","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":41,"y":51,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-225","entityId":"W_MultiAge_ANNI26C2","name":"Ascended Meridian Sun Dial","type":"residential","x":6,"y":58,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-226","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":39,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-227","entityId":"W_MultiAge_PAT26C1","name":"Ogham Stones","type":"residential","x":35,"y":52,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-228","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":39,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-229","entityId":"W_MultiAge_HIS26F2","name":"Huginn Tale Hut - Lv. 2","type":"residential","x":7,"y":36,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-230","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":29,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-231","entityId":"W_MultiAge_HIS26B1","name":"Mimir's Spring","type":"residential","x":34,"y":18,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-232","entityId":"W_MultiAge_HIS26B1","name":"Mimir's Spring","type":"residential","x":1,"y":55,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-233","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":34,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-234","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":29,"y":40,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-235","entityId":"W_MultiAge_HIS25A13","name":"Njord's Fjordstorm Harbor","type":"residential","x":36,"y":40,"width":4,"length":7,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-236","entityId":"W_MultiAge_HIS26A11","name":"Valkyrie Sanctum","type":"residential","x":7,"y":41,"width":5,"length":6,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-237","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":23,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-238","entityId":"S_PostModernEra_Street1","name":"Walkway","type":"street","x":21,"y":24,"width":1,"length":1,"era":"PostModernEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-239","entityId":"W_MultiAge_HIS25A13","name":"Njord's Fjordstorm Harbor","type":"residential","x":32,"y":40,"width":4,"length":7,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-240","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":34,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-241","entityId":"W_MultiAge_Expedition16ePlatinum","name":"Platinum Terrace Farm","type":"production","x":17,"y":24,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-242","entityId":"W_MultiAge_WILD24A15","name":"Radiant Flamingo Paradise","type":"residential","x":22,"y":59,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-243","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":17,"y":8,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-244","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":36,"y":16,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-245","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":28,"y":51,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-246","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":22,"y":51,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-247","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":22,"y":49,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-248","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":22,"y":47,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-249","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":8,"y":22,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-250","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":8,"y":20,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-251","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":8,"y":18,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-252","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":24,"y":6,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-253","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":42,"y":10,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-254","entityId":"W_MultiAge_GR25D2","name":"Neo Fashion Boutique - Lv. 2","type":"residential","x":12,"y":46,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-255","entityId":"W_MultiAge_GBG25G2","name":"Ironclad Depot - Lv. 2","type":"residential","x":34,"y":60,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-256","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":29,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-257","entityId":"W_MultiAge_HIS26E2","name":"Ascended Dreki Totem","type":"residential","x":15,"y":61,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-258","entityId":"W_MultiAge_HIS26E2","name":"Ascended Dreki Totem","type":"residential","x":41,"y":32,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-259","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":29,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-260","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":10,"y":56,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-261","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":39,"y":52,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-262","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":39,"y":58,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-263","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":37,"y":52,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-264","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":44,"y":24,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-265","entityId":"W_MultiAge_GR25D1","name":"Neo Fashion Boutique - Lv. 1","type":"residential","x":34,"y":16,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-266","entityId":"W_MultiAge_Expedition22","name":"Forgotten Temple - Active","type":"decoration","x":3,"y":55,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-267","entityId":"W_MultiAge_HIS26C2","name":"Ascended Freki's Lair","type":"residential","x":42,"y":19,"width":2,"length":4,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-268","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":26,"y":59,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-269","entityId":"W_MultiAge_GBG2023A","name":"Tourney Grounds - Active","type":"decoration","x":24,"y":50,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-270","entityId":"W_MultiAge_GBG2023A","name":"Tourney Grounds - Active","type":"decoration","x":28,"y":21,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-271","entityId":"W_MultiAge_GBG2023A","name":"Tourney Grounds - Active","type":"decoration","x":24,"y":47,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-272","entityId":"W_MultiAge_GBG2023A","name":"Tourney Grounds - Active","type":"decoration","x":24,"y":44,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-273","entityId":"W_MultiAge_GBG2023A","name":"Tourney Grounds - Active","type":"decoration","x":28,"y":43,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-274","entityId":"W_MultiAge_GBG2023A","name":"Tourney Grounds - Active","type":"decoration","x":28,"y":46,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-275","entityId":"W_MultiAge_ARTHUR26F1","name":"Merlin's Counsel","type":"residential","x":24,"y":18,"width":4,"length":4,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-276","entityId":"S_OceanicFuture_Street2","name":"Alloy Walkway","type":"street","x":6,"y":49,"width":1,"length":1,"era":"OceanicFuture","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-277","entityId":"W_MultiAge_WIN25F1","name":"Northwind Courier","type":"residential","x":13,"y":20,"width":2,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-278","entityId":"W_MultiAge_ARTHUR26E1","name":"The True King's Excalibur","type":"residential","x":19,"y":8,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-279","entityId":"W_MultiAge_ARTHUR26A10","name":"Pendragon's Throne of Camelot","type":"residential","x":26,"y":4,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-280","entityId":"W_MultiAge_ARTHUR26A10","name":"Pendragon's Throne of Camelot","type":"residential","x":32,"y":4,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-281","entityId":"W_MultiAge_ARTHUR26A10","name":"Pendragon's Throne of Camelot","type":"residential","x":38,"y":4,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-282","entityId":"W_MultiAge_ARTHUR26A10","name":"Pendragon's Throne of Camelot","type":"residential","x":30,"y":10,"width":6,"length":6,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-283","entityId":"S_FutureEra_Street1","name":"Solar Walkway","type":"street","x":32,"y":29,"width":1,"length":1,"era":"FutureEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-284","entityId":"S_FutureEra_Street1","name":"Solar Walkway","type":"street","x":35,"y":29,"width":1,"length":1,"era":"FutureEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-285","entityId":"S_FutureEra_Street1","name":"Solar Walkway","type":"street","x":33,"y":29,"width":1,"length":1,"era":"FutureEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-286","entityId":"S_FutureEra_Street1","name":"Solar Walkway","type":"street","x":34,"y":29,"width":1,"length":1,"era":"FutureEra","roadRequirementLevel":1,"requiresRoad":true},{"id":"placed-287","entityId":"W_MultiAge_Expedition16ePlatinum","name":"Platinum Terrace Farm","type":"production","x":22,"y":23,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-288","entityId":"W_MultiAge_Expedition16ePlatinum","name":"Platinum Terrace Farm","type":"production","x":22,"y":26,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16},{"id":"placed-289","entityId":"W_MultiAge_ARTHUR26B2","name":"Ascended Knights' Round Table","type":"residential","x":41,"y":57,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-290","entityId":"W_MultiAge_ARTHUR26C2","name":"Ascended Sword in the Lake","type":"residential","x":41,"y":54,"width":3,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-291","entityId":"W_MultiAge_GR25C10a","name":"Neo Solara Emporium","type":"residential","x":48,"y":24,"width":4,"length":5,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-292","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":0,"y":53,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-293","entityId":"W_MultiAge_GBG26B2","name":"Warforge Trench - Lv. 2","type":"residential","x":7,"y":55,"width":1,"length":3,"era":"VirtualFuture","roadRequirementLevel":0,"requiresRoad":false,"level":16},{"id":"placed-294","entityId":"M_AllAge_EasterBonus1Small","name":"Rogue Den","type":"military","x":15,"y":26,"width":2,"length":2,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":7},{"id":"placed-295","entityId":"W_MultiAge_Expedition16ePlatinum","name":"Platinum Terrace Farm","type":"production","x":17,"y":27,"width":4,"length":3,"era":"VirtualFuture","roadRequirementLevel":1,"requiresRoad":true,"level":16}],"unlockedAreas":[{"x":0,"y":24,"width":4,"length":4},{"x":0,"y":28,"width":4,"length":4},{"x":0,"y":32,"width":4,"length":4},{"x":0,"y":36,"width":4,"length":4},{"x":0,"y":40,"width":4,"length":4},{"x":0,"y":44,"width":4,"length":4},{"x":0,"y":48,"width":4,"length":4},{"x":0,"y":52,"width":4,"length":4},{"x":0,"y":56,"width":4,"length":4},{"x":0,"y":60,"width":4,"length":4},{"x":4,"y":24,"width":4,"length":4},{"x":4,"y":28,"width":4,"length":4},{"x":4,"y":32,"width":4,"length":4},{"x":4,"y":36,"width":4,"length":4},{"x":4,"y":40,"width":4,"length":4},{"x":4,"y":44,"width":4,"length":4},{"x":4,"y":48,"width":4,"length":4},{"x":4,"y":52,"width":4,"length":4},{"x":4,"y":56,"width":4,"length":4},{"x":4,"y":60,"width":4,"length":4},{"x":8,"y":8,"width":16,"length":16},{"x":8,"y":24,"width":4,"length":4},{"x":8,"y":28,"width":4,"length":4},{"x":8,"y":32,"width":4,"length":4},{"x":8,"y":36,"width":4,"length":4},{"x":8,"y":40,"width":4,"length":4},{"x":8,"y":44,"width":4,"length":4},{"x":8,"y":48,"width":4,"length":4},{"x":8,"y":52,"width":4,"length":4},{"x":8,"y":56,"width":4,"length":4},{"x":8,"y":60,"width":4,"length":4},{"x":8,"y":64,"width":4,"length":4},{"x":12,"y":24,"width":4,"length":4},{"x":12,"y":28,"width":4,"length":4},{"x":12,"y":32,"width":4,"length":4},{"x":12,"y":36,"width":4,"length":4},{"x":12,"y":40,"width":4,"length":4},{"x":12,"y":44,"width":4,"length":4},{"x":12,"y":48,"width":4,"length":4},{"x":12,"y":52,"width":4,"length":4},{"x":12,"y":56,"width":4,"length":4},{"x":12,"y":60,"width":4,"length":4},{"x":16,"y":0,"width":4,"length":4},{"x":16,"y":4,"width":4,"length":4},{"x":16,"y":24,"width":4,"length":4},{"x":16,"y":28,"width":4,"length":4},{"x":16,"y":32,"width":4,"length":4},{"x":16,"y":36,"width":4,"length":4},{"x":16,"y":40,"width":4,"length":4},{"x":16,"y":44,"width":4,"length":4},{"x":16,"y":48,"width":4,"length":4},{"x":16,"y":52,"width":4,"length":4},{"x":16,"y":56,"width":4,"length":4},{"x":16,"y":60,"width":4,"length":4},{"x":20,"y":0,"width":4,"length":4},{"x":20,"y":4,"width":4,"length":4},{"x":20,"y":24,"width":4,"length":4},{"x":20,"y":28,"width":4,"length":4},{"x":20,"y":32,"width":4,"length":4},{"x":20,"y":36,"width":4,"length":4},{"x":20,"y":40,"width":4,"length":4},{"x":20,"y":44,"width":4,"length":4},{"x":20,"y":48,"width":4,"length":4},{"x":20,"y":52,"width":4,"length":4},{"x":20,"y":56,"width":4,"length":4},{"x":20,"y":60,"width":4,"length":4},{"x":24,"y":0,"width":4,"length":4},{"x":24,"y":4,"width":4,"length":4},{"x":24,"y":8,"width":4,"length":4},{"x":24,"y":12,"width":4,"length":4},{"x":24,"y":16,"width":4,"length":4},{"x":24,"y":20,"width":4,"length":4},{"x":24,"y":24,"width":4,"length":4},{"x":24,"y":28,"width":4,"length":4},{"x":24,"y":32,"width":4,"length":4},{"x":24,"y":36,"width":4,"length":4},{"x":24,"y":40,"width":4,"length":4},{"x":24,"y":44,"width":4,"length":4},{"x":24,"y":48,"width":4,"length":4},{"x":24,"y":52,"width":4,"length":4},{"x":24,"y":56,"width":4,"length":4},{"x":24,"y":60,"width":4,"length":4},{"x":28,"y":4,"width":4,"length":4},{"x":28,"y":8,"width":4,"length":4},{"x":28,"y":12,"width":4,"length":4},{"x":28,"y":16,"width":4,"length":4},{"x":28,"y":20,"width":4,"length":4},{"x":28,"y":24,"width":4,"length":4},{"x":28,"y":28,"width":4,"length":4},{"x":28,"y":32,"width":4,"length":4},{"x":28,"y":36,"width":4,"length":4},{"x":28,"y":40,"width":4,"length":4},{"x":28,"y":44,"width":4,"length":4},{"x":28,"y":48,"width":4,"length":4},{"x":28,"y":52,"width":4,"length":4},{"x":28,"y":56,"width":4,"length":4},{"x":28,"y":60,"width":4,"length":4},{"x":32,"y":4,"width":4,"length":4},{"x":32,"y":8,"width":4,"length":4},{"x":32,"y":12,"width":4,"length":4},{"x":32,"y":16,"width":4,"length":4},{"x":32,"y":20,"width":4,"length":4},{"x":32,"y":24,"width":4,"length":4},{"x":32,"y":28,"width":4,"length":4},{"x":32,"y":32,"width":4,"length":4},{"x":32,"y":36,"width":4,"length":4},{"x":32,"y":40,"width":4,"length":4},{"x":32,"y":44,"width":4,"length":4},{"x":32,"y":48,"width":4,"length":4},{"x":32,"y":52,"width":4,"length":4},{"x":32,"y":56,"width":4,"length":4},{"x":32,"y":60,"width":4,"length":4},{"x":36,"y":4,"width":4,"length":4},{"x":36,"y":8,"width":4,"length":4},{"x":36,"y":12,"width":4,"length":4},{"x":36,"y":16,"width":4,"length":4},{"x":36,"y":20,"width":4,"length":4},{"x":36,"y":24,"width":4,"length":4},{"x":36,"y":28,"width":4,"length":4},{"x":36,"y":32,"width":4,"length":4},{"x":36,"y":36,"width":4,"length":4},{"x":36,"y":40,"width":4,"length":4},{"x":36,"y":44,"width":4,"length":4},{"x":36,"y":48,"width":4,"length":4},{"x":36,"y":52,"width":4,"length":4},{"x":36,"y":56,"width":4,"length":4},{"x":36,"y":60,"width":4,"length":4},{"x":40,"y":4,"width":4,"length":4},{"x":40,"y":8,"width":4,"length":4},{"x":40,"y":12,"width":4,"length":4},{"x":40,"y":16,"width":4,"length":4},{"x":40,"y":20,"width":4,"length":4},{"x":40,"y":24,"width":4,"length":4},{"x":40,"y":28,"width":4,"length":4},{"x":40,"y":32,"width":4,"length":4},{"x":40,"y":36,"width":4,"length":4},{"x":40,"y":40,"width":4,"length":4},{"x":40,"y":44,"width":4,"length":4},{"x":40,"y":48,"width":4,"length":4},{"x":40,"y":52,"width":4,"length":4},{"x":40,"y":56,"width":4,"length":4},{"x":40,"y":60,"width":4,"length":4},{"x":44,"y":4,"width":4,"length":4},{"x":44,"y":8,"width":4,"length":4},{"x":44,"y":12,"width":4,"length":4},{"x":44,"y":16,"width":4,"length":4},{"x":44,"y":20,"width":4,"length":4},{"x":44,"y":24,"width":4,"length":4},{"x":44,"y":28,"width":4,"length":4},{"x":44,"y":32,"width":4,"length":4},{"x":44,"y":36,"width":4,"length":4},{"x":44,"y":40,"width":4,"length":4},{"x":44,"y":44,"width":4,"length":4},{"x":44,"y":48,"width":4,"length":4},{"x":44,"y":52,"width":4,"length":4},{"x":44,"y":56,"width":4,"length":4},{"x":44,"y":60,"width":4,"length":4},{"x":48,"y":4,"width":4,"length":4},{"x":48,"y":8,"width":4,"length":4},{"x":48,"y":12,"width":4,"length":4},{"x":48,"y":16,"width":4,"length":4},{"x":48,"y":20,"width":4,"length":4},{"x":48,"y":24,"width":4,"length":4},{"x":48,"y":28,"width":4,"length":4},{"x":48,"y":32,"width":4,"length":4},{"x":48,"y":36,"width":4,"length":4},{"x":48,"y":40,"width":4,"length":4},{"x":48,"y":44,"width":4,"length":4},{"x":48,"y":48,"width":4,"length":4},{"x":48,"y":52,"width":4,"length":4},{"x":48,"y":56,"width":4,"length":4},{"x":48,"y":60,"width":4,"length":4}],"warnings":[],"stats":{"buildingCount":221,"roadCount":74,"roadTileCount":74,"roadEntityCount":74,"idealRoadTileCount":91.5,"roadEfficiency":123.65,"unlockedTileCount":2992,"freeTileCount":5,"roadIndependentCount":177,"totalPlaced":295,"categoryCounts":{"decoration":7,"greatbuilding":16,"main_building":1,"military":2,"production":20,"residential":175,"street":74},"bounds":{"x":0,"y":0,"width":52,"length":68}}}</script>
+  <script src="./city-map.c56b0a5a0147.js"></script>
+</body>
+</html>
