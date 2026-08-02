@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
-    <script src="src/theme.js?v=20260721-2"></script>
-    <link rel="stylesheet" href="src/styles.css?v=20260721-2">
+    <script src="src/theme.js?v=20260721-3"></script>
+    <link rel="stylesheet" href="src/styles.css?v=20260721-3">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -50,6 +50,7 @@
               <li><strong>City age</strong> updates age-based goods and unit values.</li>
               <li><strong>Source category</strong> shows every reward building or only one event or game-mode group.</li>
               <li><strong>Search</strong> can find a building by its name or find buildings that produce fragments for a named reward.</li>
+              <li><strong>My City Map</strong> can read a city-map JSON file locally and show only rankable buildings currently placed in that city.</li>
             </ul>
           </div>
           <label class="is-hidden">
@@ -91,6 +92,25 @@
             </div>
             <small id="searchHint" class="selection-preview">Find a building by its name.</small>
           </fieldset>
+          <div class="city-map-control">
+            <h3>My City Map</h3>
+            <label>
+              Load city-map file
+              <input id="cityMapFile" type="file" aria-describedby="cityMapStatus">
+            </label>
+            <label>
+              Buildings shown
+              <select id="cityScopeSelect" disabled>
+                <option value="all">All rankable buildings</option>
+                <option value="city">Only my placed buildings</option>
+              </select>
+            </label>
+            <small id="cityMapStatus" class="city-map-status" role="status" aria-live="polite" data-status="ready">Your file stays in this browser and is not uploaded or saved.</small>
+            <div class="city-map-actions">
+              <button id="applyCityAgeButton" type="button" class="secondary-button" hidden></button>
+              <button id="clearCityMapButton" type="button" class="secondary-button" hidden>Clear city map</button>
+            </div>
+          </div>
           <div class="base-production-controls compact" id="baseProductionControls">
             <div class="info-heading">
               <h3>Base Production</h3>
@@ -294,6 +314,7 @@
                   <th><button class="sort-button" data-sort="score" type="button" id="scoreColumnLabel">Score</button></th>
                   <th><button class="sort-button" data-sort="efficiency" type="button" id="efficiencyColumnLabel">Efficiency</button></th>
                   <th><button class="sort-button" data-sort="area" type="button">Area</button></th>
+                  <th id="placedCountHeader" hidden>Placed</th>
                   <th>
                     <div class="column-info-heading">
                       <span>Strengths</span>
@@ -346,7 +367,7 @@
             </section>
             <section>
               <h2>What is included</h2>
-              <p>The dashboard compares reward-building definitions. It does not use how many copies you have placed in your city. Great Buildings, Quantum Incursions settlement buildings, and standard era buildings are intentionally left out.</p>
+              <p>The dashboard compares reward-building definitions. By default it does not use how many copies you have placed. Load a city-map file under My City Map to limit the view and see placed-copy counts. Great Buildings, Quantum Incursions settlement buildings, and standard era buildings are intentionally left out.</p>
               <p>Kit profiles compare expected daily output for seven utility-kit families. Fragments are converted using each kit recipe, supply rushes include their duration, and each family uses the building's best available production option.</p>
               <p>The Farming profiles are still being tuned, especially for goods and diamonds. Treat them as a helpful guide and adjust the custom weights when the defaults do not match your city.</p>
             </section>
@@ -363,9 +384,9 @@
     </aside>
 
     <script
-      src="src/bootstrap.js?v=20260721-2"
+      src="src/bootstrap.js?v=20260721-3"
       data-data-version="d2bf62a2d539"
-      data-app-version="20260721-2"
+      data-app-version="20260721-3"
     ></script>
   </body>
 </html>

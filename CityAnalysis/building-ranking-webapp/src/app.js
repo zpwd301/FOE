@@ -5,6 +5,7 @@ const MAX_STRENGTH_BADGES = 6;
 const SEARCH_MODE_BUILDING = "building";
 const SEARCH_MODE_FRAGMENT = "fragment";
 const { recordProducesSpecialGoods } = window.FOE_BUILDING_RANKING_STRENGTHS;
+const cityMapApi = window.FOE_BUILDING_RANKING_CITY_MAP;
 
 const PROFILE_CONFIG = {
   overallEfficiency: {
@@ -111,6 +112,7 @@ const state = {
   detailSort: { key: "score", dir: "desc" },
   suppressUrlUpdate: false,
   loadedAge: null,
+  cityMap: null,
   customWeights: {
     overall: {},
     fighting: {},
@@ -164,6 +166,11 @@ const el = {
   searchInput: document.getElementById("searchInput"),
   searchInputLabel: document.getElementById("searchInputLabel"),
   searchHint: document.getElementById("searchHint"),
+  cityMapFile: document.getElementById("cityMapFile"),
+  cityScopeSelect: document.getElementById("cityScopeSelect"),
+  cityMapStatus: document.getElementById("cityMapStatus"),
+  applyCityAgeButton: document.getElementById("applyCityAgeButton"),
+  clearCityMapButton: document.getElementById("clearCityMapButton"),
   shareButton: document.getElementById("shareButton"),
   settingsSummaryText: document.getElementById("settingsSummaryText"),
   baseProductionControls: document.getElementById("baseProductionControls"),
@@ -202,6 +209,7 @@ const el = {
   rankingDescription: document.getElementById("rankingDescription"),
   scoreColumnLabel: document.getElementById("scoreColumnLabel"),
   efficiencyColumnLabel: document.getElementById("efficiencyColumnLabel"),
+  placedCountHeader: document.getElementById("placedCountHeader"),
   activeFilters: document.getElementById("activeFilters"),
   resultMeta: document.getElementById("resultMeta"),
   summaryGrid: document.getElementById("summaryGrid"),
@@ -391,7 +399,120 @@ function controls() {
     maxArea: el.maxAreaFilter.value === "" ? null : numberValue(el.maxAreaFilter.value),
     noRoadOnly: el.noRoadFilter.checked,
     topN: el.topNSelect.value,
+    cityOnly: Boolean(state.cityMap) && el.cityScopeSelect.value === "city",
   };
+}
+
+function cityMapCount(entityId) {
+  return state.cityMap?.counts.get(entityId) || 0;
+}
+
+function cityMapMatchStats() {
+  if (!state.cityMap) return null;
+  const rankableIds = new Set(state.selectedAgeRows.map((record) => record.entityId));
+  let matchedTypes = 0;
+  let matchedCopies = 0;
+  for (const [entityId, count] of state.cityMap.counts) {
+    if (!rankableIds.has(entityId)) continue;
+    matchedTypes += 1;
+    matchedCopies += count;
+  }
+  return {
+    matchedTypes,
+    matchedCopies,
+    unmatchedEntries: Math.max(0, state.cityMap.totalEntries - matchedCopies),
+  };
+}
+
+function syncCityMapPresentation() {
+  if (!state.cityMap) {
+    el.cityScopeSelect.value = "all";
+    el.cityScopeSelect.disabled = true;
+    el.applyCityAgeButton.hidden = true;
+    el.clearCityMapButton.hidden = true;
+    el.cityMapStatus.dataset.status = "ready";
+    el.cityMapStatus.textContent = "Your file stays in this browser and is not uploaded or saved.";
+    return;
+  }
+
+  const stats = cityMapMatchStats();
+  const unmatchedText = stats.unmatchedEntries
+    ? ` ${stats.unmatchedEntries.toLocaleString()} map entries are outside this dashboard.`
+    : "";
+  el.cityMapStatus.dataset.status = stats.matchedTypes ? "loaded" : "warning";
+  el.cityMapStatus.textContent = `${state.cityMap.fileName}: ${stats.matchedTypes.toLocaleString()} rankable building types (${stats.matchedCopies.toLocaleString()} placed copies).${unmatchedText}`;
+  el.cityScopeSelect.disabled = false;
+  el.clearCityMapButton.hidden = false;
+
+  const detectedAge = state.cityMap.detectedAge;
+  const detectedAgeIsAvailable = DATA.ages.some((age) => age.key === detectedAge);
+  const offerDetectedAge = detectedAgeIsAvailable && detectedAge !== controls().age;
+  el.applyCityAgeButton.hidden = !offerDetectedAge;
+  if (offerDetectedAge) {
+    el.applyCityAgeButton.textContent = `Use detected age: ${ageLabel(detectedAge)}`;
+  }
+}
+
+async function loadCityMapFile(file) {
+  if (!file) return;
+  if (!cityMapApi) {
+    el.cityMapStatus.dataset.status = "error";
+    el.cityMapStatus.textContent = "The city-map reader did not load. Refresh the page and try again.";
+    return;
+  }
+  if (file.size > cityMapApi.MAX_FILE_BYTES) {
+    el.cityMapStatus.dataset.status = "error";
+    el.cityMapStatus.textContent = `This file is larger than ${Math.round(cityMapApi.MAX_FILE_BYTES / 1024 / 1024)} MB.`;
+    el.cityMapFile.value = "";
+    return;
+  }
+
+  el.cityMapFile.disabled = true;
+  el.cityMapFile.setAttribute("aria-busy", "true");
+  el.cityMapStatus.dataset.status = "loading";
+  el.cityMapStatus.textContent = "Reading the city map in this browser…";
+  try {
+    const payload = JSON.parse(await file.text());
+    state.cityMap = {
+      ...cityMapApi.summarizeCityMap(payload),
+      fileName: (file.name || "City map").slice(0, 120),
+    };
+    el.cityScopeSelect.value = "city";
+    renderImmediately();
+    const stats = cityMapMatchStats();
+    announce(`City map loaded. Showing ${stats.matchedTypes} rankable building types from ${stats.matchedCopies} placed copies.`);
+  } catch (_error) {
+    state.cityMap = null;
+    el.cityScopeSelect.value = "all";
+    el.cityScopeSelect.disabled = true;
+    el.applyCityAgeButton.hidden = true;
+    el.clearCityMapButton.hidden = true;
+    el.cityMapStatus.dataset.status = "error";
+    el.cityMapStatus.textContent = "This file is not a supported city-map JSON export.";
+    el.cityMapFile.value = "";
+    renderImmediately();
+    el.cityMapStatus.dataset.status = "error";
+    el.cityMapStatus.textContent = "This file is not a supported city-map JSON export.";
+    announce("The selected file could not be loaded as a city map.");
+  } finally {
+    el.cityMapFile.disabled = false;
+    el.cityMapFile.removeAttribute("aria-busy");
+  }
+}
+
+function clearCityMap() {
+  state.cityMap = null;
+  el.cityMapFile.value = "";
+  el.cityScopeSelect.value = "all";
+  renderImmediately();
+  announce("Loaded city map cleared. Showing all rankable buildings.");
+}
+
+async function applyDetectedCityAge() {
+  const detectedAge = state.cityMap?.detectedAge;
+  if (!DATA.ages.some((age) => age.key === detectedAge)) return;
+  el.ageSelect.value = detectedAge;
+  await changeAge();
 }
 
 function preferenceAllowlist() {
@@ -1083,6 +1204,7 @@ function filteredRows(rows) {
   const c = controls();
   const areaFiltersValid = !areaFilterValidation(c).message;
   return rows.filter((row) => {
+    if (c.cityOnly && !cityMapCount(row.record.entityId)) return false;
     if (c.category !== ALL_CATEGORIES && row.record.category !== c.category) return false;
     if (c.search && !recordMatchesSearch(row.record, c.search, c.searchMode)) return false;
     if (areaFiltersValid && c.minArea !== null && row.record.adjustedArea < c.minArea) return false;
@@ -1128,7 +1250,9 @@ function renderSummary(rows) {
   const filtered = filteredRows(rows);
   const top = filtered[0];
   el.summaryGrid.innerHTML = [
-    [kitProfile ? "Kit producers" : "Buildings", filtered.length.toLocaleString(), kitProfile
+    [c.cityOnly ? "City building types" : kitProfile ? "Kit producers" : "Buildings", filtered.length.toLocaleString(), c.cityOnly
+      ? "The number of rankable building types placed in your loaded city that remain after the current filters. Multiple copies count once here."
+      : kitProfile
       ? "The number of buildings with supported kit production left after your current search and filters."
       : "The number of buildings left after your current search and filters."],
     ["Top building", top ? top.record.name : "None", "The highest-ranked building among the current matches. Filters narrow the list but do not recalculate its rank."],
@@ -1150,7 +1274,7 @@ function renderSummary(rows) {
       <p id="summaryInfo${index}" class="summary-help info-text" hidden>${help}</p>
     </div>
   `).join("");
-  el.rankingSubtitle.textContent = `${DATA.ages.find((age) => age.key === c.age)?.label || c.age} · ${c.category}`;
+  el.rankingSubtitle.textContent = `${DATA.ages.find((age) => age.key === c.age)?.label || c.age} · ${c.category}${c.cityOnly ? " · Loaded city" : ""}`;
 }
 
 function renderTable(rows) {
@@ -1160,8 +1284,11 @@ function renderTable(rows) {
   const sorted = displayRows(rows);
   const limit = c.topN === "all" ? sorted.length : Number(c.topN);
   const visible = sorted.slice(0, limit);
+  el.placedCountHeader.hidden = !c.cityOnly;
   el.emptyState.textContent = c.searchMode === SEARCH_MODE_FRAGMENT && c.search
     ? `No buildings produce fragments matching "${c.search}". Try a shorter reward name.`
+    : c.cityOnly
+      ? "No buildings from the loaded city match the current filters."
     : isKitProfile()
       ? "No kit-producing buildings match the current filters."
       : "No buildings match the current filters.";
@@ -1198,6 +1325,7 @@ function renderTable(rows) {
         <td>${fmt(row.score)}</td>
         <td>${fmt(row.efficiency, 3)}</td>
         <td>${row.record.adjustedArea || ""}</td>
+        <td class="placed-count"${c.cityOnly ? "" : " hidden"}>${c.cityOnly ? cityMapCount(row.record.entityId).toLocaleString() : ""}</td>
         <td><div class="badges">${badges}</div></td>
         <td><button class="details-button" type="button">View</button></td>
       </tr>
@@ -1206,7 +1334,9 @@ function renderTable(rows) {
 }
 
 function renderBuildingList() {
+  const c = controls();
   el.buildingList.innerHTML = state.selectedAgeRows
+    .filter((record) => !c.cityOnly || cityMapCount(record.entityId))
     .map((record) => `<option value="${escapeHtml(record.name)}"></option>`)
     .join("");
 }
@@ -1229,6 +1359,7 @@ function filterChips(c) {
   const chips = [];
   const areaValidation = areaFilterValidation(c);
   if (PRESET_PROFILES_ENABLED && el.presetSelect.value) chips.push(`Preset: ${presetLabel(el.presetSelect.value)}`);
+  if (c.cityOnly) chips.push(`Loaded city: ${state.cityMap.fileName}`);
   if (c.search) chips.push(`${c.searchMode === SEARCH_MODE_FRAGMENT ? "Reward fragment" : "Building"}: ${el.searchInput.value.trim()}`);
   if (c.category !== ALL_CATEGORIES) chips.push(c.category);
   c.strengths.forEach((strength) => chips.push(`Strength: ${strengthFilterLabel(strength)}`));
@@ -1269,6 +1400,7 @@ function renderControlState(rows, visibleRows) {
   syncStrengthFilterSummary();
   syncLongValuePresentation();
   syncSearchModePresentation();
+  syncCityMapPresentation();
 
   el.baseProductionControls.hidden = !usesBaseProduction;
   el.focusControls.hidden = kitProfile;
@@ -1371,8 +1503,12 @@ function renderCustomWeights() {
 }
 
 function renderCompare() {
+  const c = controls();
   const names = [el.compareA.value.trim(), el.compareB.value.trim()];
-  const selected = names.map((name) => state.rows.find((row) => row.record.name.toLowerCase() === name.toLowerCase()));
+  const selected = names.map((name) => state.rows.find((row) => (
+    row.record.name.toLowerCase() === name.toLowerCase()
+      && (!c.cityOnly || cityMapCount(row.record.entityId))
+  )));
   if (!selected[0] && !selected[1]) {
     el.compareOutput.innerHTML = "";
     return;
@@ -1397,6 +1533,7 @@ function renderCompare() {
           <div><dt>Score</dt><dd>${fmt(row.score)}</dd></div>
           <div><dt>Efficiency</dt><dd>${fmt(row.efficiency, 3)}</dd></div>
           <div><dt>Area</dt><dd>${row.record.adjustedArea || ""}</dd></div>
+          ${c.cityOnly ? `<div><dt>Placed</dt><dd>${cityMapCount(row.record.entityId).toLocaleString()}</dd></div>` : ""}
         </dl>
         <div class="contributions">${strengths}</div>
       </div>
@@ -1876,6 +2013,9 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
       <td>${Math.abs(item.weight) > 1e-9 ? "Used" : "Not used"}</td>
     </tr>
   `).join("");
+  const placedStat = controls().cityOnly
+    ? `<div class="detail-stat"><span>Placed in loaded city</span><strong>${cityMapCount(row.record.entityId).toLocaleString()}</strong></div>`
+    : "";
   el.detailContent.innerHTML = `
     <h2 class="detail-title" id="detailTitle">${escapeHtml(row.record.name)}</h2>
     <p class="detail-subtitle">${escapeHtml(row.record.category)}</p>
@@ -1893,6 +2033,7 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
         <p id="adjustedAreaInfo" class="detail-stat-info info-text" hidden>${escapeHtml(adjustedAreaExplanation(row.record))}</p>
       </div>
       <div class="detail-stat"><span>Road connection</span><strong>${row.record.requiresRoad ? "Required" : "No"}</strong></div>
+      ${placedStat}
     </div>
     <h3>Summary</h3>
     <p class="detail-summary">${escapeHtml(explainRanking(row))}</p>
@@ -2005,6 +2146,7 @@ function resetDefaults() {
   el.categorySelect.value = ALL_CATEGORIES;
   el.searchModeSelect.value = SEARCH_MODE_BUILDING;
   el.searchInput.value = "";
+  el.cityScopeSelect.value = "all";
   el.qiRoleSelect.value = defaults.qiFighterRole;
   el.gbgGeFocus.value = defaults.fightingGbgGeFocus;
   el.redBlueFocus.value = defaults.fightingRedBlueFocus;
@@ -2294,6 +2436,18 @@ function init() {
   ].forEach((input) => input.addEventListener("change", renderImmediately));
 
   el.ageSelect.addEventListener("change", changeAge);
+
+  el.cityMapFile.addEventListener("change", () => {
+    loadCityMapFile(el.cityMapFile.files?.[0]);
+  });
+  el.cityScopeSelect.addEventListener("change", () => {
+    renderImmediately();
+    announce(el.cityScopeSelect.value === "city"
+      ? "Showing only rankable buildings placed in the loaded city."
+      : "Showing all rankable buildings.");
+  });
+  el.applyCityAgeButton.addEventListener("click", applyDetectedCityAge);
+  el.clearCityMapButton.addEventListener("click", clearCityMap);
 
   el.searchInput.addEventListener("input", () => scheduleRender(160));
 
