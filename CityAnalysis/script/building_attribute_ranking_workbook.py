@@ -1273,7 +1273,7 @@ def write_buildings_sheet(
                 if age_data_context
                 else record["available"]
             ),
-            building_category_label(str(record["entity_id"])),
+            building_category_label(str(record["entity_id"]), str(record.get("name", ""))),
             (
                 f"={age_data_lookup_formula(entity_id, age_data_context['environment_col'], age_data_context['max_row'], empty_text_formula)}"
                 if age_data_context
@@ -1587,7 +1587,11 @@ def write_overall_scores_sheet(
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
         sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
-        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(
+            row_idx,
+            7,
+            building_category_label(str(record["entity_id"]), str(record.get("name", ""))),
+        )
         sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
     for col_idx in range(1, 9):
@@ -1645,7 +1649,11 @@ def write_fighting_scores_sheet(
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
         sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
-        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(
+            row_idx,
+            7,
+            building_category_label(str(record["entity_id"]), str(record.get("name", ""))),
+        )
         sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
     for col_idx in range(1, 9):
@@ -2354,7 +2362,11 @@ def write_fp_goods_scores_sheet(
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
         sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
-        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(
+            row_idx,
+            7,
+            building_category_label(str(record["entity_id"]), str(record.get("name", ""))),
+        )
         sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
     for col_idx in range(1, 9):
@@ -2668,7 +2680,11 @@ def write_qi_scores_sheet(
         sheet.cell(row_idx, 4, f"={area_formula}")
         sheet.cell(row_idx, 5, f"=IF(D{row_idx}=0,0,B{row_idx}/D{row_idx})")
         sheet.cell(row_idx, 6, f'=IF(H{row_idx}=0,"",1+SUMPRODUCT(({efficiency_score_range}>E{row_idx})*({match_range}=1)))')
-        sheet.cell(row_idx, 7, building_category_label(str(record["entity_id"])))
+        sheet.cell(
+            row_idx,
+            7,
+            building_category_label(str(record["entity_id"]), str(record.get("name", ""))),
+        )
         sheet.cell(row_idx, 8, building_category_match_formula(f"G{row_idx}"))
 
     for col_idx in range(1, 9):
@@ -3009,6 +3025,7 @@ def build_workbook(reference_file: str, era: str, output_file: str, available_on
     entities = payload.get("CityEntities")
     if not isinstance(entities, dict):
         raise SystemExit(f"CityEntities not found in reference file: {reference_file}")
+    validate_building_category_corrections(entities)
 
     age_data_context: Optional[Dict[str, Any]] = None
     records_by_age: Dict[str, List[Dict[str, Any]]] = {}

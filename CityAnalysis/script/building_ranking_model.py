@@ -81,7 +81,7 @@ XLSX_MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 # Increment this version before each pushed code change to this workbook generator.
-WORKBOOK_VERSION = "1.0.50"
+WORKBOOK_VERSION = "1.0.51"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
@@ -112,6 +112,15 @@ BUILDING_CATEGORY_FILTER_CELL = "$B$5"
 BUILDING_CATEGORY_LIST_NAME = "BuildingCategoryList"
 ALL_BUILDING_CATEGORIES = "All Building Categories"
 CULTURAL_SETTLEMENT_REWARDS = "Cultural Settlement Rewards"
+CARE_2026_EVENT_REWARDS = "CARE 2026 Event Rewards"
+BUILDING_CATEGORY_CORRECTIONS = {
+    "azalea windmill": ("Azalea Windmill", CARE_2026_EVENT_REWARDS),
+    "bougainvillea windmill": ("Bougainvillea Windmill", CARE_2026_EVENT_REWARDS),
+    "flower trail": ("Flower Trail", CARE_2026_EVENT_REWARDS),
+    "olive trail": ("Olive Trail", CARE_2026_EVENT_REWARDS),
+    "rocky trail": ("Rocky Trail", CARE_2026_EVENT_REWARDS),
+    "wheat trail": ("Wheat Trail", CARE_2026_EVENT_REWARDS),
+}
 QI_FIGHTER_ROLE_CELL = "$B$10"
 FIGHTING_GBG_GE_FOCUS_CELL = "$B$13"
 FIGHTING_RED_BLUE_FOCUS_CELL = "$B$15"
@@ -530,7 +539,14 @@ def event_reward_category_label(entity_id: str) -> Optional[str]:
     return f"{abbreviation} {year} Event Rewards"
 
 
-def building_category_label(entity_id: str) -> str:
+def normalized_building_name(name: str) -> str:
+    return re.sub(r"\s+", " ", name).strip().casefold()
+
+
+def building_category_label(entity_id: str, name: str = "") -> str:
+    correction = BUILDING_CATEGORY_CORRECTIONS.get(normalized_building_name(name))
+    if correction:
+        return correction[1]
     if entity_id.startswith(GBG_REWARD_PREFIX):
         return "GBG Rewards"
     if entity_id.startswith(QI_REWARD_PREFIX):
@@ -542,6 +558,29 @@ def building_category_label(entity_id: str) -> str:
             return CULTURAL_SETTLEMENT_REWARDS
         return event_label
     return "Other Buildings"
+
+
+def validate_building_category_corrections(entities: Dict[str, Any]) -> None:
+    matches: Dict[str, List[str]] = {name_key: [] for name_key in BUILDING_CATEGORY_CORRECTIONS}
+    for entity_key, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        name_key = normalized_building_name(str(entity.get("name", "")))
+        if name_key in matches:
+            matches[name_key].append(str(entity.get("id") or entity_key))
+
+    problems: List[str] = []
+    for name_key, (display_name, expected_category) in BUILDING_CATEGORY_CORRECTIONS.items():
+        entity_ids = matches[name_key]
+        if not entity_ids:
+            problems.append(f"missing {display_name!r}")
+        elif len(entity_ids) > 1:
+            problems.append(f"ambiguous {display_name!r}: {', '.join(sorted(entity_ids))}")
+        elif building_category_label(entity_ids[0], display_name) != expected_category:
+            problems.append(f"could not assign {display_name!r} to {expected_category!r}")
+
+    if problems:
+        raise ValueError("Building category correction validation failed: " + "; ".join(problems))
 
 
 def building_category_sort_key(label: str) -> Tuple[int, int, str]:
@@ -560,7 +599,13 @@ def building_category_sort_key(label: str) -> Tuple[int, int, str]:
 
 
 def building_category_options(records: Sequence[Dict[str, Any]]) -> List[str]:
-    categories = {building_category_label(str(record.get("entity_id", ""))) for record in records}
+    categories = {
+        building_category_label(
+            str(record.get("entity_id", "")),
+            str(record.get("name", "")),
+        )
+        for record in records
+    }
     return [ALL_BUILDING_CATEGORIES, *sorted(categories, key=building_category_sort_key)]
 
 
@@ -3212,6 +3257,7 @@ SHARED_MODEL_NAMES = (
     "age_display_name",
     "building_category_label",
     "building_category_options",
+    "validate_building_category_corrections",
     "attr_label",
     "overall_ranking_attr_label",
     "attr_description",

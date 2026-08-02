@@ -187,7 +187,10 @@ def record_payload(record: Dict[str, Any]) -> Dict[str, Any]:
         "area": area,
         "adjustedArea": model.adjusted_area(record),
         "requiresRoad": model.require_road_connection_label(record) == "Y",
-        "category": model.building_category_label(str(record["entity_id"])),
+        "category": model.building_category_label(
+            str(record["entity_id"]),
+            str(record.get("name", "")),
+        ),
         "environmentEffect": record.get("environment_effect", ""),
         "rewardProduction": record.get("reward_production", ""),
         "attrs": {
@@ -363,6 +366,7 @@ def main() -> None:
     entities = payload.get("CityEntities")
     if not isinstance(entities, dict):
         raise SystemExit(f"CityEntities not found in {reference_file}")
+    model.validate_building_category_corrections(entities)
 
     records_by_age, attr_keys = model.build_age_records(entities, list(model.AGE_ORDER), False)
     category_records = []
