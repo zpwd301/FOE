@@ -21,6 +21,7 @@ from building_attribute_ranking_workbook import (
     collect_product,
     collect_reward,
     collect_resources,
+    collect_static_resources,
     component_reward_lookup,
     format_amount,
     is_regular_timed_factory,
@@ -42,12 +43,14 @@ from Blue_Galaxy_Collection_Recommendation_Report import (
     summarize_production_component,
 )
 
+POPULATION_FIELD = "Population Provided/Consumed"
 FIELDNAMES = [
     "Name",
     "Level",
     "Age",
     "Type",
     "Count",
+    POPULATION_FIELD,
     "Expected FP Per Collection",
     "Total Expected FP",
     "Expected Medals Per Collection",
@@ -68,6 +71,7 @@ FIELDNAMES = [
 NUMERIC_FIELDS = {
     "Level",
     "Count",
+    POPULATION_FIELD,
     "Expected FP Per Collection",
     "Total Expected FP",
     "Expected Medals Per Collection",
@@ -390,6 +394,13 @@ def production_summary(
     return " || ".join(summary_parts)
 
 
+def total_population_impact(entity_def: Dict[str, Any], era_name: str, count: int) -> float:
+    """Return signed population impact for all copies represented by a report row."""
+    attrs: Dict[str, float] = {}
+    collect_static_resources(attrs, entity_def, era_name)
+    return attrs.get("static_population", 0.0) * count
+
+
 def build_report_rows(
     counts: Dict[EntityKey, int],
     entity_defs: Dict[str, Dict[str, Any]],
@@ -403,6 +414,7 @@ def build_report_rows(
         age_code, era_name = AGE_BY_LEVEL.get(key.level, (f"L{key.level}", ""))
         entity_def = entity_defs.get(key.cityentity_id, {})
         name = str(entity_def.get("name", key.cityentity_id))
+        population_impact = total_population_impact(entity_def, era_name, count)
         options = production_options(entity_def, era_name)
         per_collection = best_totals(options)
         total = per_collection.scaled(count)
@@ -429,6 +441,7 @@ def build_report_rows(
                 "Age": age_code,
                 "Type": key.entity_type,
                 "Count": str(count),
+                POPULATION_FIELD: numeric(population_impact),
                 "Expected FP Per Collection": numeric(per_collection.fp),
                 "Total Expected FP": numeric(total.fp),
                 "Expected Medals Per Collection": numeric(per_collection.medals),
@@ -477,9 +490,11 @@ def write_excel(rows: Sequence[Dict[str, str]], output_path: Path, map_file: Pat
     workbook.create_sheet("Notes")
 
     totals = {field: sum(float(row[field] or 0) for row in rows) for field in FIELDNAMES if field.startswith("Total")}
+    net_population = sum(float(row[POPULATION_FIELD] or 0) for row in rows)
     summary_values = [
         ("Source", source_name),
         ("Placed building rows", len(rows)),
+        ("Net population provided/consumed", net_population),
         ("Total expected FP", totals["Total Expected FP"]),
         ("Total expected medals", totals["Total Expected Medals"]),
         ("Total expected goods", totals["Total Expected Goods"]),
@@ -496,7 +511,9 @@ def write_excel(rows: Sequence[Dict[str, str]], output_path: Path, map_file: Pat
         summary.cell(row_idx, 2, value)
         summary.cell(row_idx, 1).font = Font(bold=True, color=FONT_COLOR)
         if isinstance(value, (int, float)):
-            summary.cell(row_idx, 2).number_format = "#,##0.00"
+            summary.cell(row_idx, 2).number_format = (
+                "#,##0" if label == "Net population provided/consumed" else "#,##0.00"
+            )
     summary.column_dimensions["A"].width = 28
     summary.column_dimensions["B"].width = 24
     summary.sheet_view.showGridLines = False
@@ -515,9 +532,13 @@ def write_excel(rows: Sequence[Dict[str, str]], output_path: Path, map_file: Pat
     notes["A1"].fill = PatternFill("solid", fgColor=TITLE_FILL)
     notes["A3"] = f"Input file: {source_name}"
     notes["A4"] = f"Report generated: {generated_at}"
-    notes["A6"] = "Expected values use reward drop chances when available."
-    notes["A7"] = "When a building has multiple production options, each category column uses that building's best option for that category."
-    notes["A8"] = "Chain-piece bonuses are counted on the matching main chain building when a single main building is present."
+    notes["A6"] = (
+        "Population Provided/Consumed is the signed total across Count: positive values provide population; "
+        "negative values consume population."
+    )
+    notes["A7"] = "Expected values use reward drop chances when available."
+    notes["A8"] = "When a building has multiple production options, each category column uses that building's best option for that category."
+    notes["A9"] = "Chain-piece bonuses are counted on the matching main chain building when a single main building is present."
     notes.column_dimensions["A"].width = 120
     notes.sheet_view.showGridLines = False
     notes.sheet_properties.tabColor = "A6A6A6"
@@ -549,7 +570,7 @@ def apply_detail_styles(sheet, row_count: int) -> None:
                 wrap_text=header in {"Production Summary", "Unit Breakdown Per Collection"},
             )
             if header in NUMERIC_FIELDS:
-                cell.number_format = "#,##0.00"
+                cell.number_format = "#,##0" if header == POPULATION_FIELD else "#,##0.00"
         if row_idx <= 6:
             for col_idx in range(1, len(FIELDNAMES) + 1):
                 sheet.cell(row_idx, col_idx).fill = PatternFill("solid", fgColor=TOP_FILL)
@@ -559,6 +580,7 @@ def apply_detail_styles(sheet, row_count: int) -> None:
         "Age": 9,
         "Type": 18,
         "Count": 8,
+        POPULATION_FIELD: 24,
         "Unit Breakdown Per Collection": 28,
         "Entity ID": 38,
         "Production Summary": 110,
