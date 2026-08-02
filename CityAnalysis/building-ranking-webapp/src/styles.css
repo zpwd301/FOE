@@ -1488,8 +1488,8 @@ th:nth-child(4),
 td:nth-child(4),
 th:nth-child(5),
 td:nth-child(5),
-th:nth-child(6),
-td:nth-child(6) {
+th:nth-child(7),
+td:nth-child(7) {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -1499,8 +1499,14 @@ td:nth-child(2) {
   min-width: 230px;
 }
 
-th:nth-child(7),
-td:nth-child(7) {
+th:nth-child(6),
+td:nth-child(6) {
+  min-width: 125px;
+  white-space: nowrap;
+}
+
+th:nth-child(8),
+td:nth-child(8) {
   min-width: 240px;
 }
 

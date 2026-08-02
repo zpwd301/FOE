@@ -105,7 +105,7 @@ const state = {
   profile: "overallEfficiency",
   rows: [],
   selectedAgeRows: [],
-  activeDetailEntityId: null,
+  activeDetailRowKey: null,
   detailSelectedAttributeKey: null,
   detailReturnFocus: null,
   sort: { key: "profile", dir: "desc" },
@@ -209,6 +209,7 @@ const el = {
   rankingDescription: document.getElementById("rankingDescription"),
   scoreColumnLabel: document.getElementById("scoreColumnLabel"),
   efficiencyColumnLabel: document.getElementById("efficiencyColumnLabel"),
+  placedAgeHeader: document.getElementById("placedAgeHeader"),
   placedCountHeader: document.getElementById("placedCountHeader"),
   activeFilters: document.getElementById("activeFilters"),
   resultMeta: document.getElementById("resultMeta"),
@@ -403,13 +404,29 @@ function controls() {
   };
 }
 
-function cityMapCount(entityId) {
-  return state.cityMap?.counts.get(entityId) || 0;
+function placementAgeGroups(rankableEntityIds = null) {
+  if (!state.cityMap || !cityMapApi) return [];
+  return cityMapApi.placementAgeGroups(state.cityMap, DATA.ages, rankableEntityIds);
+}
+
+function placedCountForRow(row) {
+  return Number(row?.placedCount || 0);
+}
+
+function placedAgeLabel(row) {
+  return row?.placedAge ? ageLabel(row.placedAge) : "Unknown age";
+}
+
+function rowSelectionLabel(row) {
+  return controls().cityOnly
+    ? `${row.record.name} (${placedAgeLabel(row)})`
+    : row.record.name;
 }
 
 function cityMapMatchStats() {
   if (!state.cityMap) return null;
   const rankableIds = new Set(state.selectedAgeRows.map((record) => record.entityId));
+  const groups = placementAgeGroups(rankableIds);
   let matchedTypes = 0;
   let matchedCopies = 0;
   for (const [entityId, count] of state.cityMap.counts) {
@@ -420,6 +437,14 @@ function cityMapMatchStats() {
   return {
     matchedTypes,
     matchedCopies,
+    matchedAgeGroups: groups.length,
+    unknownAgeCopies: groups
+      .filter((group) => !group.age)
+      .reduce((sum, group) => sum + group.count, 0),
+    missingPlacedAgeValueCopies: groups
+      .filter((group) => group.age && !(DATA.recordsByAge[group.age] || [])
+        .some((record) => record.entityId === group.entityId))
+      .reduce((sum, group) => sum + group.count, 0),
     unmatchedEntries: Math.max(0, state.cityMap.totalEntries - matchedCopies),
   };
 }
@@ -439,8 +464,18 @@ function syncCityMapPresentation() {
   const unmatchedText = stats.unmatchedEntries
     ? ` ${stats.unmatchedEntries.toLocaleString()} map entries are outside this dashboard.`
     : "";
-  el.cityMapStatus.dataset.status = stats.matchedTypes ? "loaded" : "warning";
-  el.cityMapStatus.textContent = `${state.cityMap.fileName}: ${stats.matchedTypes.toLocaleString()} rankable building types (${stats.matchedCopies.toLocaleString()} placed copies).${unmatchedText}`;
+  const unknownAgeText = stats.unknownAgeCopies
+    ? ` ${stats.unknownAgeCopies.toLocaleString()} copies have no placement age and use the selected benchmark age.`
+    : "";
+  const missingValueText = stats.missingPlacedAgeValueCopies
+    ? ` ${stats.missingPlacedAgeValueCopies.toLocaleString()} copies have no matching age-specific ranking record and use benchmark values.`
+    : "";
+  el.cityMapStatus.dataset.status = stats.matchedTypes
+    && !stats.unknownAgeCopies
+    && !stats.missingPlacedAgeValueCopies
+    ? "loaded"
+    : "warning";
+  el.cityMapStatus.textContent = `${state.cityMap.fileName}: ${stats.matchedTypes.toLocaleString()} rankable building types across ${stats.matchedAgeGroups.toLocaleString()} placed-age groups (${stats.matchedCopies.toLocaleString()} copies). Values use each placement's age against the ${ageLabel(controls().age)} benchmark.${unknownAgeText}${missingValueText}${unmatchedText}`;
   el.cityScopeSelect.disabled = false;
   el.clearCityMapButton.hidden = false;
 
@@ -449,7 +484,7 @@ function syncCityMapPresentation() {
   const offerDetectedAge = detectedAgeIsAvailable && detectedAge !== controls().age;
   el.applyCityAgeButton.hidden = !offerDetectedAge;
   if (offerDetectedAge) {
-    el.applyCityAgeButton.textContent = `Use detected age: ${ageLabel(detectedAge)}`;
+    el.applyCityAgeButton.textContent = `Use town hall as benchmark: ${ageLabel(detectedAge)}`;
   }
 }
 
@@ -473,14 +508,21 @@ async function loadCityMapFile(file) {
   el.cityMapStatus.textContent = "Reading the city map in this browser…";
   try {
     const payload = JSON.parse(await file.text());
+    const summary = cityMapApi.summarizeCityMap(payload);
+    const placementAges = [...new Set(
+      cityMapApi.placementAgeGroups(summary, DATA.ages)
+        .map((group) => group.age)
+        .filter(Boolean)
+    )];
+    await Promise.all(placementAges.map((age) => window.FOE_LOAD_BUILDING_RANKING_AGE?.(age)));
     state.cityMap = {
-      ...cityMapApi.summarizeCityMap(payload),
+      ...summary,
       fileName: (file.name || "City map").slice(0, 120),
     };
     el.cityScopeSelect.value = "city";
     renderImmediately();
     const stats = cityMapMatchStats();
-    announce(`City map loaded. Showing ${stats.matchedTypes} rankable building types from ${stats.matchedCopies} placed copies.`);
+    announce(`City map loaded. Showing ${stats.matchedAgeGroups} building and placed-age groups from ${stats.matchedCopies} copies.`);
   } catch (_error) {
     state.cityMap = null;
     el.cityScopeSelect.value = "all";
@@ -1173,6 +1215,33 @@ function rowHasStrength(row, strength) {
   });
 }
 
+function scoredRow(record, stats, weights, c, config, extras = {}) {
+  const scored = scoreRecord(record, stats, weights, c);
+  const efficiency = record.adjustedArea ? scored.score / record.adjustedArea : 0;
+  return {
+    key: extras.key || record.entityId,
+    record,
+    score: scored.score,
+    efficiency,
+    rankValue: config.efficiency ? efficiency : scored.score,
+    contributions: scored.contributions,
+    totalWeight: scored.totalWeight,
+    badges: strengthBadges(record, scored.contributions),
+    ...extras,
+  };
+}
+
+function rankingOrder(left, right) {
+  return right.rankValue - left.rankValue || left.record.name.localeCompare(right.record.name);
+}
+
+function benchmarkRankFor(row, benchmarkRows) {
+  return 1 + benchmarkRows.filter((candidate) => (
+    candidate.rankValue > row.rankValue
+    || (candidate.rankValue === row.rankValue && candidate.record.name.localeCompare(row.record.name) < 0)
+  )).length;
+}
+
 function buildRows() {
   const c = controls();
   const config = PROFILE_CONFIG[state.profile];
@@ -1180,22 +1249,24 @@ function buildRows() {
   state.selectedAgeRows = records;
   const stats = computeStats(records, c);
   const weights = customizedWeightMap(config.weightProfile, c);
-  let rows = records.map((record) => {
-    const scored = scoreRecord(record, stats, weights, c);
-    const efficiency = record.adjustedArea ? scored.score / record.adjustedArea : 0;
-    return {
-      record,
-      score: scored.score,
-      efficiency,
-      rankValue: config.efficiency ? efficiency : scored.score,
-      contributions: scored.contributions,
-      totalWeight: scored.totalWeight,
-      badges: strengthBadges(record, scored.contributions),
-    };
-  });
-  if (isKitProfile()) rows = rows.filter((row) => recordHasKitProduction(row.record));
-  rows.sort((a, b) => b.rankValue - a.rankValue || a.record.name.localeCompare(b.record.name));
-  rows.forEach((row, idx) => { row.rank = idx + 1; });
+  let benchmarkRows = records.map((record) => scoredRow(record, stats, weights, c, config));
+  if (isKitProfile()) benchmarkRows = benchmarkRows.filter((row) => recordHasKitProduction(row.record));
+  benchmarkRows.sort(rankingOrder);
+  benchmarkRows.forEach((row, idx) => { row.rank = idx + 1; });
+
+  let rows = benchmarkRows;
+  if (c.cityOnly) {
+    rows = cityMapApi.resolvePlacementRecords(state.cityMap, DATA.ages, records, DATA.recordsByAge)
+      .map((group) => scoredRow(group.record, stats, weights, c, config, {
+        key: `${group.entityId}|${group.level ?? "unknown"}`,
+        placedAge: group.age,
+        placedCount: group.count,
+        usedBenchmarkFallback: group.usedBenchmarkFallback,
+      }));
+    if (isKitProfile()) rows = rows.filter((row) => recordHasKitProduction(row.record));
+    rows.forEach((row) => { row.rank = benchmarkRankFor(row, benchmarkRows); });
+    rows.sort(rankingOrder);
+  }
   state.rows = rows;
   return rows;
 }
@@ -1204,7 +1275,7 @@ function filteredRows(rows) {
   const c = controls();
   const areaFiltersValid = !areaFilterValidation(c).message;
   return rows.filter((row) => {
-    if (c.cityOnly && !cityMapCount(row.record.entityId)) return false;
+    if (c.cityOnly && !placedCountForRow(row)) return false;
     if (c.category !== ALL_CATEGORIES && row.record.category !== c.category) return false;
     if (c.search && !recordMatchesSearch(row.record, c.search, c.searchMode)) return false;
     if (areaFiltersValid && c.minArea !== null && row.record.adjustedArea < c.minArea) return false;
@@ -1250,8 +1321,8 @@ function renderSummary(rows) {
   const filtered = filteredRows(rows);
   const top = filtered[0];
   el.summaryGrid.innerHTML = [
-    [c.cityOnly ? "City building types" : kitProfile ? "Kit producers" : "Buildings", filtered.length.toLocaleString(), c.cityOnly
-      ? "The number of rankable building types placed in your loaded city that remain after the current filters. Multiple copies count once here."
+    [c.cityOnly ? "City building/age groups" : kitProfile ? "Kit producers" : "Buildings", filtered.length.toLocaleString(), c.cityOnly
+      ? "The number of rankable building and placement-age groups left after the current filters. Copies of one building at different ages appear as separate rows."
       : kitProfile
       ? "The number of buildings with supported kit production left after your current search and filters."
       : "The number of buildings left after your current search and filters."],
@@ -1274,7 +1345,8 @@ function renderSummary(rows) {
       <p id="summaryInfo${index}" class="summary-help info-text" hidden>${help}</p>
     </div>
   `).join("");
-  el.rankingSubtitle.textContent = `${DATA.ages.find((age) => age.key === c.age)?.label || c.age} · ${c.category}${c.cityOnly ? " · Loaded city" : ""}`;
+  const benchmarkAge = DATA.ages.find((age) => age.key === c.age)?.label || c.age;
+  el.rankingSubtitle.textContent = `${benchmarkAge}${c.cityOnly ? " benchmark · Actual placed ages" : ""} · ${c.category}`;
 }
 
 function renderTable(rows) {
@@ -1284,6 +1356,7 @@ function renderTable(rows) {
   const sorted = displayRows(rows);
   const limit = c.topN === "all" ? sorted.length : Number(c.topN);
   const visible = sorted.slice(0, limit);
+  el.placedAgeHeader.hidden = !c.cityOnly;
   el.placedCountHeader.hidden = !c.cityOnly;
   el.emptyState.textContent = c.searchMode === SEARCH_MODE_FRAGMENT && c.search
     ? `No buildings produce fragments matching "${c.search}". Try a shorter reward name.`
@@ -1315,7 +1388,7 @@ function renderTable(rows) {
       ? `<div class="fragment-search-match" title="${escapeHtml(fragmentMatchText)}"><strong>Fragment reward:</strong> ${visibleFragmentMatches}${additionalFragmentMatches}</div>`
       : "";
     return `
-      <tr data-entity-id="${row.record.entityId}">
+      <tr data-row-key="${escapeHtml(row.key)}">
         <td class="rank">${row.rank}</td>
         <td>
           <div class="building-name">${escapeHtml(row.record.name)}</div>
@@ -1325,7 +1398,8 @@ function renderTable(rows) {
         <td>${fmt(row.score)}</td>
         <td>${fmt(row.efficiency, 3)}</td>
         <td>${row.record.adjustedArea || ""}</td>
-        <td class="placed-count"${c.cityOnly ? "" : " hidden"}>${c.cityOnly ? cityMapCount(row.record.entityId).toLocaleString() : ""}</td>
+        <td class="placed-age"${c.cityOnly ? "" : " hidden"}>${c.cityOnly ? escapeHtml(placedAgeLabel(row)) : ""}</td>
+        <td class="placed-count"${c.cityOnly ? "" : " hidden"}>${c.cityOnly ? placedCountForRow(row).toLocaleString() : ""}</td>
         <td><div class="badges">${badges}</div></td>
         <td><button class="details-button" type="button">View</button></td>
       </tr>
@@ -1334,10 +1408,9 @@ function renderTable(rows) {
 }
 
 function renderBuildingList() {
-  const c = controls();
-  el.buildingList.innerHTML = state.selectedAgeRows
-    .filter((record) => !c.cityOnly || cityMapCount(record.entityId))
-    .map((record) => `<option value="${escapeHtml(record.name)}"></option>`)
+  const labels = [...new Set(state.rows.map(rowSelectionLabel))];
+  el.buildingList.innerHTML = labels
+    .map((label) => `<option value="${escapeHtml(label)}"></option>`)
     .join("");
 }
 
@@ -1359,7 +1432,10 @@ function filterChips(c) {
   const chips = [];
   const areaValidation = areaFilterValidation(c);
   if (PRESET_PROFILES_ENABLED && el.presetSelect.value) chips.push(`Preset: ${presetLabel(el.presetSelect.value)}`);
-  if (c.cityOnly) chips.push(`Loaded city: ${state.cityMap.fileName}`);
+  if (c.cityOnly) {
+    chips.push(`Loaded city: ${state.cityMap.fileName}`);
+    chips.push("Actual placed ages");
+  }
   if (c.search) chips.push(`${c.searchMode === SEARCH_MODE_FRAGMENT ? "Reward fragment" : "Building"}: ${el.searchInput.value.trim()}`);
   if (c.category !== ALL_CATEGORIES) chips.push(c.category);
   c.strengths.forEach((strength) => chips.push(`Strength: ${strengthFilterLabel(strength)}`));
@@ -1506,8 +1582,7 @@ function renderCompare() {
   const c = controls();
   const names = [el.compareA.value.trim(), el.compareB.value.trim()];
   const selected = names.map((name) => state.rows.find((row) => (
-    row.record.name.toLowerCase() === name.toLowerCase()
-      && (!c.cityOnly || cityMapCount(row.record.entityId))
+    rowSelectionLabel(row).toLowerCase() === name.toLowerCase()
   )));
   if (!selected[0] && !selected[1]) {
     el.compareOutput.innerHTML = "";
@@ -1533,7 +1608,10 @@ function renderCompare() {
           <div><dt>Score</dt><dd>${fmt(row.score)}</dd></div>
           <div><dt>Efficiency</dt><dd>${fmt(row.efficiency, 3)}</dd></div>
           <div><dt>Area</dt><dd>${row.record.adjustedArea || ""}</dd></div>
-          ${c.cityOnly ? `<div><dt>Placed</dt><dd>${cityMapCount(row.record.entityId).toLocaleString()}</dd></div>` : ""}
+          ${c.cityOnly ? `
+            <div><dt>Placed age</dt><dd>${escapeHtml(placedAgeLabel(row))}</dd></div>
+            <div><dt>Copies at this age</dt><dd>${placedCountForRow(row).toLocaleString()}</dd></div>
+          ` : ""}
         </dl>
         <div class="contributions">${strengths}</div>
       </div>
@@ -1882,7 +1960,12 @@ function buildReportText(row) {
     "FOE Building Ranking discrepancy report",
     `Building: ${row.record.name}`,
     `Entity ID: ${row.record.entityId}`,
-    `City age: ${DATA.ages.find((age) => age.key === controls().age)?.label || controls().age}`,
+    `Benchmark age: ${ageLabel(controls().age)}`,
+    ...(controls().cityOnly ? [
+      `Placed age: ${placedAgeLabel(row)}`,
+      `Copies at this age: ${placedCountForRow(row)}`,
+      `Value source: ${row.usedBenchmarkFallback ? `${ageLabel(controls().age)} benchmark fallback` : placedAgeLabel(row)}`,
+    ] : []),
     `Profile: ${PROFILE_CONFIG[state.profile].title}`,
     `Rank: ${row.rank}`,
     `Score: ${fmt(row.score)}`,
@@ -1979,15 +2062,15 @@ function trapDetailFocus(event) {
   }
 }
 
-function openDetail(entityId, focusClose = true, returnFocus = null) {
-  const row = state.rows.find((item) => item.record.entityId === entityId);
+function openDetail(rowKey, focusClose = true, returnFocus = null) {
+  const row = state.rows.find((item) => item.key === rowKey);
   if (!row) return;
   if (focusClose) {
     state.detailReturnFocus = returnFocus
       || (!el.detailDrawer.contains(document.activeElement) ? document.activeElement : state.detailReturnFocus);
   }
-  if (state.activeDetailEntityId !== entityId) state.detailSelectedAttributeKey = null;
-  state.activeDetailEntityId = entityId;
+  if (state.activeDetailRowKey !== rowKey) state.detailSelectedAttributeKey = null;
+  state.activeDetailRowKey = rowKey;
   const attrRows = attributeRowsFor(row);
   if (!attrRows.some((item) => item.key === state.detailSelectedAttributeKey)) {
     state.detailSelectedAttributeKey = attrRows[0]?.key || "";
@@ -2013,8 +2096,12 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
       <td>${Math.abs(item.weight) > 1e-9 ? "Used" : "Not used"}</td>
     </tr>
   `).join("");
-  const placedStat = controls().cityOnly
-    ? `<div class="detail-stat"><span>Placed in loaded city</span><strong>${cityMapCount(row.record.entityId).toLocaleString()}</strong></div>`
+  const placedStats = controls().cityOnly
+    ? `
+      <div class="detail-stat"><span>Placed age</span><strong>${escapeHtml(placedAgeLabel(row))}</strong></div>
+      <div class="detail-stat"><span>Copies at this age</span><strong>${placedCountForRow(row).toLocaleString()}</strong></div>
+      <div class="detail-stat"><span>Benchmark age</span><strong>${escapeHtml(ageLabel(controls().age))}</strong></div>
+    `
     : "";
   el.detailContent.innerHTML = `
     <h2 class="detail-title" id="detailTitle">${escapeHtml(row.record.name)}</h2>
@@ -2033,7 +2120,7 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
         <p id="adjustedAreaInfo" class="detail-stat-info info-text" hidden>${escapeHtml(adjustedAreaExplanation(row.record))}</p>
       </div>
       <div class="detail-stat"><span>Road connection</span><strong>${row.record.requiresRoad ? "Required" : "No"}</strong></div>
-      ${placedStat}
+      ${placedStats}
     </div>
     <h3>Summary</h3>
     <p class="detail-summary">${escapeHtml(explainRanking(row))}</p>
@@ -2082,7 +2169,7 @@ function openDetail(entityId, focusClose = true, returnFocus = null) {
       } else {
         state.detailSort = { key, dir: key === "attribute" ? "asc" : "desc" };
       }
-      openDetail(entityId, false);
+      openDetail(rowKey, false);
       el.detailContent.querySelector(`[data-detail-sort="${key}"]`)?.focus();
     });
   });
@@ -2099,7 +2186,7 @@ function closeDetail() {
   el.drawerBackdrop.hidden = true;
   document.body.classList.remove("drawer-open");
   setBackgroundInert(false);
-  state.activeDetailEntityId = null;
+  state.activeDetailRowKey = null;
   state.detailSelectedAttributeKey = null;
   state.detailReturnFocus = null;
   if (returnFocus?.isConnected) {
@@ -2142,11 +2229,11 @@ function scheduleRender(delay = 100, afterRender = null) {
 function resetDefaults() {
   const defaults = DATA.defaults;
   el.presetSelect.value = "";
-  el.ageSelect.value = DATA.metadata.defaultAge;
+  if (!state.cityMap) el.ageSelect.value = DATA.metadata.defaultAge;
   el.categorySelect.value = ALL_CATEGORIES;
   el.searchModeSelect.value = SEARCH_MODE_BUILDING;
   el.searchInput.value = "";
-  el.cityScopeSelect.value = "all";
+  if (!state.cityMap) el.cityScopeSelect.value = "all";
   el.qiRoleSelect.value = defaults.qiFighterRole;
   el.gbgGeFocus.value = defaults.fightingGbgGeFocus;
   el.redBlueFocus.value = defaults.fightingRedBlueFocus;
@@ -2569,10 +2656,10 @@ function init() {
   el.closeDrawer.addEventListener("click", closeDetail);
   el.drawerBackdrop.addEventListener("click", closeDetail);
   el.rankingBody.addEventListener("click", (event) => {
-    const row = event.target.closest("tr[data-entity-id]");
+    const row = event.target.closest("tr[data-row-key]");
     if (row) {
       const returnFocus = event.target.closest(".details-button") || row.querySelector(".details-button");
-      openDetail(row.dataset.entityId, true, returnFocus);
+      openDetail(row.dataset.rowKey, true, returnFocus);
     }
   });
   el.detailContent.addEventListener("click", async (event) => {
@@ -2591,7 +2678,7 @@ function init() {
 
     const button = event.target.closest("#copyReportButton");
     if (!button) return;
-    const row = state.rows.find((item) => item.record.entityId === state.activeDetailEntityId);
+    const row = state.rows.find((item) => item.key === state.activeDetailRowKey);
     if (!row) return;
     const reportText = buildReportText(row);
     const output = document.getElementById("reportOutput");

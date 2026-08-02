@@ -24,6 +24,12 @@
     return typeof value === "string" ? value.trim() : "";
   }
 
+  function entityLevel(entry) {
+    if (!isObject(entry)) return null;
+    const numeric = Number(entry.level);
+    return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+  }
+
   function townHallAge(entries) {
     for (const entry of entries) {
       const match = /^H_([^_]+)_Townhall$/i.exec(entityId(entry));
@@ -72,27 +78,91 @@
     if (!extracted.entries.length) throw new Error("The city map does not contain any entries.");
 
     const counts = new Map();
+    const countsByEntityLevel = new Map();
     for (const entry of extracted.entries) {
       const id = entityId(entry);
       if (!id) continue;
       counts.set(id, (counts.get(id) || 0) + 1);
+      const level = entityLevel(entry);
+      if (!countsByEntityLevel.has(id)) countsByEntityLevel.set(id, new Map());
+      const levelCounts = countsByEntityLevel.get(id);
+      levelCounts.set(level, (levelCounts.get(level) || 0) + 1);
     }
     if (!counts.size) throw new Error("The city map does not contain recognizable building IDs.");
 
+    const placementLevels = new Set();
+    let ageIdentifiedEntries = 0;
+    let uniqueEntityAgeGroups = 0;
+    for (const levelCounts of countsByEntityLevel.values()) {
+      uniqueEntityAgeGroups += levelCounts.size;
+      for (const [level, count] of levelCounts) {
+        if (level === null) continue;
+        placementLevels.add(level);
+        ageIdentifiedEntries += count;
+      }
+    }
+
     return {
       counts,
+      countsByEntityLevel,
       detectedAge: extracted.detectedAge,
       format: extracted.format,
       totalEntries: extracted.entries.length,
       identifiedEntries: Array.from(counts.values()).reduce((sum, count) => sum + count, 0),
+      ageIdentifiedEntries,
+      placementLevels: [...placementLevels].sort((left, right) => left - right),
       uniqueEntityIds: counts.size,
+      uniqueEntityAgeGroups,
     };
+  }
+
+  function placementAgeGroups(summary, ages, rankableEntityIds = null) {
+    if (!(summary?.countsByEntityLevel instanceof Map) || !Array.isArray(ages)) return [];
+    const groups = [];
+    for (const [id, levelCounts] of summary.countsByEntityLevel) {
+      if (rankableEntityIds instanceof Set && !rankableEntityIds.has(id)) continue;
+      for (const [level, count] of levelCounts) {
+        const age = Number.isInteger(level) ? String(ages[level]?.key || "") : "";
+        groups.push({ entityId: id, level, age, count });
+      }
+    }
+    groups.sort((left, right) => (
+      left.entityId.localeCompare(right.entityId)
+      || Number(left.level ?? Number.MAX_SAFE_INTEGER) - Number(right.level ?? Number.MAX_SAFE_INTEGER)
+    ));
+    return groups;
+  }
+
+  function resolvePlacementRecords(summary, ages, benchmarkRecords, recordsByAge = {}) {
+    if (!Array.isArray(benchmarkRecords)) return [];
+    const benchmarkById = new Map(benchmarkRecords.map((record) => [record.entityId, record]));
+    const recordsByAgeAndId = new Map();
+    const recordsForAge = (age) => {
+      if (!recordsByAgeAndId.has(age)) {
+        recordsByAgeAndId.set(
+          age,
+          new Map((recordsByAge[age] || []).map((record) => [record.entityId, record]))
+        );
+      }
+      return recordsByAgeAndId.get(age);
+    };
+    return placementAgeGroups(summary, ages, new Set(benchmarkById.keys())).map((group) => {
+      const placedRecord = group.age ? recordsForAge(group.age).get(group.entityId) : null;
+      return {
+        ...group,
+        record: placedRecord || benchmarkById.get(group.entityId),
+        usedBenchmarkFallback: !placedRecord,
+      };
+    });
   }
 
   return {
     MAX_FILE_BYTES,
     entityId,
+    entityLevel,
     extractCityMap,
+    placementAgeGroups,
+    resolvePlacementRecords,
     summarizeCityMap,
   };
 });

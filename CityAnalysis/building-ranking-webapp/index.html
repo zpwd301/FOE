@@ -6,7 +6,7 @@
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
     <script src="src/theme.js?v=20260721-3"></script>
-    <link rel="stylesheet" href="src/styles.css?v=20260721-3">
+    <link rel="stylesheet" href="src/styles.css?v=20260802-1">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -47,10 +47,10 @@
           <div id="citySetupInfo" class="section-note info-text" hidden>
             <p>Choose which buildings you want to compare.</p>
             <ul>
-              <li><strong>City age</strong> updates age-based goods and unit values.</li>
+              <li><strong>Ranking benchmark age</strong> defines the common comparison scale for scores and ranks.</li>
               <li><strong>Source category</strong> shows every reward building or only one event or game-mode group.</li>
               <li><strong>Search</strong> can find a building by its name or find buildings that produce fragments for a named reward.</li>
-              <li><strong>My City Map</strong> can read a city-map JSON file locally and show only rankable buildings currently placed in that city.</li>
+              <li><strong>My City Map</strong> can read a city-map JSON file locally. Each building uses its own placed age for raw values while the ranking benchmark stays common, and copies at different ages appear on separate rows.</li>
             </ul>
           </div>
           <label class="is-hidden">
@@ -67,7 +67,7 @@
             </select>
           </label>
           <label>
-            City age
+            Ranking benchmark age
             <select id="ageSelect"></select>
           </label>
           <label>
@@ -314,6 +314,7 @@
                   <th><button class="sort-button" data-sort="score" type="button" id="scoreColumnLabel">Score</button></th>
                   <th><button class="sort-button" data-sort="efficiency" type="button" id="efficiencyColumnLabel">Efficiency</button></th>
                   <th><button class="sort-button" data-sort="area" type="button">Area</button></th>
+                  <th id="placedAgeHeader" hidden>Placed age</th>
                   <th id="placedCountHeader" hidden>Placed</th>
                   <th>
                     <div class="column-info-heading">
@@ -367,7 +368,7 @@
             </section>
             <section>
               <h2>What is included</h2>
-              <p>The dashboard compares reward-building definitions. By default it does not use how many copies you have placed. Load a city-map file under My City Map to limit the view and see placed-copy counts. Great Buildings, Quantum Incursions settlement buildings, and standard era buildings are intentionally left out.</p>
+              <p>The dashboard compares reward-building definitions. By default it does not use how many copies you have placed. Load a city-map file under My City Map to use each copy's placed age, limit the view, and see placed-copy counts. Great Buildings, Quantum Incursions settlement buildings, and standard era buildings are intentionally left out.</p>
               <p>Kit profiles compare expected daily output for seven utility-kit families. Fragments are converted using each kit recipe, supply rushes include their duration, and each family uses the building's best available production option.</p>
               <p>The Farming profiles are still being tuned, especially for goods and diamonds. Treat them as a helpful guide and adjust the custom weights when the defaults do not match your city.</p>
             </section>
@@ -384,9 +385,9 @@
     </aside>
 
     <script
-      src="src/bootstrap.js?v=20260721-3"
+      src="src/bootstrap.js?v=20260802-3"
       data-data-version="d2bf62a2d539"
-      data-app-version="20260721-3"
+      data-app-version="20260802-3"
     ></script>
   </body>
 </html>
