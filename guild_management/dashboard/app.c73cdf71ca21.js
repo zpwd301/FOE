@@ -13,6 +13,7 @@
   let resizeFrame = 0;
 
   const asDate = (value) => new Date(`${value}T00:00:00Z`);
+  const asIsoDate = (value) => value.toISOString().slice(0, 10);
   const formatDate = (value, short = false) => (short ? shortDateFmt : dateFmt).format(asDate(value));
   const signed = (number) => `${number >= 0 ? "+" : "-"}${fmt.format(Math.abs(number))}`;
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -41,6 +42,17 @@
   const periodGoods = () => periodModel().goods;
   const totalSeries = () => periodModel().series;
   const ageRows = () => periodModel().ages;
+  const periodWindow = () => {
+    const end = asDate(data.dates.at(-1));
+    const requestedStart = new Date(end);
+    requestedStart.setUTCDate(requestedStart.getUTCDate() - (selectedDays - 1));
+    const firstAvailable = asDate(data.dates[0]);
+    const start = requestedStart < firstAvailable ? firstAvailable : requestedStart;
+    return { start: asIsoDate(start), end: asIsoDate(end), days: Math.round((end - start) / 86400000) + 1 };
+  };
+  const snapshotSummary = (series) => {
+    return `${series.length} daily ${series.length === 1 ? "snapshot" : "snapshots"} available`;
+  };
 
   function drawLineChart(svg, series, color, fill) {
     const rect = svg.getBoundingClientRect(); const width = Math.max(300, Math.round(rect.width)); const height = Math.max(130, Math.round(rect.height));
@@ -55,7 +67,7 @@
 
   function renderTrend() {
     const series = totalSeries(); const svg = $("#trend-chart"); const chart = drawLineChart(svg, series, "#9c7b35", "rgba(156,123,53,.13)"); const tooltip = $("#chart-tooltip");
-    $("#chart-start").textContent = formatDate(series[0].date, true); $("#chart-end").textContent = formatDate(series.at(-1).date, true); $("#trend-note").textContent = `${series.length} daily snapshots`;
+    $("#chart-start").textContent = formatDate(series[0].date, true); $("#chart-end").textContent = formatDate(series.at(-1).date, true); $("#trend-note").textContent = snapshotSummary(series);
     svg.onmousemove = (event) => { const bounds = svg.getBoundingClientRect(); const index = Math.round(((event.clientX - bounds.left) / bounds.width) * (series.length - 1)); const point = series[Math.max(0, Math.min(series.length - 1, index))]; tooltip.hidden = false; tooltip.textContent = `${formatDate(point.date, true)}  ${fmt.format(point.value)}`; tooltip.style.left = `${(chart.x(index) / chart.width) * 100}%`; tooltip.style.top = `${(chart.y(point.value) / chart.height) * 100}%`; };
     svg.onmouseleave = () => { tooltip.hidden = true; };
   }
@@ -83,7 +95,7 @@
     }
     const best = [...goods].sort((a, b) => b.delta - a.delta)[0]; const weakest = [...goods].sort((a, b) => a.delta - b.delta)[0]; const lowest = [...goods].sort((a, b) => a.current - b.current)[0];
     $("#insights").innerHTML = `<div class="insight"><strong class="${weakAge.delta >= 0 ? "positive" : "negative"}">${signed(weakAge.delta)}</strong><span>${escapeHtml(weakAge.age)} is the weakest age group.</span><span class="insight-tag">AGE MOVEMENT</span></div><div class="insight"><strong class="positive">${escapeHtml(best.name)}</strong><span>Largest gain: ${signed(best.delta)} goods.</span><span class="insight-tag">BEST CONTRIBUTOR</span></div><div class="insight"><strong class="negative">${escapeHtml(weakest.name)}</strong><span>Largest draw: ${signed(weakest.delta)} goods.</span><span class="insight-tag">REFILL PRIORITY</span></div>`;
-    $("#coverage-copy").textContent = `Showing ${series.length} days of available history, ${formatDate(series[0].date)} to ${formatDate(series.at(-1).date)}. Current lowest stock: ${lowest.name} at ${fmt.format(lowest.current)}.`;
+    $("#coverage-copy").textContent = `Available history: ${formatDate(series[0].date)} to ${formatDate(series.at(-1).date)}. ${snapshotSummary(series)} in the selected ${periodWindow().days}-day period. Current lowest stock: ${lowest.name} at ${fmt.format(lowest.current)}.`;
   }
 
   function renderAges() {
@@ -105,8 +117,8 @@
   }
 
   function render() {
-    const usable = Math.min(selectedDays, data.dates.length); document.querySelectorAll("[data-range]").forEach((button) => button.classList.toggle("active", Number(button.dataset.range) === selectedDays));
-    $("#trend-note").textContent = `${usable} daily snapshots`; renderOverview(); renderTrend(); renderAges(); renderGoods();
+    document.querySelectorAll("[data-range]").forEach((button) => button.classList.toggle("active", Number(button.dataset.range) === selectedDays));
+    renderOverview(); renderTrend(); renderAges(); renderGoods();
   }
 
   $("#as-of").textContent = `Data through ${formatDate(data.meta.latestDate)}`;
