@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent
 SITE_DIR = ROOT / "site"
 ASSET_SOURCE_DIR = SITE_DIR / "assets"
 DEFAULT_DATA_SOURCE = SITE_DIR / "data" / "treasury-data.js"
+DEFAULT_CONTRIBUTION_DATA_SOURCE = SITE_DIR / "data" / "contribution-data.js"
 DEFAULT_OUTPUT_DIR = ROOT / "dashboard"
 FINGERPRINT_LENGTH = 12
 MINIMUM_FONT_SIZE_PX = 12
@@ -216,11 +217,17 @@ def remove_stale_published_assets(output_dir: Path, current: set[Path]) -> None:
             candidate.unlink()
 
 
-def publish_assets(output_dir: Path, data_source: Path = DEFAULT_DATA_SOURCE) -> dict[str, Path]:
+def publish_assets(
+    output_dir: Path,
+    data_source: Path = DEFAULT_DATA_SOURCE,
+    contribution_data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOURCE,
+) -> dict[str, Path]:
     sources: dict[str, tuple[Path, str]] = {
         "styles": (ASSET_SOURCE_DIR / "styles.css", "styles"),
         "data": (data_source, "data"),
         "app": (ASSET_SOURCE_DIR / "app.js", "app"),
+        "contribution_data": (contribution_data_source, "contribution-data"),
+        "contributions_app": (ASSET_SOURCE_DIR / "contributions.js", "contributions"),
         "icon": (ASSET_SOURCE_DIR / "GOE.png", "GOE"),
     }
     for image_format in BANNER_FORMATS:
@@ -260,6 +267,34 @@ def load_treasury_summary(data_source: Path = DEFAULT_DATA_SOURCE) -> dict[str, 
             if critical_count == 0
             else f"{critical_count} tracked {'good needs' if critical_count == 1 else 'goods need'} attention."
         ),
+    }
+
+
+def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOURCE) -> dict[str, str]:
+    raw = read_text(data_source).strip()
+    prefix = "window.CONTRIBUTION_DATA = "
+    if not raw.startswith(prefix) or not raw.endswith(";"):
+        raise ValueError(f"{data_source} is not a CONTRIBUTION_DATA payload")
+    payload = json.loads(raw[len(prefix):-1])
+    positive_records = [record for record in payload["records"] if record[5] > 0]
+    total = sum(record[5] for record in positive_records)
+    direct = sum(record[5] for record in positive_records if record[6] == "Guild treasury donation")
+    first = dt.datetime.fromisoformat(payload["meta"]["firstTimestamp"])
+    latest = dt.datetime.fromisoformat(payload["meta"]["latestTimestamp"])
+    if first.date() == latest.date():
+        date_range = f"{first:%B} {first.day}, {first.year}"
+    elif first.year == latest.year and first.month == latest.month:
+        date_range = f"{first:%B} {first.day}–{latest.day}, {latest.year}"
+    elif first.year == latest.year:
+        date_range = f"{first:%B} {first.day}–{latest:%B} {latest.day}, {latest.year}"
+    else:
+        date_range = f"{first:%B} {first.day}, {first.year}–{latest:%B} {latest.day}, {latest.year}"
+    return {
+        "contribution_total": f"{total:,}",
+        "contribution_members": f"{len({record[1] for record in positive_records}):,}",
+        "contribution_building": f"{total - direct:,}",
+        "contribution_direct": f"{direct:,}",
+        "contribution_date_range": date_range,
     }
 
 
@@ -349,16 +384,38 @@ def page(
     )
 
 
+def redirect_page(*, target: str, styles_asset: str, icon_asset: str) -> str:
+    safe_target = html.escape(target, quote=True)
+    return (
+        "<!doctype html>\n<html lang=\"en\">\n  <head>\n"
+        "    <meta charset=\"utf-8\">\n"
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        f"    <meta http-equiv=\"refresh\" content=\"0; url={safe_target}\">\n"
+        f"    <link rel=\"canonical\" href=\"{safe_target}\">\n"
+        f"    <link rel=\"icon\" href=\"{html.escape(icon_asset, quote=True)}\">\n"
+        f"    <link rel=\"stylesheet\" href=\"{html.escape(styles_asset, quote=True)}\">\n"
+        "    <title>Member Contributions | GoE Guild Portal</title>\n"
+        "  </head>\n  <body>\n"
+        "    <main class=\"shell\"><h1>Member Contributions moved</h1>"
+        f"<p><a href=\"{safe_target}\">Continue to Member Contributions</a>.</p></main>\n"
+        f"    <script>window.location.replace(\"{safe_target}\" + window.location.search + window.location.hash);</script>\n"
+        "  </body>\n</html>\n"
+    )
+
+
 def publish_dashboard(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     data_source: Path = DEFAULT_DATA_SOURCE,
+    contribution_data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOURCE,
 ) -> dict[str, Path]:
     output_dir = output_dir.resolve()
     data_source = data_source.resolve()
+    contribution_data_source = contribution_data_source.resolve()
     resources = load_resources()
     validate_minimum_font_size()
-    assets = publish_assets(output_dir, data_source)
+    assets = publish_assets(output_dir, data_source, contribution_data_source)
     summary = load_treasury_summary(data_source)
+    contribution_summary = load_contribution_summary(contribution_data_source)
     base_template = read_text(SITE_DIR / "templates" / "base.html")
     styles_asset = f"/{assets['styles'].name}"
     icon_asset = f"/{assets['icon'].name}"
@@ -367,6 +424,7 @@ def publish_dashboard(
         read_text(SITE_DIR / "pages" / "home.html"),
         {
             **summary,
+            **contribution_summary,
             "resource_cards": resource_cards(resources, compact=True),
             "banner_jpg_asset": f"/{assets['banner_jpg_1956'].name}",
             "banner_jpg_srcset": ", ".join(
@@ -394,7 +452,10 @@ def publish_dashboard(
         ),
     )
 
-    treasury_content = read_text(SITE_DIR / "pages" / "treasury.html")
+    treasury_content = render(
+        read_text(SITE_DIR / "pages" / "treasury.html"),
+        contribution_summary,
+    )
     treasury_scripts = (
         f'    <script src="/{assets["data"].name}"></script>\n'
         f'    <script src="/{assets["app"].name}"></script>'
@@ -411,6 +472,37 @@ def publish_dashboard(
             styles_asset=styles_asset,
             icon_asset=icon_asset,
             scripts=treasury_scripts,
+        ),
+    )
+
+    contribution_content = read_text(SITE_DIR / "pages" / "contributions.html")
+    contribution_scripts = (
+        f'    <script src="/{assets["contribution_data"].name}"></script>\n'
+        f'    <script src="/{assets["contributions_app"].name}"></script>'
+    )
+    write_text(
+        output_dir / "treasury" / "contributions" / "index.html",
+        page(
+            base_template,
+            title="Member Contributions | GoE Guild Portal",
+            description=(
+                "Individual GoE guild goods contribution rankings, including "
+                "building production and direct treasury contributions."
+            ),
+            active_nav="treasury",
+            main_class="shell shell--treasury shell--contributions",
+            content=contribution_content,
+            styles_asset=styles_asset,
+            icon_asset=icon_asset,
+            scripts=contribution_scripts,
+        ),
+    )
+    write_text(
+        output_dir / "contributions" / "index.html",
+        redirect_page(
+            target="/treasury/contributions/",
+            styles_asset=styles_asset,
+            icon_asset=icon_asset,
         ),
     )
 
@@ -475,7 +567,7 @@ def publish_dashboard(
 def main() -> None:
     args = parse_args()
     assets = publish_dashboard(args.output_dir)
-    print("Dashboard pages built: /, /treasury/, /resources/")
+    print("Dashboard pages built: /, /treasury/, /treasury/contributions/, /resources/")
     print("Published assets: " + ", ".join(path.name for path in assets.values()))
 
 

@@ -1,15 +1,15 @@
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>Treasury</span></nav>
+      <nav class="treasury-sections" aria-label="Treasury sections"><a href="/treasury/" aria-current="page">Overview</a><a href="/treasury/contributions/"><span class="section-label-long">Member Contributions</span><span class="section-label-short">Contributions</span></a></nav>
       <section class="intro treasury-intro" id="treasury-dashboard" aria-labelledby="treasury-title">
         <div>
           <p class="eyebrow">Live operations</p>
-          <h1 id="treasury-title">Treasury</h1>
+          <h1 id="treasury-title">Treasury Overview</h1>
           <p class="intro-copy" id="coverage-copy"></p>
-          <p class="data-freshness" id="as-of"></p>
         </div>
         <div class="range-control" role="group" aria-label="Treasury analysis period">
-          <button type="button" data-range="7">7 days</button>
-          <button type="button" data-range="30">30 days</button>
-          <button type="button" data-range="90">3 months</button>
+          <button type="button" data-range="7" aria-pressed="false">7 days</button>
+          <button type="button" data-range="30" aria-pressed="false">30 days</button>
+          <button type="button" data-range="90" aria-pressed="false">3 months</button>
         </div>
       </section>
 
@@ -26,18 +26,28 @@
 
       <section class="content-grid">
         <article class="panel trend-panel">
-          <div class="panel-heading"><div><p class="eyebrow">Whole treasury</p><h2>Balance over time</h2></div><span class="panel-note" id="trend-note"></span></div>
-          <div class="chart-wrap"><svg id="trend-chart" role="img" aria-label="Treasury balance trend chart"></svg><div class="chart-tooltip" id="chart-tooltip" hidden></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">Treasury trend</p><h2>Balance over time</h2></div><span class="panel-note" id="trend-note"></span></div>
+          <div class="chart-wrap"><svg id="trend-chart" role="img" tabindex="0" aria-label="Treasury balance trend chart" aria-describedby="chart-summary"></svg><div class="chart-tooltip" id="chart-tooltip" hidden></div></div>
           <div class="chart-axis"><span id="chart-start"></span><span id="chart-end"></span></div>
+          <p class="chart-summary" id="chart-summary"></p>
         </article>
         <aside class="panel insights-panel">
-          <div class="panel-heading"><div><p class="eyebrow">Period highlights</p><h2>Where to look</h2></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">Period highlights</p><h2>Key movements</h2></div></div>
           <div id="insights" class="insights"></div>
         </aside>
       </section>
 
+      <section class="treasury-contribution-card" aria-labelledby="treasury-contribution-title">
+        <div class="treasury-contribution-card__copy">
+          <p class="eyebrow">Member contributions</p>
+          <h2 id="treasury-contribution-title"><strong>{{contribution_total}}</strong> goods contributed by {{contribution_members}} members</h2>
+          <p>{{contribution_date_range}} · {{contribution_direct}} contributed directly, with building production powering the rest.</p>
+        </div>
+        <a class="treasury-contribution-card__link" href="/treasury/contributions/">View contributions <span aria-hidden="true">&rarr;</span></a>
+      </section>
+
       <section class="panel ages-panel" aria-labelledby="age-title">
-        <div class="panel-heading"><div><p class="eyebrow">Drill down</p><h2 id="age-title">Age performance</h2></div><span class="panel-note">Select an age to see its five goods</span></div>
+        <div class="panel-heading age-panel-heading"><div><p class="eyebrow">Drill down</p><h2 id="age-title">Age performance</h2><p class="panel-explainer">Start with the age groups showing the largest declines.</p></div><div class="age-panel-actions"><span class="panel-note">Select an age to see its five goods</span><div class="age-view-control" role="group" aria-label="Age performance view"><button type="button" data-age-view="attention" class="active" aria-pressed="true">Needs attention</button><button type="button" data-age-view="all" aria-pressed="false">All ages</button></div></div></div>
         <div id="age-list" class="age-list"></div>
       </section>
 

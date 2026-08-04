@@ -7,29 +7,42 @@
         <div class="portal-hero__content">
           <p class="eyebrow">Guardians of Elysium</p>
           <h1 id="page-title">One guild.<br>One hub.<br>Everything <em>GoE.</em></h1>
-          <p class="hero-copy">Your command center for treasury, policies, announcements, and the tools that keep GoE running strong.</p>
-          <div class="hero-actions" aria-label="Featured destinations">
-            <a href="/treasury/"><strong>Treasury</strong><span>Track. Plan. Decide.</span></a>
-            <a href="/resources/guild-expedition-lottery-rules/"><strong>Policies</strong><span>Clear. Official. Up to date.</span></a>
-            <a href="/resources/"><strong>Resources</strong><span>Guides, references, and more.</span></a>
+          <p class="hero-copy">Your command center for treasury operations, member contributions, and the resources that keep GoE running strong.</p>
+          <div class="hero-actions" aria-label="Portal sections">
+            <div class="hero-destination">
+              <a class="hero-destination__parent" href="/treasury/"><strong>Treasury</strong><span>Balances, trends, and contribution insights.</span></a>
+              <div class="hero-destination__children" aria-label="Treasury pages"><a href="/treasury/">Overview</a><a href="/treasury/contributions/">Member contributions</a></div>
+            </div>
+            <div class="hero-destination">
+              <a class="hero-destination__parent" href="/resources/"><strong>Resources</strong><span>Policies, guides, and guild references.</span></a>
+              <div class="hero-destination__children" aria-label="Resource pages"><a href="/resources/">Resource library</a><a href="/resources/guild-expedition-lottery-rules/">Lottery rules</a></div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="home-section" aria-labelledby="operations-title">
+      <section class="home-section home-section--treasury" aria-labelledby="operations-title">
         <div class="section-heading">
           <div><p class="eyebrow">Live operations</p><h2 id="operations-title">Treasury at a glance</h2></div>
-          <a class="text-link" href="/treasury/">Open treasury <span aria-hidden="true">&rarr;</span></a>
+          <a class="text-link" href="/treasury/">Explore treasury <span aria-hidden="true">&rarr;</span></a>
         </div>
-        <a class="treasury-feature" href="/treasury/">
-          <span class="feature-kicker"><span class="live-dot" aria-hidden="true"></span> Data through {{treasury_as_of}}</span>
-          <strong>{{treasury_total}}</strong>
-          <span class="feature-label">goods currently tracked</span>
-          <span class="feature-status">{{treasury_status}}</span>
-        </a>
+        <div class="treasury-home-grid">
+          <a class="treasury-feature" href="/treasury/">
+            <span class="feature-kicker"><span class="live-dot" aria-hidden="true"></span> Overview · Data through {{treasury_as_of}}</span>
+            <strong>{{treasury_total}}</strong>
+            <span class="feature-label">goods in the treasury</span>
+            <span class="feature-status">{{treasury_status}}</span>
+          </a>
+          <a class="treasury-feature treasury-feature--contributions" href="/treasury/contributions/">
+            <span class="feature-kicker">Member contributions · {{contribution_date_range}}</span>
+            <strong>{{contribution_total}}</strong>
+            <span class="feature-label">goods contributed by {{contribution_members}} members</span>
+            <span class="feature-status">{{contribution_direct}} contributed directly, with building production powering the rest.</span>
+          </a>
+        </div>
       </section>
 
-      <section class="home-section" aria-labelledby="resources-title">
+      <section class="home-section home-section--resources" aria-labelledby="resources-title">
         <div class="section-heading">
           <div><p class="eyebrow">Guild library</p><h2 id="resources-title">Official resources</h2></div>
           <a class="text-link" href="/resources/">Browse all <span aria-hidden="true">&rarr;</span></a>

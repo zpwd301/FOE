@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Individual GoE guild goods contribution rankings, including building production and direct treasury contributions.">
+    <title>Member Contributions | GoE Guild Portal</title>
+    <link rel="icon" href="/GOE.cf564778dc8b.png">
+    <link rel="stylesheet" href="/styles.18b841db8537.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="GoE Guild Portal home">
+        <img class="guild-icon" src="/GOE.cf564778dc8b.png" alt="">
+        <span class="brand-copy"><strong>GoE</strong><span>Guild Portal</span></span>
+      </a>
+      <nav class="main-nav" aria-label="Primary navigation"><a href="/">Home</a><a href="/treasury/" aria-current="page">Treasury</a><a href="/resources/">Resources</a></nav>
+      <details class="mobile-nav">
+        <summary aria-label="Open navigation"><span aria-hidden="true"></span>Menu</summary>
+        <nav aria-label="Mobile navigation"><a href="/">Home</a><a href="/treasury/" aria-current="page">Treasury</a><a href="/resources/">Resources</a></nav>
+      </details>
+    </header>
+    <main class="shell shell--treasury shell--contributions" id="main-content">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><a href="/treasury/">Treasury</a><span aria-hidden="true">/</span><span>Member Contributions</span></nav>
+      <nav class="treasury-sections" aria-label="Treasury sections"><a href="/treasury/">Overview</a><a href="/treasury/contributions/" aria-current="page"><span class="section-label-long">Member Contributions</span><span class="section-label-short">Contributions</span></a></nav>
+
+      <section class="intro treasury-intro contribution-intro" aria-labelledby="production-title">
+        <div>
+          <p class="eyebrow">Guild treasury</p>
+          <h1 id="production-title">Member Contributions</h1>
+          <p class="intro-copy" id="production-coverage"></p>
+        </div>
+        <div class="range-control" role="group" aria-label="Contribution analysis period">
+          <button type="button" data-production-range="3" aria-pressed="false">3 days</button>
+          <button type="button" data-production-range="7" aria-pressed="false">7 days</button>
+          <button type="button" data-production-range="all" aria-pressed="false">All data</button>
+        </div>
+      </section>
+
+      <section class="metrics production-metrics" aria-label="Goods contribution summary">
+        <article class="metric-card"><span class="metric-label">Goods contributed</span><strong class="positive" id="production-total">-</strong><span class="metric-sub">building production and direct contributions</span></article>
+        <article class="metric-card"><span class="metric-label">Active contributors</span><strong id="producer-count">-</strong><span class="metric-sub">members contributing goods</span></article>
+        <article class="metric-card"><span class="metric-label">Daily contributions</span><strong id="daily-production">-</strong><span class="metric-sub">average during this period</span></article>
+        <article class="metric-card" id="leading-producer-card"><span class="metric-label">Leading contributor</span><strong id="leading-producer">-</strong><span class="metric-sub" id="leading-producer-total">-</span></article>
+      </section>
+
+      <section class="production-grid">
+        <article class="panel producer-panel" aria-labelledby="producer-title">
+          <div class="production-heading">
+            <div><p class="eyebrow">Celebrating contributions</p><h2 id="producer-title">Top 10 contributors</h2><p class="panel-explainer">A big thank-you to our leading contributors! Every contribution matters, and every member remains available through search.</p></div>
+            <label class="producer-search"><span>Find any member</span><input type="search" id="producer-search" placeholder="Search all contributors&hellip;"></label>
+          </div>
+          <div class="table-scroll">
+            <table class="producer-table table--interactive">
+              <caption class="sr-only">Top ten guild goods contributors and member search results</caption>
+              <thead><tr><th scope="col">Rank</th><th scope="col">Member</th><th scope="col">Goods contributed</th><th scope="col">Share</th><th scope="col">Records</th><th scope="col">Top era</th></tr></thead>
+              <tbody id="producer-rows"></tbody>
+            </table>
+          </div>
+          <p class="empty-state" id="producer-empty" hidden>No contributor matched that search yet. Try another spelling or a shorter name.</p>
+        </article>
+
+        <aside class="panel era-production-panel" aria-labelledby="era-production-title">
+          <div class="panel-heading"><div><p class="eyebrow">Contribution mix</p><h2 id="era-production-title">Top eras</h2><p class="panel-explainer">Where the guild&rsquo;s contributed goods came from.</p></div></div>
+          <ol class="era-production-list" id="era-production-list"></ol>
+        </aside>
+      </section>
+
+      <dialog class="producer-dialog" id="producer-dialog" aria-labelledby="producer-dialog-title">
+        <button class="dialog-close" type="button" aria-label="Close contributor details" title="Close" id="producer-dialog-close">&#215;</button>
+        <p class="eyebrow">Member contributions</p>
+        <h2 id="producer-dialog-title"></h2>
+        <p class="detail-summary" id="producer-dialog-period"></p>
+
+        <div class="producer-production-details" id="producer-production-details">
+          <div class="producer-dialog-metrics" aria-label="Member contribution summary">
+            <div><span>Goods contributed</span><strong class="positive" id="member-production-total">-</strong></div>
+            <div><span>Guild share</span><strong id="member-production-share">-</strong></div>
+            <div><span>Contribution records</span><strong id="member-production-records">-</strong></div>
+          </div>
+          <div class="producer-breakdowns">
+            <section aria-labelledby="member-goods-title"><h3 id="member-goods-title">Top goods</h3><ol class="production-breakdown" id="member-goods-list"></ol></section>
+            <section aria-labelledby="member-eras-title"><h3 id="member-eras-title">Contributions by era</h3><ol class="production-breakdown" id="member-eras-list"></ol></section>
+            <section aria-labelledby="member-sources-title"><h3 id="member-sources-title">Contribution sources</h3><ol class="production-breakdown" id="member-sources-list"></ol></section>
+          </div>
+
+          <section class="producer-validation" id="producer-validation" aria-labelledby="producer-validation-title">
+            <h3 id="producer-validation-title">View detailed records</h3>
+            <p>Members can view their own detailed record breakdown by entering their assigned passcode.</p>
+            <form id="producer-validation-form" novalidate>
+              <label for="producer-passcode">Assigned passcode</label>
+              <div><input type="password" id="producer-passcode" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-describedby="producer-passcode-help producer-passcode-error"><button type="submit">View details</button></div>
+              <small id="producer-passcode-help">Enter the passcode assigned to this member. Verification lasts for this browser session.</small>
+              <p class="validation-error" id="producer-passcode-error" role="alert" hidden>That passcode does not match this member.</p>
+            </form>
+          </section>
+
+          <div class="producer-protected-details" id="producer-protected-details" tabindex="-1" hidden>
+            <section class="producer-usage" id="producer-usage" aria-labelledby="producer-usage-title" hidden>
+              <div class="usage-summary"><div><p class="eyebrow">Guild operations</p><h3 id="producer-usage-title">Guild goods usage</h3><p>Shown separately and not deducted from contributions.</p></div><div><strong class="negative" id="member-usage-total">-</strong><span id="member-usage-count"></span></div></div>
+              <div class="usage-analysis">
+                <section aria-labelledby="usage-purpose-title"><h4 id="usage-purpose-title">By purpose</h4><ol class="usage-breakdown" id="member-usage-purpose-list"></ol></section>
+                <section aria-labelledby="usage-goods-title"><h4 id="usage-goods-title">Top goods used</h4><ol class="usage-breakdown" id="member-usage-goods-list"></ol></section>
+                <section aria-labelledby="usage-eras-title"><h4 id="usage-eras-title">Usage by era</h4><ol class="usage-breakdown" id="member-usage-era-list"></ol></section>
+              </div>
+            </section>
+            <p class="usage-empty" id="producer-usage-empty" role="status" hidden>No guild-goods usage was recorded for this member in the selected period.</p>
+
+            <section class="producer-records" aria-labelledby="producer-records-title">
+              <div class="record-section-heading"><h3 id="producer-records-title">Full contribution records</h3><span id="producer-record-count"></span></div>
+              <div class="table-scroll">
+                <table class="detail-record-table">
+                  <caption class="sr-only">Full goods contribution records for the selected member</caption>
+                  <thead><tr><th scope="col">Date &amp; time</th><th scope="col">Good</th><th scope="col">Era</th><th scope="col">Source</th><th scope="col">Amount</th></tr></thead>
+                  <tbody id="member-production-record-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+      </dialog>
+
+    </main>
+    <footer class="site-footer">
+      <span>Guardians of Elysium</span>
+      <span>Guild tools and official resources &middot; 2026</span>
+    </footer>
+    <script src="/contribution-data.a041db4c456f.js"></script>
+    <script src="/contributions.f93c87373c63.js"></script>
+  </body>
+</html>

@@ -6,10 +6,20 @@ This project provides `generate_treasury_report.py`, which creates:
 
 It also includes the no-runtime static GoE Guild Portal in `dashboard/`,
 ready for Cloudflare Pages. The portal provides a home page, a treasury module,
-and a resource library. The first library entry is the Official GoE Guild
-Expedition Lottery Rules. Treasury tools include 7/30/90-day period controls,
-age drill-downs, and a short goods watch list. Bronze Age goods are excluded
-using the same rule as the PDF report.
+an individual goods-contribution module, and a resource library. The first library
+entry is the Official GoE Guild Expedition Lottery Rules. Treasury tools include
+7/30/90-day period controls, age drill-downs, and a short goods watch list.
+Contribution tools rank members using all positive goods records, including
+building production and direct treasury contributions, and provide public
+member-level aggregates. Complete contribution records and
+aggregated guild-goods usage by purpose, good, and era are hidden behind a
+client-side assigned-passcode prompt; this is a convenience gate, not secure
+authentication, because the static data is delivered to the browser. Keep
+Cloudflare Access enabled for real access control. Successful member validation
+is remembered in session storage for the current browser tab, including across
+period changes and same-tab navigation.
+Bronze Age goods are excluded from the treasury balance using the same rule as
+the PDF report.
 
 ## Prerequisites
 
@@ -44,6 +54,19 @@ Refresh the dashboard after adding a treasury export to `input/`:
 ```bash
 ../CityAnalysis/.venv/bin/python generate_treasury_dashboard.py
 ```
+
+Refresh contribution records after adding a `GuildTreasury-*.csv` export to
+`input/guild-goods-contribution/`:
+
+```bash
+../CityAnalysis/.venv/bin/python generate_contribution_dashboard.py
+```
+
+Contribution exports are non-cumulative snapshots and may overlap. The refresh
+script merges every CSV in that directory, removes duplicate transactions both
+within and across files, and lets the newest overlapping copy supply the current
+player display name. Do not remove older exports or select only the newest file
+for a normal refresh.
 
 The refresh script selects the newest CSV by modified time, writes
 `site/data/treasury-data.js`, and rebuilds every portal page. Source assets stay
@@ -93,6 +116,8 @@ Portal routes:
 
 - `/` — Guild Portal home
 - `/treasury/` — live treasury dashboard
+- `/treasury/contributions/` — individual guild goods contribution rankings and member drill-downs
+- `/contributions/` — compatibility redirect to the Treasury contribution section
 - `/resources/` — guild resource library
 - `/resources/guild-expedition-lottery-rules/` — lottery rules
 

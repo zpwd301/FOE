@@ -9,11 +9,11 @@
   const shortDateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   let selectedDays = 90;
   let sortMode = "delta";
+  let ageView = "attention";
   let periodCache = null;
   let resizeFrame = 0;
 
   const asDate = (value) => new Date(`${value}T00:00:00Z`);
-  const asIsoDate = (value) => value.toISOString().slice(0, 10);
   const formatDate = (value, short = false) => (short ? shortDateFmt : dateFmt).format(asDate(value));
   const signed = (number) => `${number >= 0 ? "+" : "-"}${fmt.format(Math.abs(number))}`;
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -42,14 +42,6 @@
   const periodGoods = () => periodModel().goods;
   const totalSeries = () => periodModel().series;
   const ageRows = () => periodModel().ages;
-  const periodWindow = () => {
-    const end = asDate(data.dates.at(-1));
-    const requestedStart = new Date(end);
-    requestedStart.setUTCDate(requestedStart.getUTCDate() - (selectedDays - 1));
-    const firstAvailable = asDate(data.dates[0]);
-    const start = requestedStart < firstAvailable ? firstAvailable : requestedStart;
-    return { start: asIsoDate(start), end: asIsoDate(end), days: Math.round((end - start) / 86400000) + 1 };
-  };
   const snapshotSummary = (series) => {
     return `${series.length} daily ${series.length === 1 ? "snapshot" : "snapshots"} available`;
   };
@@ -68,8 +60,17 @@
   function renderTrend() {
     const series = totalSeries(); const svg = $("#trend-chart"); const chart = drawLineChart(svg, series, "#9c7b35", "rgba(156,123,53,.13)"); const tooltip = $("#chart-tooltip");
     $("#chart-start").textContent = formatDate(series[0].date, true); $("#chart-end").textContent = formatDate(series.at(-1).date, true); $("#trend-note").textContent = snapshotSummary(series);
-    svg.onmousemove = (event) => { const bounds = svg.getBoundingClientRect(); const index = Math.round(((event.clientX - bounds.left) / bounds.width) * (series.length - 1)); const point = series[Math.max(0, Math.min(series.length - 1, index))]; tooltip.hidden = false; tooltip.textContent = `${formatDate(point.date, true)}  ${fmt.format(point.value)}`; tooltip.style.left = `${(chart.x(index) / chart.width) * 100}%`; tooltip.style.top = `${(chart.y(point.value) / chart.height) * 100}%`; };
+    const minimum = series.reduce((lowest, point) => point.value < lowest.value ? point : lowest);
+    const maximum = series.reduce((highest, point) => point.value > highest.value ? point : highest);
+    const net = series.at(-1).value - series[0].value;
+    const summary = `Low ${fmt.format(minimum.value)} on ${formatDate(minimum.date, true)}; high ${fmt.format(maximum.value)} on ${formatDate(maximum.date, true)}; net ${signed(net)}.`;
+    $("#chart-summary").textContent = summary;
+    svg.setAttribute("aria-label", `Treasury balance trend. ${summary}`);
+    const showPoint = (index) => { const safeIndex = Math.max(0, Math.min(series.length - 1, index)); const point = series[safeIndex]; tooltip.hidden = false; tooltip.textContent = `${formatDate(point.date, true)}  ${fmt.format(point.value)}`; tooltip.style.left = `${(chart.x(safeIndex) / chart.width) * 100}%`; tooltip.style.top = `${(chart.y(point.value) / chart.height) * 100}%`; };
+    svg.onmousemove = (event) => { const bounds = svg.getBoundingClientRect(); showPoint(Math.round(((event.clientX - bounds.left) / bounds.width) * (series.length - 1))); };
     svg.onmouseleave = () => { tooltip.hidden = true; };
+    svg.onfocus = () => showPoint(series.length - 1);
+    svg.onblur = () => { tooltip.hidden = true; };
   }
 
   function renderOverview() {
@@ -83,30 +84,34 @@
     alert.classList.toggle("is-healthy", !hasCriticalGoods);
     alert.setAttribute("role", hasCriticalGoods ? "alert" : "status");
     $("#critical-mark").textContent = hasCriticalGoods ? "!" : "✓";
-    $("#critical-label").textContent = hasCriticalGoods ? "Critical stock alert" : "Treasury status";
+    $("#critical-label").textContent = hasCriticalGoods ? "Critical stock alert" : "Treasury healthy";
     if (criticalGoods.length) {
       const list = criticalGoods.map((good) => `${good.name} (${good.age}): ${fmt.format(good.current)}`).join(", ");
       const shortfall = sum(criticalGoods.map((good) => data.meta.lowStockThreshold - good.current));
       $("#critical-summary").textContent = `${list} in stock. ${fmt.format(shortfall)} needed to reach the ${fmt.format(data.meta.lowStockThreshold)} target.`;
       $("#critical-guidance").textContent = "GBG officers: Please avoid spending any good marked as critically low unless it is truly necessary. Donations to replenish low goods are greatly appreciated! ❤️";
     } else {
-      $("#critical-summary").textContent = "Treasury thriving. Thank you, Guardians! ✨";
-      $("#critical-guidance").textContent = "Every tracked good is safely above the critical threshold. Your steady contributions are keeping GoE prepared and prosperous. Fantastic teamwork!";
+      $("#critical-summary").textContent = "All tracked goods are above the critical threshold.";
+      $("#critical-guidance").textContent = "Treasury healthy and ready for guild operations.";
     }
-    const best = [...goods].sort((a, b) => b.delta - a.delta)[0]; const weakest = [...goods].sort((a, b) => a.delta - b.delta)[0]; const lowest = [...goods].sort((a, b) => a.current - b.current)[0];
-    $("#insights").innerHTML = `<div class="insight"><strong class="${weakAge.delta >= 0 ? "positive" : "negative"}">${signed(weakAge.delta)}</strong><span>${escapeHtml(weakAge.age)} is the weakest age group.</span><span class="insight-tag">AGE MOVEMENT</span></div><div class="insight"><strong class="positive">${escapeHtml(best.name)}</strong><span>Largest gain: ${signed(best.delta)} goods.</span><span class="insight-tag">BEST CONTRIBUTOR</span></div><div class="insight"><strong class="negative">${escapeHtml(weakest.name)}</strong><span>Largest draw: ${signed(weakest.delta)} goods.</span><span class="insight-tag">REFILL PRIORITY</span></div>`;
-    $("#coverage-copy").textContent = `Available history: ${formatDate(series[0].date)} to ${formatDate(series.at(-1).date)}. ${snapshotSummary(series)} in the selected ${periodWindow().days}-day period. Current lowest stock: ${lowest.name} at ${fmt.format(lowest.current)}.`;
+    const best = [...goods].sort((a, b) => b.delta - a.delta)[0]; const weakest = [...goods].sort((a, b) => a.delta - b.delta)[0];
+    $("#insights").innerHTML = `<div class="insight"><strong class="${weakAge.delta >= 0 ? "positive" : "negative"}">${signed(weakAge.delta)}</strong><span>${escapeHtml(weakAge.age)} is the weakest age group.</span><span class="insight-tag">AGE MOVEMENT</span></div><div class="insight"><strong class="positive">${escapeHtml(best.name)}</strong><span>Largest gain: ${signed(best.delta)} goods.</span><span class="insight-tag">LARGEST GAIN</span></div><div class="insight"><strong class="negative">${escapeHtml(weakest.name)}</strong><span>Largest draw: ${signed(weakest.delta)} goods.</span><span class="insight-tag">REFILL PRIORITY</span></div>`;
+    $("#coverage-copy").textContent = `Data through ${formatDate(data.meta.latestDate)} · ${snapshotSummary(series)}`;
   }
 
   function renderAges() {
-    $("#age-list").innerHTML = ageRows().map((row) => `<button class="age-row" type="button" data-age="${escapeHtml(row.age)}"><span class="age-name">${escapeHtml(row.age)}</span><span class="age-stock">${fmt.format(row.current)} in stock</span><span class="age-delta ${row.delta >= 0 ? "positive" : "negative"}">${signed(row.delta)} <span aria-hidden="true">${row.delta >= 0 ? "&#8599;" : "&#8600;"}</span></span></button>`).join("");
+    const rows = ageView === "all" ? ageRows() : ageRows().slice(0, 6);
+    const rates = rows.map((row) => row.start ? row.delta / row.start * 100 : 0);
+    const maximumRate = Math.max(...rates.map(Math.abs), 1);
+    $("#age-list").innerHTML = rows.map((row, index) => { const rate = rates[index]; const width = Math.max(3, Math.abs(rate) / maximumRate * 100); return `<button class="age-row" type="button" data-age="${escapeHtml(row.age)}" aria-label="${escapeHtml(row.age)}: ${fmt.format(row.current)} in stock, ${signed(row.delta)} or ${rate >= 0 ? "+" : ""}${rate.toFixed(1)} percent"><span class="age-name">${escapeHtml(row.age)}</span><span class="age-stock">${fmt.format(row.current)} in stock</span><span class="age-delta ${row.delta >= 0 ? "positive" : "negative"}">${signed(row.delta)} <span aria-hidden="true">${row.delta >= 0 ? "&#8599;" : "&#8600;"}</span></span><span class="age-relative ${row.delta >= 0 ? "positive" : "negative"}">${rate >= 0 ? "+" : ""}${rate.toFixed(1)}%</span><span class="age-change-track" aria-hidden="true"><span class="${row.delta >= 0 ? "is-positive" : "is-negative"}" style="--age-width:${width.toFixed(2)}%"></span></span></button>`; }).join("");
+    document.querySelectorAll("[data-age-view]").forEach((button) => { const active = button.dataset.ageView === ageView; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
     document.querySelectorAll("[data-age]").forEach((button) => button.addEventListener("click", () => openDetail(button.dataset.age)));
   }
 
   function renderGoods() {
     const goods = [...periodGoods()];
     if (sortMode === "stock") goods.sort((a, b) => a.current - b.current); else if (sortMode === "gain") goods.sort((a, b) => b.delta - a.delta); else goods.sort((a, b) => a.delta - b.delta);
-    $("#goods-list").innerHTML = goods.slice(0, 12).map((good) => `<tr><td><strong>${escapeHtml(good.name)}</strong></td><td>${escapeHtml(good.age)}</td><td class="${good.current < data.meta.lowStockThreshold ? "stock-low" : ""}">${fmt.format(good.current)}</td><td class="${good.delta >= 0 ? "positive" : "negative"}">${signed(good.delta)}</td><td>${fmt.format(good.min)}</td></tr>`).join("");
+    $("#goods-list").innerHTML = goods.slice(0, 12).map((good) => `<tr><td data-label="Good"><strong>${escapeHtml(good.name)}</strong></td><td data-label="Age">${escapeHtml(good.age)}</td><td data-label="Current stock" class="${good.current < data.meta.lowStockThreshold ? "stock-low" : ""}">${fmt.format(good.current)}</td><td data-label="Period change" class="${good.delta >= 0 ? "positive" : "negative"}">${signed(good.delta)}</td><td data-label="Lowest in period">${fmt.format(good.min)}</td></tr>`).join("");
   }
 
   function openDetail(age) {
@@ -117,12 +122,12 @@
   }
 
   function render() {
-    document.querySelectorAll("[data-range]").forEach((button) => button.classList.toggle("active", Number(button.dataset.range) === selectedDays));
+    document.querySelectorAll("[data-range]").forEach((button) => { const active = Number(button.dataset.range) === selectedDays; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
     renderOverview(); renderTrend(); renderAges(); renderGoods();
   }
 
-  $("#as-of").textContent = `Data through ${formatDate(data.meta.latestDate)}`;
   document.querySelectorAll("[data-range]").forEach((button) => button.addEventListener("click", () => { selectedDays = Number(button.dataset.range); periodCache = null; render(); }));
+  document.querySelectorAll("[data-age-view]").forEach((button) => button.addEventListener("click", () => { ageView = button.dataset.ageView; renderAges(); }));
   $("#goods-sort").addEventListener("change", (event) => { sortMode = event.target.value; renderGoods(); }); $("#detail-close").addEventListener("click", () => $("#detail-dialog").close());
   window.addEventListener("resize", () => {
     if (resizeFrame) cancelAnimationFrame(resizeFrame);
