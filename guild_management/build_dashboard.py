@@ -560,6 +560,20 @@ def publish_dashboard(
             ),
         )
 
+    write_text(
+        output_dir / "404.html",
+        page(
+            base_template,
+            title="Page Not Found | GoE Guild Portal",
+            description="The requested GoE Guild Portal page could not be found.",
+            active_nav="",
+            main_class="shell shell--not-found",
+            content=read_text(SITE_DIR / "pages" / "not-found.html"),
+            styles_asset=styles_asset,
+            icon_asset=icon_asset,
+        ),
+    )
+
     validate_output(output_dir)
     return assets
 
@@ -567,7 +581,7 @@ def publish_dashboard(
 def main() -> None:
     args = parse_args()
     assets = publish_dashboard(args.output_dir)
-    print("Dashboard pages built: /, /treasury/, /treasury/contributions/, /resources/")
+    print("Dashboard pages built: /, /treasury/, /treasury/contributions/, /resources/, /404.html")
     print("Published assets: " + ", ".join(path.name for path in assets.values()))
 
 

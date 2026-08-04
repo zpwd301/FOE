@@ -98,9 +98,11 @@ The committed `dashboard/` directory is the complete, deploy-ready site. Portal
 links and fingerprinted assets are intentionally rooted at `/`. The included
 `dashboard/_redirects` file permanently redirects old `/guild-management/...`
 bookmarks to their corresponding root URLs, while `dashboard/_headers` defines
-the production security and caching policy. Run the local build and commit its
-generated dashboard files before deploying because Cloudflare does not run a
-build command in this configuration.
+the production security and caching policy. The generated top-level `404.html`
+also prevents Cloudflare Pages from treating missing asset paths as SPA routes
+and returning the portal HTML with an incorrect MIME type. Run the local build
+and commit its generated dashboard files before deploying because Cloudflare
+does not run a build command in this configuration.
 
 In the Cloudflare dashboard, add `goe.z301.uk` under the Pages project's
 **Custom domains** settings. If the `z301.uk` zone is managed by the same

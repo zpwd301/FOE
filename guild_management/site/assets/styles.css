@@ -79,6 +79,17 @@ body { min-height:100vh; display:flex; flex-direction:column; }
 .resource-card .text-link { margin-top:auto; padding-top:22px; }
 .resource-card--compact { min-height:220px; }
 
+/* Not found */
+.shell--not-found { min-height:calc(100vh - 190px); display:grid; align-items:center; }
+.not-found { display:grid; grid-template-columns:minmax(150px,.45fr) minmax(0,1fr); align-items:center; gap:clamp(35px,7vw,90px); padding:clamp(42px,8vw,90px); background:linear-gradient(135deg,#10251a,#1d4a31); border:1px solid #356247; border-top:4px solid #c39a43; border-radius:6px; box-shadow:0 22px 55px rgba(12,43,25,.22); overflow:hidden; }
+.not-found__code { color:rgba(238,213,151,.9); font:500 clamp(5rem,14vw,10rem)/.8 Georgia,"Times New Roman",serif; letter-spacing:-.07em; text-shadow:0 5px 25px rgba(0,0,0,.22); }
+.not-found__copy { max-width:620px; }
+.not-found__copy .eyebrow { color:#d7b966; }
+.not-found__copy h1 { margin:0; color:#fffdf5; font:500 clamp(2.2rem,4.6vw,3.7rem)/1.02 Georgia,"Times New Roman",serif; letter-spacing:-.025em; }
+.not-found__copy p:not(.eyebrow) { max-width:58ch; margin:20px 0 0; color:#cad8ce; line-height:1.65; }
+.not-found__link { min-height:46px; width:max-content; display:inline-flex; align-items:center; gap:8px; margin-top:27px; padding:10px 14px; color:#173221; background:#f0d58f; border-radius:4px; text-decoration:none; font-weight:850; }
+.not-found__link:hover, .not-found__link:focus-visible { color:#10251a; background:#ffe5a3; }
+
 /* Policy page */
 .shell--policy { max-width:1180px; }
 .policy-hero { padding:6px 0 32px; border-bottom:1px solid var(--line); }
@@ -159,6 +170,8 @@ body { min-height:100vh; display:flex; flex-direction:column; }
   .hero-seal { display:none; }
   .resource-grid { grid-template-columns:1fr; }
   .policy-hero h1, .page-hero h1 { font-size:38px; }
+  .not-found { grid-template-columns:1fr; gap:28px; }
+  .not-found__code { font-size:clamp(4.5rem,24vw,7rem); }
   .policy-meta { grid-template-columns:repeat(2,1fr); }
   .policy-meta div, .policy-meta div:nth-child(4) { padding:0 12px; border-left:1px solid var(--line); }
   .policy-meta div:nth-child(odd) { padding-left:0; border-left:0; }
