@@ -1,5 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
   Permissions-Policy: camera=(), geolocation=(), microphone=()
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff
@@ -33,7 +33,10 @@
 /app.*.js
   Cache-Control: public, max-age=31536000, immutable
 
-/contribution-data.*.js
+/contribution-summary.*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/contribution-detail.*.json
   Cache-Control: public, max-age=31536000, immutable
 
 /contributions.*.js

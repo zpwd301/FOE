@@ -25,7 +25,7 @@ MINIMUM_FONT_SIZE_PX = 12
 BANNER_WIDTHS = (720, 1200, 1956)
 BANNER_FORMATS = ("avif", "webp", "jpg")
 CACHEABLE_ASSET_SUFFIXES = frozenset(
-    {".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".png", ".svg", ".webp", ".woff", ".woff2"}
+    {".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".json", ".png", ".svg", ".webp", ".woff", ".woff2"}
 )
 FINGERPRINTED_ASSET_PATTERN = re.compile(
     rf"\.[0-9a-f]{{{FINGERPRINT_LENGTH}}}\.[^.]+$", re.IGNORECASE
@@ -208,6 +208,119 @@ def fingerprinted_asset(source: Path, output_dir: Path, output_stem: str, conten
     return target
 
 
+def load_contribution_payload(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOURCE) -> dict[str, object]:
+    raw = read_text(data_source).strip()
+    prefix = "window.CONTRIBUTION_DATA = "
+    if not raw.startswith(prefix) or not raw.endswith(";"):
+        raise ValueError(f"{data_source} is not a CONTRIBUTION_DATA payload")
+    return json.loads(raw[len(prefix):-1])
+
+
+def contribution_groups(records: list[list[object]], label_index: int, *, absolute: bool = False) -> list[list[object]]:
+    groups: dict[str, int] = {}
+    for record in records:
+        amount = abs(int(record[5])) if absolute else int(record[5])
+        label = str(record[label_index])
+        groups[label] = groups.get(label, 0) + amount
+    return [
+        [label, amount]
+        for label, amount in sorted(groups.items(), key=lambda item: (-item[1], item[0].casefold()))
+    ]
+
+
+def build_contribution_summary_payload(payload: dict[str, object]) -> dict[str, object]:
+    records = list(payload["records"])
+    latest = dt.datetime.fromisoformat(str(payload["meta"]["latestTimestamp"]))
+    latest_date = latest.date()
+    positive_records = [record for record in records if int(record[5]) > 0]
+    periods: dict[str, object] = {}
+    for key, days in (("3", 3), ("7", 7), ("all", None)):
+        if days is None:
+            current = positive_records
+            start_date = min(
+                (dt.date.fromisoformat(str(record[0])[:10]) for record in current),
+                default=latest_date,
+            )
+            contribution_days = max(1, len({str(record[0])[:10] for record in current}))
+        else:
+            start_date = latest_date - dt.timedelta(days=days - 1)
+            cutoff = start_date.isoformat()
+            current = [record for record in positive_records if str(record[0])[:10] >= cutoff]
+            contribution_days = days
+
+        by_player: dict[str, list[list[object]]] = {}
+        for record in current:
+            by_player.setdefault(str(record[1]), []).append(record)
+        producers = []
+        for player_id, member_records in by_player.items():
+            total = sum(int(record[5]) for record in member_records)
+            eras = contribution_groups(member_records, 3)
+            producers.append(
+                {
+                    "id": player_id,
+                    "name": str(member_records[0][2]),
+                    "total": total,
+                    "count": len(member_records),
+                    "topEra": eras[0][0] if eras else "",
+                    "goods": contribution_groups(member_records, 4)[:8],
+                    "eras": eras[:8],
+                    "sources": contribution_groups(member_records, 6)[:8],
+                }
+            )
+        producers.sort(key=lambda producer: (-int(producer["total"]), str(producer["name"]).casefold()))
+        total = sum(int(record[5]) for record in current)
+        periods[key] = {
+            "startDate": start_date.isoformat(),
+            "endDate": latest_date.isoformat(),
+            "recordCount": len(current),
+            "total": total,
+            "dailyAverage": int(total / contribution_days + 0.5),
+            "producers": producers,
+            "eras": contribution_groups(current, 3)[:8],
+        }
+    return {"meta": payload["meta"], "periods": periods}
+
+
+def publish_contribution_assets(
+    data_source: Path,
+    output_dir: Path,
+) -> tuple[Path, list[Path]]:
+    payload = load_contribution_payload(data_source)
+    records_by_player: dict[str, list[list[object]]] = {}
+    for record in payload["records"]:
+        records_by_player.setdefault(str(record[1]), []).append(record)
+
+    detail_assets: list[Path] = []
+    detail_urls: dict[str, str] = {}
+    detail_source = Path("contribution-detail.json")
+    for player_id in sorted(records_by_player):
+        records = records_by_player[player_id]
+        detail_payload = {
+            "playerId": player_id,
+            "playerName": str(records[0][2]),
+            "records": records,
+        }
+        content = json.dumps(detail_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        target = fingerprinted_asset(detail_source, output_dir, "contribution-detail", content)
+        detail_assets.append(target)
+        detail_urls[player_id] = f"/{target.name}"
+
+    summary_payload = build_contribution_summary_payload(payload)
+    summary_payload["details"] = detail_urls
+    summary_content = (
+        "window.CONTRIBUTION_SUMMARY = "
+        + json.dumps(summary_payload, ensure_ascii=False, separators=(",", ":"))
+        + ";\n"
+    ).encode("utf-8")
+    summary_target = fingerprinted_asset(
+        Path("contribution-summary.js"),
+        output_dir,
+        "contribution-summary",
+        summary_content,
+    )
+    return summary_target, detail_assets
+
+
 def remove_stale_published_assets(output_dir: Path, current: set[Path]) -> None:
     legacy_names = {"GOE.png", "app.js", "data.js", "portal-banner.jpg", "styles.css"}
     for candidate in output_dir.iterdir():
@@ -226,7 +339,6 @@ def publish_assets(
         "styles": (ASSET_SOURCE_DIR / "styles.css", "styles"),
         "data": (data_source, "data"),
         "app": (ASSET_SOURCE_DIR / "app.js", "app"),
-        "contribution_data": (contribution_data_source, "contribution-data"),
         "contributions_app": (ASSET_SOURCE_DIR / "contributions.js", "contributions"),
         "icon": (ASSET_SOURCE_DIR / "GOE.png", "GOE"),
     }
@@ -237,6 +349,8 @@ def publish_assets(
                 f"portal-banner-{width}",
             )
     missing = [path.name for path, _ in sources.values() if not path.is_file()]
+    if not contribution_data_source.is_file():
+        missing.append(contribution_data_source.name)
     if missing:
         raise FileNotFoundError(f"Missing dashboard asset files: {', '.join(missing)}")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -244,7 +358,12 @@ def publish_assets(
     for name, (source, output_stem) in sources.items():
         content = minify_css(read_text(source)).encode() if name == "styles" else None
         targets[name] = fingerprinted_asset(source, output_dir, output_stem, content)
-    remove_stale_published_assets(output_dir, set(targets.values()))
+    contribution_summary, contribution_details = publish_contribution_assets(
+        contribution_data_source,
+        output_dir,
+    )
+    targets["contribution_summary"] = contribution_summary
+    remove_stale_published_assets(output_dir, set(targets.values()) | set(contribution_details))
     return targets
 
 
@@ -271,11 +390,9 @@ def load_treasury_summary(data_source: Path = DEFAULT_DATA_SOURCE) -> dict[str, 
 
 
 def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOURCE) -> dict[str, str]:
-    raw = read_text(data_source).strip()
-    prefix = "window.CONTRIBUTION_DATA = "
-    if not raw.startswith(prefix) or not raw.endswith(";"):
-        raise ValueError(f"{data_source} is not a CONTRIBUTION_DATA payload")
-    payload = json.loads(raw[len(prefix):-1])
+    payload = load_contribution_payload(data_source)
+    public_summary = build_contribution_summary_payload(payload)
+    all_period = public_summary["periods"]["all"]
     positive_records = [record for record in payload["records"] if record[5] > 0]
     total = sum(record[5] for record in positive_records)
     direct = sum(record[5] for record in positive_records if record[6] == "Guild treasury donation")
@@ -289,12 +406,57 @@ def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOUR
         date_range = f"{first:%B} {first.day}–{latest:%B} {latest.day}, {latest.year}"
     else:
         date_range = f"{first:%B} {first.day}, {first.year}–{latest:%B} {latest.day}, {latest.year}"
+    leader = all_period["producers"][0] if all_period["producers"] else None
+    period_label = (
+        f"{dt.date.fromisoformat(all_period['startDate']):%b} "
+        f"{dt.date.fromisoformat(all_period['startDate']).day}, "
+        f"{dt.date.fromisoformat(all_period['startDate']).year} to "
+        f"{dt.date.fromisoformat(all_period['endDate']):%b} "
+        f"{dt.date.fromisoformat(all_period['endDate']).day}, "
+        f"{dt.date.fromisoformat(all_period['endDate']).year}"
+    )
+    producer_rows = []
+    for rank, producer in enumerate(all_period["producers"][:10], start=1):
+        share = int(producer["total"]) / max(int(all_period["total"]), 1) * 100
+        top_era = re.sub(r"^\d+\s*-\s*", "", str(producer["topEra"])) or "—"
+        name = html.escape(str(producer["name"]))
+        producer_rows.append(
+            f'<tr data-producer-id="{html.escape(str(producer["id"]), quote=True)}" tabindex="0" '
+            f'aria-label="Open contribution details for {name}">'
+            f'<td><span class="producer-rank">{rank}</span></td><td><strong>{name}</strong></td>'
+            f'<td class="production-value">{int(producer["total"]):,}</td><td>{share:.1f}%</td>'
+            f'<td>{int(producer["count"]):,}</td><td>{html.escape(top_era)}</td></tr>'
+        )
+    era_rows = []
+    eras = all_period["eras"]
+    maximum = int(eras[0][1]) if eras else 1
+    for rank, (era, amount) in enumerate(eras, start=1):
+        label = html.escape(re.sub(r"^\d+\s*-\s*", "", str(era)))
+        share = int(amount) / max(int(all_period["total"]), 1) * 100
+        width = max(3, int(amount) / maximum * 100)
+        era_rows.append(
+            f'<li><span class="era-production-rank">{rank}</span><span><strong>{label}</strong>'
+            f'<small>{share:.1f}% of contributions</small>'
+            f'<span class="era-production-bar" style="--era-width:{width:.2f}%"></span></span>'
+            f'<strong>{int(amount):,}</strong></li>'
+        )
     return {
         "contribution_total": f"{total:,}",
         "contribution_members": f"{len({record[1] for record in positive_records}):,}",
         "contribution_building": f"{total - direct:,}",
         "contribution_direct": f"{direct:,}",
         "contribution_date_range": date_range,
+        "contribution_coverage": (
+            f"{period_label} · {int(all_period['recordCount']):,} contribution "
+            f"{'record' if int(all_period['recordCount']) == 1 else 'records'} available"
+        ),
+        "contribution_daily": f"{int(all_period['dailyAverage']):,}",
+        "contribution_leader": html.escape(str(leader["name"])) if leader else "—",
+        "contribution_leader_total": (
+            f"{int(leader['total']):,} goods contributed" if leader else "No contributions in this period"
+        ),
+        "contribution_top_rows": "".join(producer_rows),
+        "contribution_era_rows": "".join(era_rows),
     }
 
 
@@ -475,10 +637,13 @@ def publish_dashboard(
         ),
     )
 
-    contribution_content = read_text(SITE_DIR / "pages" / "contributions.html")
+    contribution_content = render(
+        read_text(SITE_DIR / "pages" / "contributions.html"),
+        contribution_summary,
+    )
     contribution_scripts = (
-        f'    <script src="/{assets["contribution_data"].name}"></script>\n'
-        f'    <script src="/{assets["contributions_app"].name}"></script>'
+        f'    <script defer src="/{assets["contribution_summary"].name}"></script>\n'
+        f'    <script defer src="/{assets["contributions_app"].name}"></script>'
     )
     write_text(
         output_dir / "treasury" / "contributions" / "index.html",

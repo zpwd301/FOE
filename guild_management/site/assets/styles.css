@@ -896,6 +896,8 @@ tbody tr:nth-child(even) { background:#e7f0ea; }
 .usage-breakdown small { color:var(--muted); font-size:12px; }
 .usage-breakdown li > strong { flex:0 0 auto; font-size:13px; font-variant-numeric:tabular-nums; }
 .usage-empty { margin:20px 0 0; padding:16px 18px; color:#355542; background:#edf5f0; border:1px solid #c6d8cb; border-radius:4px; font-size:14px; }
+.detail-loading { margin:20px 0 0; padding:16px 18px; color:#355542; background:#edf5f0; border:1px solid #c6d8cb; border-radius:4px; font-size:14px; }
+.detail-loading.is-error { color:#713c35; background:#fbf0ee; border-color:#e3b9b3; }
 .producer-usage:focus, .usage-empty:focus { outline:3px solid #d8ad4e; outline-offset:3px; }
 
 @media (max-width:920px) {

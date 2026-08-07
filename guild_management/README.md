@@ -74,6 +74,11 @@ under `site/`; the deployable `dashboard/` directory contains only
 content-fingerprinted CSS, JavaScript, data, icons, and responsive banner files.
 This lets browsers cache assets efficiently without showing an older dashboard
 after a deployment.
+The Member Contributions page embeds its all-data overview in the HTML and loads
+a compact pre-aggregated summary for range changes and search. Full transaction
+history is split into fingerprinted per-member JSON files and is fetched only
+after that member's passcode is accepted, keeping raw history off the initial
+page-loading path.
 The script supports both the older comma-delimited exports and the current
 semicolon-delimited FoE export format. The current site uses all available
 data up to 90 days; when fewer than three months are present it says so in the

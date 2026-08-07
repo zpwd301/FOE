@@ -5,20 +5,20 @@
         <div>
           <p class="eyebrow">Guild treasury</p>
           <h1 id="production-title">Member Contributions</h1>
-          <p class="intro-copy" id="production-coverage"></p>
+          <p class="intro-copy" id="production-coverage">{{contribution_coverage}}</p>
         </div>
         <div class="range-control" role="group" aria-label="Contribution analysis period">
           <button type="button" data-production-range="3" aria-pressed="false">3 days</button>
           <button type="button" data-production-range="7" aria-pressed="false">7 days</button>
-          <button type="button" data-production-range="all" aria-pressed="false">All data</button>
+          <button class="active" type="button" data-production-range="all" aria-pressed="true">All data</button>
         </div>
       </section>
 
       <section class="metrics production-metrics" aria-label="Goods contribution summary">
-        <article class="metric-card"><span class="metric-label">Goods contributed</span><strong class="positive" id="production-total">-</strong><span class="metric-sub">building production and direct contributions</span></article>
-        <article class="metric-card"><span class="metric-label">Active contributors</span><strong id="producer-count">-</strong><span class="metric-sub">members contributing goods</span></article>
-        <article class="metric-card"><span class="metric-label">Daily contributions</span><strong id="daily-production">-</strong><span class="metric-sub">average during this period</span></article>
-        <article class="metric-card" id="leading-producer-card"><span class="metric-label">Leading contributor</span><strong id="leading-producer">-</strong><span class="metric-sub" id="leading-producer-total">-</span></article>
+        <article class="metric-card"><span class="metric-label">Goods contributed</span><strong class="positive" id="production-total">{{contribution_total}}</strong><span class="metric-sub">building production and direct contributions</span></article>
+        <article class="metric-card"><span class="metric-label">Active contributors</span><strong id="producer-count">{{contribution_members}}</strong><span class="metric-sub">members contributing goods</span></article>
+        <article class="metric-card"><span class="metric-label">Daily contributions</span><strong id="daily-production">{{contribution_daily}}</strong><span class="metric-sub">average during this period</span></article>
+        <article class="metric-card" id="leading-producer-card"><span class="metric-label">Leading contributor</span><strong id="leading-producer">{{contribution_leader}}</strong><span class="metric-sub" id="leading-producer-total">{{contribution_leader_total}}</span></article>
       </section>
 
       <section class="production-grid">
@@ -31,7 +31,7 @@
             <table class="producer-table table--interactive">
               <caption class="sr-only">Top ten guild goods contributors and member search results</caption>
               <thead><tr><th scope="col">Rank</th><th scope="col">Member</th><th scope="col">Goods contributed</th><th scope="col">Share</th><th scope="col">Records</th><th scope="col">Top era</th></tr></thead>
-              <tbody id="producer-rows"></tbody>
+              <tbody id="producer-rows">{{contribution_top_rows}}</tbody>
             </table>
           </div>
           <p class="empty-state" id="producer-empty" hidden>No contributor matched that search yet. Try another spelling or a shorter name.</p>
@@ -39,7 +39,7 @@
 
         <aside class="panel era-production-panel" aria-labelledby="era-production-title">
           <div class="panel-heading"><div><p class="eyebrow">Contribution mix</p><h2 id="era-production-title">Top eras</h2><p class="panel-explainer">Where the guild&rsquo;s contributed goods came from.</p></div></div>
-          <ol class="era-production-list" id="era-production-list"></ol>
+          <ol class="era-production-list" id="era-production-list">{{contribution_era_rows}}</ol>
         </aside>
       </section>
 
@@ -73,6 +73,7 @@
           </section>
 
           <div class="producer-protected-details" id="producer-protected-details" tabindex="-1" hidden>
+            <p class="detail-loading" id="producer-detail-loading" role="status" hidden>Loading your detailed records&hellip;</p>
             <section class="producer-usage" id="producer-usage" aria-labelledby="producer-usage-title" hidden>
               <div class="usage-summary"><div><p class="eyebrow">Guild operations</p><h3 id="producer-usage-title">Guild goods usage</h3><p>Shown separately and not deducted from contributions.</p></div><div><strong class="negative" id="member-usage-total">-</strong><span id="member-usage-count"></span></div></div>
               <div class="usage-analysis">
@@ -83,7 +84,7 @@
             </section>
             <p class="usage-empty" id="producer-usage-empty" role="status" hidden>No guild-goods usage was recorded for this member in the selected period.</p>
 
-            <section class="producer-records" aria-labelledby="producer-records-title">
+            <section class="producer-records" id="producer-records" aria-labelledby="producer-records-title" hidden>
               <div class="record-section-heading"><h3 id="producer-records-title">Full contribution records</h3><span id="producer-record-count"></span></div>
               <div class="table-scroll">
                 <table class="detail-record-table">
