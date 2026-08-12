@@ -9,9 +9,9 @@ ready for Cloudflare Pages. The portal provides a home page, a treasury module,
 an individual goods-contribution module, and a resource library. The first library
 entry is the Official GoE Guild Expedition Lottery Rules. Treasury tools include
 7/30/90-day period controls, age drill-downs, and a short goods watch list.
-Contribution tools rank members using all positive goods records, including
+Contribution tools rank members using up to 30 days of positive goods records, including
 building production and direct treasury contributions, and provide public
-member-level aggregates. Complete contribution records and
+member-level aggregates. The most recent 500 contribution records per member and
 aggregated guild-goods usage by purpose, good, and era are hidden behind a
 client-side assigned-passcode prompt; this is a convenience gate, not secure
 authentication, because the static data is delivered to the browser. Keep
@@ -74,15 +74,15 @@ under `site/`; the deployable `dashboard/` directory contains only
 content-fingerprinted CSS, JavaScript, data, icons, and responsive banner files.
 This lets browsers cache assets efficiently without showing an older dashboard
 after a deployment.
-The Member Contributions page embeds its all-data overview in the HTML and loads
-a compact pre-aggregated summary for range changes and search. Full transaction
-history is split into fingerprinted per-member JSON files and is fetched only
-after that member's passcode is accepted, keeping raw history off the initial
-page-loading path.
+The Member Contributions page embeds its 30-day overview in the HTML and loads
+a compact pre-aggregated summary for range changes and search. Detailed transaction
+history is capped to the most recent 500 contributions in each fingerprinted
+per-member JSON file and is fetched only after that member's passcode is
+accepted, keeping raw history off the initial page-loading path.
 The script supports both the older comma-delimited exports and the current
-semicolon-delimited FoE export format. The current site uses all available
-data up to 90 days; when fewer than three months are present it says so in the
-overview.
+semicolon-delimited FoE export format. The contribution dashboard offers 3-,
+7-, and 30-day windows, using the available history when it contains fewer than
+30 days.
 
 Treasury data is operational guild information. Protect the deployed dashboard
 with a Cloudflare Access policy before adding a public custom domain. Static

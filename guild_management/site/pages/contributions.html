@@ -10,7 +10,7 @@
         <div class="range-control" role="group" aria-label="Contribution analysis period">
           <button type="button" data-production-range="3" aria-pressed="false">3 days</button>
           <button type="button" data-production-range="7" aria-pressed="false">7 days</button>
-          <button class="active" type="button" data-production-range="all" aria-pressed="true">All data</button>
+          <button class="active" type="button" data-production-range="30" aria-pressed="true">30 days</button>
         </div>
       </section>
 
@@ -62,8 +62,8 @@
           </div>
 
           <section class="producer-validation" id="producer-validation" aria-labelledby="producer-validation-title">
-            <h3 id="producer-validation-title">View detailed records</h3>
-            <p>Members can view their own detailed record breakdown by entering their assigned passcode.</p>
+            <h3 id="producer-validation-title">View recent detailed records</h3>
+            <p>Members can view their own most recent 500 contribution records by entering their assigned passcode.</p>
             <form id="producer-validation-form" novalidate>
               <label for="producer-passcode">Assigned passcode</label>
               <div><input type="password" id="producer-passcode" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-describedby="producer-passcode-help producer-passcode-error"><button type="submit">View details</button></div>
@@ -85,10 +85,10 @@
             <p class="usage-empty" id="producer-usage-empty" role="status" hidden>No guild-goods usage was recorded for this member in the selected period.</p>
 
             <section class="producer-records" id="producer-records" aria-labelledby="producer-records-title" hidden>
-              <div class="record-section-heading"><h3 id="producer-records-title">Full contribution records</h3><span id="producer-record-count"></span></div>
+              <div class="record-section-heading"><h3 id="producer-records-title">Recent contribution records</h3><span id="producer-record-count"></span></div>
               <div class="table-scroll">
                 <table class="detail-record-table">
-                  <caption class="sr-only">Full goods contribution records for the selected member</caption>
+                  <caption class="sr-only">Most recent goods contribution records for the selected member</caption>
                   <thead><tr><th scope="col">Date &amp; time</th><th scope="col">Good</th><th scope="col">Era</th><th scope="col">Source</th><th scope="col">Amount</th></tr></thead>
                   <tbody id="member-production-record-list"></tbody>
                 </table>

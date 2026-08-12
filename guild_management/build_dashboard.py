@@ -24,6 +24,9 @@ FINGERPRINT_LENGTH = 12
 MINIMUM_FONT_SIZE_PX = 12
 BANNER_WIDTHS = (720, 1200, 1956)
 BANNER_FORMATS = ("avif", "webp", "jpg")
+CONTRIBUTION_PERIODS = (("3", 3), ("7", 7), ("30", 30))
+DEFAULT_CONTRIBUTION_PERIOD = "30"
+CONTRIBUTION_DETAIL_RECORD_LIMIT = 500
 CACHEABLE_ASSET_SUFFIXES = frozenset(
     {".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".json", ".png", ".svg", ".webp", ".woff", ".woff2"}
 )
@@ -233,20 +236,17 @@ def build_contribution_summary_payload(payload: dict[str, object]) -> dict[str, 
     latest = dt.datetime.fromisoformat(str(payload["meta"]["latestTimestamp"]))
     latest_date = latest.date()
     positive_records = [record for record in records if int(record[5]) > 0]
+    first_positive_date = min(
+        (dt.date.fromisoformat(str(record[0])[:10]) for record in positive_records),
+        default=latest_date,
+    )
     periods: dict[str, object] = {}
-    for key, days in (("3", 3), ("7", 7), ("all", None)):
-        if days is None:
-            current = positive_records
-            start_date = min(
-                (dt.date.fromisoformat(str(record[0])[:10]) for record in current),
-                default=latest_date,
-            )
-            contribution_days = max(1, len({str(record[0])[:10] for record in current}))
-        else:
-            start_date = latest_date - dt.timedelta(days=days - 1)
-            cutoff = start_date.isoformat()
-            current = [record for record in positive_records if str(record[0])[:10] >= cutoff]
-            contribution_days = days
+    for key, days in CONTRIBUTION_PERIODS:
+        cutoff_date = latest_date - dt.timedelta(days=days - 1)
+        start_date = max(cutoff_date, first_positive_date)
+        cutoff = start_date.isoformat()
+        current = [record for record in positive_records if str(record[0])[:10] >= cutoff]
+        contribution_days = max(1, (latest_date - start_date).days + 1)
 
         by_player: dict[str, list[list[object]]] = {}
         for record in current:
@@ -286,6 +286,7 @@ def publish_contribution_assets(
     output_dir: Path,
 ) -> tuple[Path, list[Path]]:
     payload = load_contribution_payload(data_source)
+    latest_date = dt.datetime.fromisoformat(str(payload["meta"]["latestTimestamp"])).date()
     records_by_player: dict[str, list[list[object]]] = {}
     for record in payload["records"]:
         records_by_player.setdefault(str(record[1]), []).append(record)
@@ -294,11 +295,32 @@ def publish_contribution_assets(
     detail_urls: dict[str, str] = {}
     detail_source = Path("contribution-detail.json")
     for player_id in sorted(records_by_player):
-        records = records_by_player[player_id]
+        records = sorted(records_by_player[player_id], key=lambda record: str(record[0]), reverse=True)
+        contribution_records = [record for record in records if int(record[5]) > 0]
+        usage_records = [record for record in records if int(record[5]) < 0]
+        contribution_record_counts: dict[str, int] = {}
+        usage_periods: dict[str, object] = {}
+        for key, days in CONTRIBUTION_PERIODS:
+            cutoff = (latest_date - dt.timedelta(days=days - 1)).isoformat()
+            contribution_record_counts[key] = sum(
+                1 for record in contribution_records if str(record[0])[:10] >= cutoff
+            )
+            current_usage = [record for record in usage_records if str(record[0])[:10] >= cutoff]
+            usage_periods[key] = {
+                "recordCount": len(current_usage),
+                "total": sum(abs(int(record[5])) for record in current_usage),
+                "purposes": contribution_groups(current_usage, 6, absolute=True)[:8],
+                "goods": contribution_groups(current_usage, 4, absolute=True)[:8],
+                "eras": contribution_groups(current_usage, 3, absolute=True)[:8],
+            }
         detail_payload = {
             "playerId": player_id,
             "playerName": str(records[0][2]),
-            "records": records,
+            "recordLimit": CONTRIBUTION_DETAIL_RECORD_LIMIT,
+            "availableRecordCount": len(contribution_records),
+            "contributionRecordCounts": contribution_record_counts,
+            "records": contribution_records[:CONTRIBUTION_DETAIL_RECORD_LIMIT],
+            "usagePeriods": usage_periods,
         }
         content = json.dumps(detail_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         target = fingerprinted_asset(detail_source, output_dir, "contribution-detail", content)
@@ -392,12 +414,17 @@ def load_treasury_summary(data_source: Path = DEFAULT_DATA_SOURCE) -> dict[str, 
 def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOURCE) -> dict[str, str]:
     payload = load_contribution_payload(data_source)
     public_summary = build_contribution_summary_payload(payload)
-    all_period = public_summary["periods"]["all"]
-    positive_records = [record for record in payload["records"] if record[5] > 0]
+    default_period = public_summary["periods"][DEFAULT_CONTRIBUTION_PERIOD]
+    positive_records = [
+        record
+        for record in payload["records"]
+        if record[5] > 0
+        and default_period["startDate"] <= str(record[0])[:10] <= default_period["endDate"]
+    ]
     total = sum(record[5] for record in positive_records)
     direct = sum(record[5] for record in positive_records if record[6] == "Guild treasury donation")
-    first = dt.datetime.fromisoformat(payload["meta"]["firstTimestamp"])
-    latest = dt.datetime.fromisoformat(payload["meta"]["latestTimestamp"])
+    first = dt.datetime.combine(dt.date.fromisoformat(default_period["startDate"]), dt.time())
+    latest = dt.datetime.combine(dt.date.fromisoformat(default_period["endDate"]), dt.time())
     if first.date() == latest.date():
         date_range = f"{first:%B} {first.day}, {first.year}"
     elif first.year == latest.year and first.month == latest.month:
@@ -406,18 +433,18 @@ def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOUR
         date_range = f"{first:%B} {first.day}–{latest:%B} {latest.day}, {latest.year}"
     else:
         date_range = f"{first:%B} {first.day}, {first.year}–{latest:%B} {latest.day}, {latest.year}"
-    leader = all_period["producers"][0] if all_period["producers"] else None
+    leader = default_period["producers"][0] if default_period["producers"] else None
     period_label = (
-        f"{dt.date.fromisoformat(all_period['startDate']):%b} "
-        f"{dt.date.fromisoformat(all_period['startDate']).day}, "
-        f"{dt.date.fromisoformat(all_period['startDate']).year} to "
-        f"{dt.date.fromisoformat(all_period['endDate']):%b} "
-        f"{dt.date.fromisoformat(all_period['endDate']).day}, "
-        f"{dt.date.fromisoformat(all_period['endDate']).year}"
+        f"{dt.date.fromisoformat(default_period['startDate']):%b} "
+        f"{dt.date.fromisoformat(default_period['startDate']).day}, "
+        f"{dt.date.fromisoformat(default_period['startDate']).year} to "
+        f"{dt.date.fromisoformat(default_period['endDate']):%b} "
+        f"{dt.date.fromisoformat(default_period['endDate']).day}, "
+        f"{dt.date.fromisoformat(default_period['endDate']).year}"
     )
     producer_rows = []
-    for rank, producer in enumerate(all_period["producers"][:10], start=1):
-        share = int(producer["total"]) / max(int(all_period["total"]), 1) * 100
+    for rank, producer in enumerate(default_period["producers"][:10], start=1):
+        share = int(producer["total"]) / max(int(default_period["total"]), 1) * 100
         top_era = re.sub(r"^\d+\s*-\s*", "", str(producer["topEra"])) or "—"
         name = html.escape(str(producer["name"]))
         producer_rows.append(
@@ -428,11 +455,11 @@ def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOUR
             f'<td>{int(producer["count"]):,}</td><td>{html.escape(top_era)}</td></tr>'
         )
     era_rows = []
-    eras = all_period["eras"]
+    eras = default_period["eras"]
     maximum = int(eras[0][1]) if eras else 1
     for rank, (era, amount) in enumerate(eras, start=1):
         label = html.escape(re.sub(r"^\d+\s*-\s*", "", str(era)))
-        share = int(amount) / max(int(all_period["total"]), 1) * 100
+        share = int(amount) / max(int(default_period["total"]), 1) * 100
         width = max(3, int(amount) / maximum * 100)
         era_rows.append(
             f'<li><span class="era-production-rank">{rank}</span><span><strong>{label}</strong>'
@@ -447,10 +474,10 @@ def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOUR
         "contribution_direct": f"{direct:,}",
         "contribution_date_range": date_range,
         "contribution_coverage": (
-            f"{period_label} · {int(all_period['recordCount']):,} contribution "
-            f"{'record' if int(all_period['recordCount']) == 1 else 'records'} available"
+            f"{period_label} · {int(default_period['recordCount']):,} contribution "
+            f"{'record' if int(default_period['recordCount']) == 1 else 'records'} available"
         ),
-        "contribution_daily": f"{int(all_period['dailyAverage']):,}",
+        "contribution_daily": f"{int(default_period['dailyAverage']):,}",
         "contribution_leader": html.escape(str(leader["name"])) if leader else "—",
         "contribution_leader_total": (
             f"{int(leader['total']):,} goods contributed" if leader else "No contributions in this period"
