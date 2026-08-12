@@ -21,6 +21,7 @@ class BuildingCategoryTests(unittest.TestCase):
             "Wheat Trail",
             "Olive\u00a0Trail",
             "Rocky Trail",
+            "Ascended Golden Crops Feast",
         ]
         return {
             f"legacy-{index}": {"id": f"legacy-{index}", "name": name}
@@ -76,6 +77,15 @@ class BuildingCategoryTests(unittest.TestCase):
                     model.building_category_label(entity_id, name),
                     model.CARE_2026_EVENT_REWARDS,
                 )
+
+    def test_ascended_golden_crops_feast_overrides_legacy_fall_event_id(self) -> None:
+        self.assertEqual(
+            model.building_category_label(
+                "W_MultiAge_FALL21A12",
+                "Ascended Golden Crops Feast",
+            ),
+            model.FALL_2026_EVENT_REWARDS,
+        )
 
     def test_category_correction_validation_accepts_normalized_whitespace(self) -> None:
         model.validate_building_category_corrections(self.correction_entities())

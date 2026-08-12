@@ -16,6 +16,12 @@ import export_data  # noqa: E402
 
 
 class ExportAssetTests(unittest.TestCase):
+    def test_default_age_is_space_age_asteroid_belt(self) -> None:
+        data_dir = WEBAPP_ROOT / "data"
+        core = json.loads((data_dir / "ranking-core.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(core["metadata"]["defaultAge"], "SpaceAgeAsteroidBelt")
+
     def test_core_and_every_age_have_matching_json_and_gzip(self) -> None:
         data_dir = WEBAPP_ROOT / "data"
         core = json.loads((data_dir / "ranking-core.json").read_text(encoding="utf-8"))

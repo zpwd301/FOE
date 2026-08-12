@@ -113,7 +113,9 @@ BUILDING_CATEGORY_LIST_NAME = "BuildingCategoryList"
 ALL_BUILDING_CATEGORIES = "All Building Categories"
 CULTURAL_SETTLEMENT_REWARDS = "Cultural Settlement Rewards"
 CARE_2026_EVENT_REWARDS = "CARE 2026 Event Rewards"
+FALL_2026_EVENT_REWARDS = "FALL 2026 Event Rewards"
 BUILDING_CATEGORY_CORRECTIONS = {
+    "ascended golden crops feast": ("Ascended Golden Crops Feast", FALL_2026_EVENT_REWARDS),
     "azalea windmill": ("Azalea Windmill", CARE_2026_EVENT_REWARDS),
     "bougainvillea windmill": ("Bougainvillea Windmill", CARE_2026_EVENT_REWARDS),
     "flower trail": ("Flower Trail", CARE_2026_EVENT_REWARDS),

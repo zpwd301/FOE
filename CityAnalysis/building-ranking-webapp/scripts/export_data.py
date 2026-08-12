@@ -19,7 +19,7 @@ if SCRIPT_DIR not in sys.path:
 
 import building_ranking_model as model  # noqa: E402
 
-DEFAULT_AGE = "VirtualFuture"
+DEFAULT_AGE = "SpaceAgeAsteroidBelt"
 DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
 # Increment when the serialized website payload shape or semantics change.
 EXPORT_SCHEMA_VERSION = 5
