@@ -93,13 +93,13 @@
       "sha256": "69fb71702a7e5a418a4f501775a489babf7297fb5a7a8becfa3026fd263ae83c"
     }
   },
-  "coreCompressedSha256": "66af78ab156527956d1fb42135824f1057e8b963a75ad841737384163e5c0bbe",
-  "coreSha256": "fc2eba299a55c59407c2aa6cd6c3175c709a2e1d94d4c8bd5ec29a5695c00041",
-  "dataVersion": "dd1387d97183",
-  "exporterSha256": "9eb56936500912d5e5b58feec742d028749e50142ffb766db0a97a9cc1858bec",
-  "modelSha256": "17e983e033bc3b865852284eec6c5e8931872247757296e0cd7949c78ee4a5e5",
+  "coreCompressedSha256": "1832cdc01c06e8c31ad7ad43c22e6f77326c1763ee09bf1e2e558431e1b20fc4",
+  "coreSha256": "b99f235635a8cea4d2cea47f0395772b0fda1c1ebd4ce5fb0aae7d074de01754",
+  "dataVersion": "cb075acefb8f",
+  "exporterSha256": "1391e20e927ecca5a5889f62bc4cd481844450956351d471b3436c6e0e8def32",
+  "modelSha256": "5dc328ede7a53c38f283133838f9cd4e3ab72033fc31c8c7c89f83662597066e",
   "modelVersion": "1.0.51",
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "source": "input/ref/zpwd-ref",
   "sourceSha256": "03417d605b4632a34c8bdfd8fbea32fcc928b16a95342e65ae2e979934b794a5"
 }

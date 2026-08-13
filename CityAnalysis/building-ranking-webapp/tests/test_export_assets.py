@@ -16,6 +16,14 @@ import export_data  # noqa: E402
 
 
 class ExportAssetTests(unittest.TestCase):
+    @staticmethod
+    def age_variant(index: dict, entity_id: str, age: str, fallback):
+        entry = index.get(entity_id)
+        if not isinstance(entry, dict):
+            return fallback
+        overrides = entry.get("overrides", {})
+        return overrides.get(age, entry.get("default", fallback))
+
     def test_default_age_is_space_age_asteroid_belt(self) -> None:
         data_dir = WEBAPP_ROOT / "data"
         core = json.loads((data_dir / "ranking-core.json").read_text(encoding="utf-8"))
@@ -45,6 +53,29 @@ class ExportAssetTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match.group(1), export_data.data_version())
         self.assertNotIn("ranking-data", index)
+
+    def test_unit_details_match_exported_ranking_attributes(self) -> None:
+        data_dir = WEBAPP_ROOT / "data"
+        core = json.loads((data_dir / "ranking-core.json").read_text(encoding="utf-8"))
+        index = core["unitProductionByEntity"]
+        attribute_keys = {
+            "prod_unit_current_age",
+            "prod_unit_next_age",
+            "prod_unit_rogue",
+        }
+
+        for age in (item["key"] for item in core["ages"]):
+            payload = json.loads((data_dir / "ages" / f"{age}.json").read_text(encoding="utf-8"))
+            for record in payload["records"]:
+                details = self.age_variant(index, record["entityId"], age, [])
+                for attribute_key in attribute_keys:
+                    expected = sum(
+                        float(item["expectedPerDay"])
+                        for item in details
+                        if item["attributeKey"] == attribute_key
+                    )
+                    actual = float(record.get("attrs", {}).get(attribute_key, 0.0))
+                    self.assertAlmostEqual(actual, expected, places=9)
 
     def test_legacy_monolithic_assets_are_removed(self) -> None:
         data_dir = WEBAPP_ROOT / "data"

@@ -207,6 +207,19 @@ PROD_FP_ATTR = "prod_resource_strategy_points"
 PROD_GOODS_ATTR = "prod_resource_goods_total"
 PROD_GUILD_GOODS_ATTR = "prod_resource_guild_goods"
 PROD_MEDALS_ATTR = "prod_resource_medals"
+UNIT_AGE_DEFINITIONS = {
+    "prod_unit_current_age": ("current", "Current age"),
+    "prod_unit_next_age": ("next", "Next age"),
+    "prod_unit_rogue": ("rogue", "Special"),
+}
+UNIT_CLASS_DEFINITIONS = {
+    "light_melee": ("light", "Light"),
+    "heavy_melee": ("heavy", "Heavy"),
+    "fast": ("fast", "Fast"),
+    "short_ranged": ("ranged", "Ranged"),
+    "long_ranged": ("artillery", "Artillery"),
+    "rogue": ("rogue", "Rogue"),
+}
 KIT_FAMILY_DEFINITIONS = {
     "oneUp": {
         "attrKey": "prod_kit_one_up",
@@ -1773,6 +1786,47 @@ def unit_attribute_key(reward: Dict[str, Any]) -> str:
     return "prod_unit_current_age"
 
 
+def unit_class_details(reward: Dict[str, Any]) -> Tuple[str, str]:
+    reward_id = str(reward.get("id", ""))
+    parts = reward_id.split("#")
+    raw_class = resource_key(parts[1]) if len(parts) >= 2 and parts[0].casefold() == "era_unit" else ""
+    if unit_attribute_key(reward) == "prod_unit_rogue":
+        raw_class = "rogue"
+    if raw_class in UNIT_CLASS_DEFINITIONS:
+        return UNIT_CLASS_DEFINITIONS[raw_class]
+    if raw_class:
+        return raw_class, raw_class.replace("_", " ").title()
+    return "", ""
+
+
+def unit_display_name(reward: Dict[str, Any]) -> str:
+    name = str(reward.get("name") or "").strip()
+    if name:
+        return re.sub(r"^\s*\d+(?:\.\d+)?\s*[x×]\s*", "", name, count=1).strip()
+    unit = reward.get("unit")
+    unit_id = unit.get("unitTypeId") if isinstance(unit, dict) else None
+    fallback = str(unit_id or reward.get("unitTypeId") or reward.get("subType") or "Unit")
+    return fallback.replace("_", " ").title()
+
+
+def unit_output_identity(reward: Dict[str, Any]) -> Tuple[str, str, str, str, str, str, str]:
+    attribute_key = unit_attribute_key(reward)
+    age_key, age_label = UNIT_AGE_DEFINITIONS[attribute_key]
+    class_key, class_label = unit_class_details(reward)
+    unit = reward.get("unit")
+    nested_unit_id = unit.get("unitTypeId") if isinstance(unit, dict) else None
+    unit_id = str(nested_unit_id or reward.get("unitTypeId") or reward.get("subType") or "")
+    return (
+        attribute_key,
+        age_key,
+        age_label,
+        class_key,
+        class_label,
+        unit_id,
+        unit_display_name(reward),
+    )
+
+
 def add_unit_production(attrs: Dict[str, float], reward: Dict[str, Any], factor: float) -> None:
     amount = as_float(reward.get("amount", reward.get("value", 1))) or 1.0
     add_attr(attrs, unit_attribute_key(reward), amount, factor)
@@ -1916,6 +1970,208 @@ def resolved_reward(
     if reward_lookup and isinstance(reward.get("id"), str) and reward["id"] in reward_lookup:
         return {**reward_lookup[reward["id"]], **reward}
     return reward
+
+
+UnitOutputKey = Tuple[str, str, str, str, str, str, str]
+
+
+def add_unit_output(
+    outputs: Dict[UnitOutputKey, Dict[str, Any]],
+    reward: Dict[str, Any],
+    time_factor: float,
+    probability: float,
+) -> None:
+    amount = as_float(reward.get("amount", reward.get("value", 1))) or 1.0
+    identity = unit_output_identity(reward)
+    entry = outputs.setdefault(
+        identity,
+        {
+            "attributeKey": identity[0],
+            "age": identity[1],
+            "ageLabel": identity[2],
+            "classKey": identity[3],
+            "classLabel": identity[4],
+            "unitId": identity[5],
+            "unitName": identity[6],
+            "expectedPerDay": 0.0,
+            "possiblePerDay": 0.0,
+        },
+    )
+    entry["expectedPerDay"] += amount * time_factor * probability
+    entry["possiblePerDay"] += amount * time_factor
+
+
+def collect_unit_reward(
+    outputs: Dict[UnitOutputKey, Dict[str, Any]],
+    reward: Dict[str, Any],
+    time_factor: float,
+    probability: float,
+    reward_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> None:
+    resolved = resolved_reward(reward, reward_lookup)
+    reward_type = resource_key(str(resolved.get("type", "")))
+    if reward_type == "chest":
+        possible_rewards = resolved.get("possible_rewards") or resolved.get("possibleRewards")
+        if isinstance(possible_rewards, list):
+            for item in possible_rewards:
+                if not isinstance(item, dict):
+                    continue
+                nested = item.get("reward") or item.get("product") or item
+                if isinstance(nested, dict):
+                    collect_unit_reward(
+                        outputs,
+                        nested,
+                        time_factor,
+                        probability * probability_factor(item),
+                        reward_lookup,
+                    )
+        return
+    subtype = resource_key(str(resolved.get("subType", "")))
+    if reward_type == "unit" or subtype in {"unit", "units"}:
+        add_unit_output(outputs, resolved, time_factor, probability)
+
+
+def collect_unit_product(
+    outputs: Dict[UnitOutputKey, Dict[str, Any]],
+    product: Any,
+    time_factor: float,
+    probability: float,
+    reward_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> None:
+    if not isinstance(product, dict):
+        return
+
+    resolved_product = resolved_reward(product, reward_lookup)
+    direct_type = resource_key(str(resolved_product.get("type", "")))
+    direct_subtype = resource_key(str(resolved_product.get("subType", "")))
+    if direct_type in {"unit", "chest"} or direct_subtype in {"unit", "units"}:
+        collect_unit_reward(outputs, resolved_product, time_factor, probability, reward_lookup)
+        return
+
+    reward = product.get("reward")
+    if isinstance(reward, dict):
+        collect_unit_reward(outputs, reward, time_factor, probability, reward_lookup)
+
+    for key in ("product", "assembledReward"):
+        nested = product.get(key)
+        if isinstance(nested, dict):
+            collect_unit_product(outputs, nested, time_factor, probability, reward_lookup)
+
+    for key in ("products", "possible_rewards", "possibleRewards"):
+        values = product.get(key)
+        if not isinstance(values, list):
+            continue
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            nested = item.get("product") or item.get("reward") or item
+            collect_unit_product(
+                outputs,
+                nested,
+                time_factor,
+                probability * probability_factor(item),
+                reward_lookup,
+            )
+
+
+def unit_outputs_by_attribute(
+    outputs: Dict[UnitOutputKey, Dict[str, Any]],
+) -> Dict[str, Dict[UnitOutputKey, Dict[str, Any]]]:
+    grouped: Dict[str, Dict[UnitOutputKey, Dict[str, Any]]] = {}
+    for identity, item in outputs.items():
+        grouped.setdefault(str(item["attributeKey"]), {})[identity] = item
+    return grouped
+
+
+def unit_outputs_value(outputs: Dict[UnitOutputKey, Dict[str, Any]]) -> float:
+    return sum(float(item["expectedPerDay"]) for item in outputs.values())
+
+
+def merge_unit_outputs(
+    target: Dict[UnitOutputKey, Dict[str, Any]],
+    source: Dict[UnitOutputKey, Dict[str, Any]],
+) -> None:
+    for identity, item in source.items():
+        if identity not in target:
+            target[identity] = {**item}
+            continue
+        target[identity]["expectedPerDay"] += float(item["expectedPerDay"])
+        target[identity]["possiblePerDay"] += float(item["possiblePerDay"])
+
+
+def serialize_unit_production(
+    outputs_by_attribute: Dict[str, Dict[UnitOutputKey, Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    age_order = {"current": 0, "next": 1, "rogue": 2}
+    class_order = {"light": 0, "heavy": 1, "fast": 2, "ranged": 3, "artillery": 4, "rogue": 5}
+    items: List[Dict[str, Any]] = []
+    for outputs in outputs_by_attribute.values():
+        for output in outputs.values():
+            possible = float(output["possiblePerDay"])
+            chance = float(output["expectedPerDay"]) / possible if possible > 0 else 1.0
+            items.append({**output, "chance": max(0.0, min(1.0, chance))})
+    return sorted(
+        items,
+        key=lambda item: (
+            age_order.get(str(item["age"]), 99),
+            class_order.get(str(item["classKey"]), 99),
+            str(item["unitName"]).casefold(),
+        ),
+    )
+
+
+def extract_unit_production(entity: Dict[str, Any], era: str) -> List[Dict[str, Any]]:
+    production_sets: List[Tuple[Any, Dict[str, Dict[str, Any]]]] = []
+    chain_products: List[Tuple[Any, Dict[str, Dict[str, Any]]]] = []
+    for _component_key, component in selected_components(entity, era):
+        production = component.get("production")
+        if isinstance(production, dict):
+            production_sets.append((production.get("options", []), component_reward_lookup(component)))
+        chain = component.get("chain")
+        if isinstance(chain, dict):
+            config = chain.get("config")
+            bonuses = config.get("bonuses") if isinstance(config, dict) else None
+            if isinstance(bonuses, list):
+                reward_lookup = component_reward_lookup(component)
+                for bonus in bonuses:
+                    if isinstance(bonus, dict):
+                        chain_products.append((bonus.get("productions", []), reward_lookup))
+
+    available_products = entity.get("available_products")
+    if isinstance(available_products, list) and not is_regular_timed_factory(entity):
+        production_sets.append((available_products, {}))
+
+    best_by_attribute: Dict[str, Dict[UnitOutputKey, Dict[str, Any]]] = {}
+    for options, reward_lookup in production_sets:
+        if not isinstance(options, list):
+            continue
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            option_outputs: Dict[UnitOutputKey, Dict[str, Any]] = {}
+            time_factor = option_time_factor(option)
+            for key in ("product", "products", "reward"):
+                value = option.get(key)
+                if isinstance(value, list):
+                    for item in value:
+                        collect_unit_product(option_outputs, item, time_factor, 1.0, reward_lookup)
+                elif isinstance(value, dict):
+                    collect_unit_product(option_outputs, value, time_factor, 1.0, reward_lookup)
+            for attribute_key, outputs in unit_outputs_by_attribute(option_outputs).items():
+                current = best_by_attribute.get(attribute_key)
+                if current is None or unit_outputs_value(outputs) > unit_outputs_value(current):
+                    best_by_attribute[attribute_key] = outputs
+
+    chain_outputs: Dict[UnitOutputKey, Dict[str, Any]] = {}
+    for products, reward_lookup in chain_products:
+        if not isinstance(products, list):
+            continue
+        for product in products:
+            collect_unit_product(chain_outputs, product, 1.0, 1.0, reward_lookup)
+    for attribute_key, outputs in unit_outputs_by_attribute(chain_outputs).items():
+        merge_unit_outputs(best_by_attribute.setdefault(attribute_key, {}), outputs)
+
+    return serialize_unit_production(best_by_attribute)
 
 
 def kit_reward_measure(reward: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -2934,6 +3190,7 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
         width, length, area = extract_size(entity, era)
         attrs = extract_attributes(entity, era, area)
         kit_production = extract_kit_production(entity, era)
+        unit_production = extract_unit_production(entity, era)
         for family, production in kit_production.items():
             attr_key = str(KIT_FAMILY_DEFINITIONS[family]["attrKey"])
             attrs[attr_key] = float(production["valuePerDay"])
@@ -2964,6 +3221,7 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
                 "fragment_production": fragment_production,
                 "fragment_rewards": fragment_rewards,
                 "kit_production": kit_production,
+                "unit_production": unit_production,
                 "reward_production": "; ".join(
                     part
                     for part in (
@@ -3253,6 +3511,8 @@ SHARED_MODEL_NAMES = (
     "KIT_FAMILY_DEFINITIONS",
     "KIT_REWARD_DEFINITIONS",
     "KIT_ATTR_TO_FAMILY",
+    "UNIT_AGE_DEFINITIONS",
+    "UNIT_CLASS_DEFINITIONS",
     "FARMING_FP_GOODS_COMBINED_RAW_WEIGHT",
     "FARMING_SECONDARY_RAW_WEIGHTS",
     "load_payload",
@@ -3284,6 +3544,7 @@ SHARED_MODEL_NAMES = (
     "kit_reward_measure",
     "collect_kit_product",
     "extract_kit_production",
+    "extract_unit_production",
     "extract_fragment_production_items",
     "collect_records",
     "build_age_records",

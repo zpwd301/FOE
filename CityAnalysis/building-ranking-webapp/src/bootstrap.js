@@ -109,6 +109,7 @@
     await Promise.all([
       loadScript(`src/preferences.js?v=${encodeURIComponent(appVersion)}`),
       loadScript(`src/strengths.js?v=${encodeURIComponent(appVersion)}`),
+      loadScript(`src/unit-production.js?v=${encodeURIComponent(appVersion)}`),
       loadScript(`src/city-map.js?v=${encodeURIComponent(appVersion)}`),
       loadCoreData(),
     ]);

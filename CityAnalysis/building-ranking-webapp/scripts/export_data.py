@@ -22,7 +22,7 @@ import building_ranking_model as model  # noqa: E402
 DEFAULT_AGE = "SpaceAgeAsteroidBelt"
 DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
 # Increment when the serialized website payload shape or semantics change.
-EXPORT_SCHEMA_VERSION = 5
+EXPORT_SCHEMA_VERSION = 6
 
 
 def file_sha256(path: str) -> str:
@@ -247,6 +247,10 @@ def fragment_reward_index(records_by_age: Dict[str, List[Dict[str, Any]]]) -> Di
     return age_variant_index(records_by_age, "fragment_rewards", list)
 
 
+def unit_production_index(records_by_age: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+    return age_variant_index(records_by_age, "unit_production", list)
+
+
 def attr_metadata(attr_keys: List[str]) -> Dict[str, Dict[str, Any]]:
     out: Dict[str, Dict[str, Any]] = {}
     for key in attr_keys:
@@ -395,6 +399,7 @@ def main() -> None:
             for key, definition in model.KIT_FAMILY_DEFINITIONS.items()
         ],
         "kitProductionByEntity": kit_production_index(records_by_age),
+        "unitProductionByEntity": unit_production_index(records_by_age),
         "fragmentRewardsByEntity": fragment_reward_index(records_by_age),
         "attrKeys": attr_keys,
         "attrs": attr_metadata(attr_keys),

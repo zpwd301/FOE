@@ -6,6 +6,7 @@ const SEARCH_MODE_BUILDING = "building";
 const SEARCH_MODE_FRAGMENT = "fragment";
 const { recordProducesSpecialGoods } = window.FOE_BUILDING_RANKING_STRENGTHS;
 const cityMapApi = window.FOE_BUILDING_RANKING_CITY_MAP;
+const unitProductionApi = window.FOE_BUILDING_RANKING_UNIT_PRODUCTION;
 
 const PROFILE_CONFIG = {
   overallEfficiency: {
@@ -764,6 +765,10 @@ function recordHasKitProduction(record) {
 
 function kitProductionForRecord(record) {
   return ageVariantForRecord(DATA.kitProductionByEntity, record, {});
+}
+
+function unitProductionForRecord(record) {
+  return ageVariantForRecord(DATA.unitProductionByEntity, record, []);
 }
 
 function ageVariantForRecord(index, record, fallback) {
@@ -1689,17 +1694,19 @@ function plainStrengths(contributions) {
   return labels.length ? labels : ["its recorded production"];
 }
 
-function displayAttributeLabel(label, key = "") {
+function displayAttributeLabel(label, key = "", record = null) {
   if (key === "happiness") return "Gross Happiness";
   if (key === "happiness_demanded") return "Happiness demand";
   if (key === "prod_resource_goods_total") return "Goods Total (Calculated)";
-  return label
+  const baseLabel = label
     .replace(/^Boost: /, "")
     .replace(/^Production: /, "")
     .replace(/Att Boost/g, "Attack")
     .replace(/Def Boost/g, "Defense")
     .replace(/All$/, "All modes")
     .replace(/Strategy Points/g, "Forge Points");
+  if (!record || !unitProductionApi?.detailAttributeLabel) return baseLabel;
+  return unitProductionApi.detailAttributeLabel(baseLabel, key, unitProductionForRecord(record));
 }
 
 function isPercentageAttribute(key) {
@@ -1970,7 +1977,7 @@ function buildReportText(row) {
     `Rank: ${row.rank}`,
     `Score: ${fmt(row.score)}`,
     `Efficiency: ${fmt(row.efficiency, 3)}`,
-    `Attribute checked: ${selected ? displayAttributeLabel(selected.label, selected.key) : "Not selected"}`,
+    `Attribute checked: ${selected ? displayAttributeLabel(selected.label, selected.key, row.record) : "Not selected"}`,
     `Expected value: ${selected ? formatAttributeValue(selected.key, selected.effective) : "N/A"}`,
     `Observed value: ${observed || "Not provided"}`,
     `Notes: ${notes || "None"}`,
@@ -2024,6 +2031,39 @@ function renderKitProductionDetails(record) {
               `).join("")}
             </div>
           </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function unitCountPerDay(value) {
+  return `${fmtCompact(Number(value || 0))}/day`;
+}
+
+function renderUnitProductionDetails(record) {
+  const production = unitProductionForRecord(record);
+  if (!production.length) return "";
+  return `
+    <h3>Unit Production</h3>
+    <p class="detail-section-note">Expected daily output includes collection frequency and reward probability.</p>
+    <div class="detail-info-list unit-detail-list">
+      ${production.map((item) => {
+        const chance = Number(item.chance ?? 1);
+        const primary = `${unitCountPerDay(item.expectedPerDay)}${chance < 0.999 ? " expected" : ""}`;
+        const classLabel = item.classLabel || "Not provided";
+        const possible = chance < 0.999
+          ? `${unitCountPerDay(item.possiblePerDay)} at ${unitProductionApi.probabilityLabel(chance)}`
+          : "";
+        const summary = `${primary}${possible ? ` (${possible})` : ""}`;
+        return `
+          <div class="detail-info-row unit-detail-row">
+            <span>${escapeHtml(item.ageLabel)} · ${escapeHtml(classLabel)}</span>
+            <strong class="unit-detail-value">
+              ${escapeHtml(item.unitName)}
+              <small>${escapeHtml(summary)}</small>
+            </strong>
+          </div>
         `;
       }).join("")}
     </div>
@@ -2085,11 +2125,11 @@ function openDetail(rowKey, focusClose = true, returnFocus = null) {
     </div>
   `).join("");
   const attrOptions = attrRows.slice(0, 80).map((item) => `
-    <option value="${escapeHtml(item.key)}"${item.key === state.detailSelectedAttributeKey ? " selected" : ""}>${escapeHtml(displayAttributeLabel(item.label, item.key))}</option>
+    <option value="${escapeHtml(item.key)}"${item.key === state.detailSelectedAttributeKey ? " selected" : ""}>${escapeHtml(displayAttributeLabel(item.label, item.key, row.record))}</option>
   `).join("");
   const attrTableRows = attrRows.map((item) => `
     <tr class="attribute-row${item.key === state.detailSelectedAttributeKey ? " selected-attribute-row" : ""}" data-attribute-key="${escapeHtml(item.key)}" tabindex="0">
-      <td>${escapeHtml(displayAttributeLabel(item.label, item.key))}</td>
+      <td>${escapeHtml(displayAttributeLabel(item.label, item.key, row.record))}</td>
       <td>${rawEffectiveValue(item)}</td>
       <td>${fmt(item.scorePoints)}</td>
       <td>${fmt(item.weight)}</td>
@@ -2143,6 +2183,7 @@ function openDetail(rowKey, focusClose = true, returnFocus = null) {
         <tbody>${attrTableRows}</tbody>
       </table>
     </div>
+    ${renderUnitProductionDetails(row.record)}
     ${renderKitProductionDetails(row.record)}
     <h3>Additional Building Details</h3>
     <div class="detail-info-list">${detailRows}</div>

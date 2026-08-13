@@ -1939,6 +1939,23 @@ tbody tr:hover {
   line-height: 1.45;
 }
 
+.unit-detail-list {
+  gap: 8px;
+}
+
+.unit-detail-row {
+  align-items: center;
+}
+
+.unit-detail-value small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .kit-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2465,6 +2482,7 @@ tbody tr:hover {
   .kit-detail-grid {
     grid-template-columns: 1fr;
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
