@@ -8,7 +8,7 @@
   const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   const shortDateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   let selectedDays = 90;
-  let sortMode = "delta";
+  let sortMode = "stock";
   let ageView = "attention";
   let periodCache = null;
   let resizeFrame = 0;
