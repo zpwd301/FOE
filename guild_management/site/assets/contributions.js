@@ -180,6 +180,7 @@
     $("#producer-usage").hidden = true;
     $("#producer-usage-empty").hidden = true;
     $("#producer-admin-usage").hidden = true;
+    $("#producer-dialog").classList.remove("producer-dialog--admin");
     $("#producer-records").hidden = true;
     $("#member-usage-purpose-list").innerHTML = "";
     $("#member-usage-goods-list").innerHTML = "";
@@ -247,6 +248,7 @@
   function renderAdminUsage(detail) {
     const section = $("#producer-admin-usage");
     const usage = detail.adminUsagePeriods?.[selectedRange];
+    $("#producer-dialog").classList.toggle("producer-dialog--admin", isAdminMember(detail.playerId) && Boolean(usage));
     if (!isAdminMember(detail.playerId) || !usage) {
       section.hidden = true;
       return;
@@ -293,20 +295,13 @@
 
   function updateProducerDialog(producer) {
     const admin = isAdminMember(producer.id);
-    $("#producer-dialog").classList.toggle("producer-dialog--admin", admin);
     $("#producer-dialog-title").textContent = producer.name;
-    $("#producer-dialog-period").textContent = admin
-      ? `Contribution summary for ${periodLabel()}. The guild-wide administrator view requires zpwd’s admin passcode.`
-      : `Contribution summary for ${periodLabel()}. Detailed records require an assigned passcode.`;
-    $("#producer-validation-title").textContent = admin ? "Open administrator view" : "View recent detailed records";
-    $("#producer-validation-copy").textContent = admin
-      ? "Validate zpwd’s dedicated admin passcode to view member records and the guild-wide goods-usage ledger."
-      : "Members can view their own most recent 500 contribution records by entering their assigned passcode.";
-    $("#producer-passcode-label").textContent = admin ? "Administrator passcode" : "Assigned passcode";
-    $("#producer-passcode-help").textContent = admin
-      ? "This passcode is unique to zpwd’s administrator view. Verification lasts for this browser session."
-      : "Enter the passcode assigned to this member. Verification lasts for this browser session.";
-    $("#producer-validation-submit").textContent = admin ? "Open admin view" : "View details";
+    $("#producer-dialog-period").textContent = `Contribution summary for ${periodLabel()}. Detailed records require an assigned passcode.`;
+    $("#producer-validation-title").textContent = "View recent detailed records";
+    $("#producer-validation-copy").textContent = "Members can view their own most recent 500 contribution records by entering their assigned passcode.";
+    $("#producer-passcode-label").textContent = "Assigned passcode";
+    $("#producer-passcode-help").textContent = "Enter the passcode assigned to this member. Verification lasts for this browser session.";
+    $("#producer-validation-submit").textContent = "View details";
     $("#producer-passcode").setAttribute("inputmode", admin ? "text" : "numeric");
     if (admin) $("#producer-passcode").removeAttribute("pattern");
     else $("#producer-passcode").setAttribute("pattern", "[0-9]*");
