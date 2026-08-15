@@ -6,7 +6,7 @@
     <meta name="description" content="Individual GoE guild goods contribution rankings, including building production and direct treasury contributions.">
     <title>Member Contributions | GoE Guild Portal</title>
     <link rel="icon" href="/GOE.cf564778dc8b.png">
-    <link rel="stylesheet" href="/styles.b3b36ac32b09.css">
+    <link rel="stylesheet" href="/styles.9802a487d4fa.css">
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -87,10 +87,10 @@
 
           <section class="producer-validation" id="producer-validation" aria-labelledby="producer-validation-title">
             <h3 id="producer-validation-title">View recent detailed records</h3>
-            <p>Members can view their own most recent 500 contribution records by entering their assigned passcode.</p>
+            <p id="producer-validation-copy">Members can view their own most recent 500 contribution records by entering their assigned passcode.</p>
             <form id="producer-validation-form" novalidate>
-              <label for="producer-passcode">Assigned passcode</label>
-              <div><input type="password" id="producer-passcode" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-describedby="producer-passcode-help producer-passcode-error"><button type="submit">View details</button></div>
+              <label for="producer-passcode" id="producer-passcode-label">Assigned passcode</label>
+              <div><input type="password" id="producer-passcode" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-describedby="producer-passcode-help producer-passcode-error"><button type="submit" id="producer-validation-submit">View details</button></div>
               <small id="producer-passcode-help">Enter the passcode assigned to this member. Verification lasts for this browser session.</small>
               <p class="validation-error" id="producer-passcode-error" role="alert" hidden>That passcode does not match this member.</p>
             </form>
@@ -107,6 +107,31 @@
               </div>
             </section>
             <p class="usage-empty" id="producer-usage-empty" role="status" hidden>No guild-goods usage was recorded for this member in the selected period.</p>
+
+            <section class="admin-usage" id="producer-admin-usage" aria-labelledby="producer-admin-usage-title" hidden>
+              <div class="admin-usage-heading">
+                <div>
+                  <span class="admin-badge">Guild-wide audit</span>
+                  <h3 id="producer-admin-usage-title">All-member goods usage</h3>
+                  <p id="producer-admin-usage-period"></p>
+                </div>
+              </div>
+              <div class="admin-usage-metrics" aria-label="Guild-wide usage summary">
+                <div><span>Goods used</span><strong id="admin-usage-total">-</strong></div>
+                <div><span>Members</span><strong id="admin-usage-player-count">-</strong></div>
+                <div><span>Purposes</span><strong id="admin-usage-purpose-count">-</strong></div>
+                <div><span>Records</span><strong id="admin-usage-record-count">-</strong></div>
+              </div>
+              <div class="admin-usage-table-shell">
+                <div class="table-scroll">
+                  <table class="admin-usage-table">
+                    <caption class="sr-only">Guild goods usage grouped by member and purpose for the selected period</caption>
+                    <thead><tr><th scope="col">Member</th><th scope="col">Purpose</th><th scope="col">Goods used</th><th scope="col">Share</th><th scope="col">Records</th><th scope="col">Goods mix</th></tr></thead>
+                    <tbody id="admin-usage-rows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
 
             <section class="producer-records" id="producer-records" aria-labelledby="producer-records-title" hidden>
               <div class="record-section-heading"><h3 id="producer-records-title">Recent contribution records</h3><span id="producer-record-count"></span></div>
@@ -127,7 +152,7 @@
       <span>Guardians of Elysium</span>
       <span>Guild tools and official resources &middot; 2026</span>
     </footer>
-    <script defer src="/contribution-summary.6ba075abcc5d.js"></script>
-    <script defer src="/contributions.d48b30e99206.js"></script>
+    <script defer src="/contribution-summary.2741313e98bd.js"></script>
+    <script defer src="/contributions.dc885a05958d.js"></script>
   </body>
 </html>

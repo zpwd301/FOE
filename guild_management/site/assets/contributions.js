@@ -10,6 +10,8 @@
   const fmt = new Intl.NumberFormat("en-US");
   const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
   const timestampFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const adminMemberId = "855340115";
+  const adminPasscode = "856444949🦆";
   const leaderCelebrations = {
     "WMonkey the Fuzzy": ["🐒", "🐵", "🙈", "🙉", "🙊"],
     zpwd: ["😊"],
@@ -18,7 +20,7 @@
     "3 Point": ["⛺", "🦌"],
     "Justin 2556": ["🐈‍⬛"],
   };
-  const sessionUnlockKey = "goe-contribution-unlocked-members-v1";
+  const sessionUnlockKey = "goe-contribution-unlocked-members-v2";
   const detailCache = new Map();
   const unlockedMembers = (() => {
     try {
@@ -37,6 +39,8 @@
   const eraName = (era) => String(era).replace(/^\d+\s*-\s*/, "");
   const sourceName = (message) => message === "Guild treasury donation" ? "Direct contribution" : message;
   const selectedPeriod = () => data.periods[selectedRange];
+  const isAdminMember = (playerId) => String(playerId) === adminMemberId;
+  const expectedPasscode = (playerId) => isAdminMember(playerId) ? adminPasscode : String(playerId);
 
   function rememberUnlockedMember(playerId) {
     unlockedMembers.add(String(playerId));
@@ -175,10 +179,12 @@
     $("#producer-detail-loading").classList.remove("is-error");
     $("#producer-usage").hidden = true;
     $("#producer-usage-empty").hidden = true;
+    $("#producer-admin-usage").hidden = true;
     $("#producer-records").hidden = true;
     $("#member-usage-purpose-list").innerHTML = "";
     $("#member-usage-goods-list").innerHTML = "";
     $("#member-usage-era-list").innerHTML = "";
+    $("#admin-usage-rows").innerHTML = "";
     $("#member-production-record-list").innerHTML = "";
     $("#producer-record-count").textContent = "";
   }
@@ -232,6 +238,31 @@
     }
   }
 
+  function renderAdminGoods(goods) {
+    const topGoods = goods.slice(0, 3).map(([good, amount]) => `${escapeHtml(good)} <strong>${fmt.format(amount)}</strong>`).join(" · ");
+    const allGoods = goods.map(([good, amount]) => `<span><b>${escapeHtml(good)}</b><em>${fmt.format(amount)}</em></span>`).join("");
+    return `<details class="admin-goods-detail"><summary><span>${topGoods || "No goods"}</span><small>${plural(goods.length, "good")} · expand all</small></summary><div class="admin-goods-cloud">${allGoods}</div></details>`;
+  }
+
+  function renderAdminUsage(detail) {
+    const section = $("#producer-admin-usage");
+    const usage = detail.adminUsagePeriods?.[selectedRange];
+    if (!isAdminMember(detail.playerId) || !usage) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    $("#producer-admin-usage-period").textContent = `${periodLabel()} · grouped by member and purpose. Expand any goods mix to inspect every good.`;
+    $("#admin-usage-total").textContent = `−${fmt.format(usage.total)}`;
+    $("#admin-usage-player-count").textContent = fmt.format(usage.playerCount);
+    $("#admin-usage-purpose-count").textContent = fmt.format(usage.purposeCount);
+    $("#admin-usage-record-count").textContent = fmt.format(usage.recordCount);
+    $("#admin-usage-rows").innerHTML = usage.rows.map((row) => {
+      const share = row.total / Math.max(usage.total, 1) * 100;
+      return `<tr><td><strong>${escapeHtml(row.playerName)}</strong></td><td><span class="admin-purpose">${escapeHtml(row.purpose)}</span></td><td class="admin-usage-value">−${fmt.format(row.total)}</td><td>${share.toFixed(1)}%</td><td>${fmt.format(row.recordCount)}</td><td>${renderAdminGoods(row.goods)}</td></tr>`;
+    }).join("");
+  }
+
   async function showProtectedDetails(playerId) {
     const id = String(playerId);
     const loading = $("#producer-detail-loading");
@@ -248,6 +279,7 @@
       if (pendingProducerId !== id || !$("#producer-dialog").open) return;
       renderProductionRecords(detail);
       renderUsageDetails(detail);
+      renderAdminUsage(detail);
       loading.hidden = true;
       $("#producer-records").hidden = false;
       $("#producer-protected-details").focus();
@@ -260,8 +292,24 @@
   }
 
   function updateProducerDialog(producer) {
+    const admin = isAdminMember(producer.id);
+    $("#producer-dialog").classList.toggle("producer-dialog--admin", admin);
     $("#producer-dialog-title").textContent = producer.name;
-    $("#producer-dialog-period").textContent = `Contribution summary for ${periodLabel()}. Detailed records require an assigned passcode.`;
+    $("#producer-dialog-period").textContent = admin
+      ? `Contribution summary for ${periodLabel()}. The guild-wide administrator view requires zpwd’s admin passcode.`
+      : `Contribution summary for ${periodLabel()}. Detailed records require an assigned passcode.`;
+    $("#producer-validation-title").textContent = admin ? "Open administrator view" : "View recent detailed records";
+    $("#producer-validation-copy").textContent = admin
+      ? "Validate zpwd’s dedicated admin passcode to view member records and the guild-wide goods-usage ledger."
+      : "Members can view their own most recent 500 contribution records by entering their assigned passcode.";
+    $("#producer-passcode-label").textContent = admin ? "Administrator passcode" : "Assigned passcode";
+    $("#producer-passcode-help").textContent = admin
+      ? "This passcode is unique to zpwd’s administrator view. Verification lasts for this browser session."
+      : "Enter the passcode assigned to this member. Verification lasts for this browser session.";
+    $("#producer-validation-submit").textContent = admin ? "Open admin view" : "View details";
+    $("#producer-passcode").setAttribute("inputmode", admin ? "text" : "numeric");
+    if (admin) $("#producer-passcode").removeAttribute("pattern");
+    else $("#producer-passcode").setAttribute("pattern", "[0-9]*");
     renderProductionSummary(producer);
   }
 
@@ -317,7 +365,7 @@
   $("#producer-validation-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const passcode = $("#producer-passcode");
-    if (passcode.value.trim() !== pendingProducerId) {
+    if (passcode.value.trim() !== expectedPasscode(pendingProducerId)) {
       passcode.setAttribute("aria-invalid", "true");
       $("#producer-passcode-error").hidden = false;
       passcode.focus();

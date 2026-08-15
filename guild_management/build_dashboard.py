@@ -27,6 +27,7 @@ BANNER_FORMATS = ("avif", "webp", "jpg")
 CONTRIBUTION_PERIODS = (("3", 3), ("7", 7), ("30", 30))
 DEFAULT_CONTRIBUTION_PERIOD = "30"
 CONTRIBUTION_DETAIL_RECORD_LIMIT = 500
+ADMIN_CONTRIBUTION_PLAYER_ID = "855340115"
 CACHEABLE_ASSET_SUFFIXES = frozenset(
     {".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".json", ".png", ".svg", ".webp", ".woff", ".woff2"}
 )
@@ -281,6 +282,49 @@ def build_contribution_summary_payload(payload: dict[str, object]) -> dict[str, 
     return {"meta": payload["meta"], "periods": periods}
 
 
+def build_admin_usage_periods(
+    records: list[list[object]],
+    latest_date: dt.date,
+) -> dict[str, object]:
+    usage_records = [record for record in records if int(record[5]) < 0]
+    periods: dict[str, object] = {}
+    for key, days in CONTRIBUTION_PERIODS:
+        cutoff = (latest_date - dt.timedelta(days=days - 1)).isoformat()
+        current = [record for record in usage_records if str(record[0])[:10] >= cutoff]
+        grouped: dict[tuple[str, str], list[list[object]]] = {}
+        for record in current:
+            group_key = (str(record[1]), str(record[6]))
+            grouped.setdefault(group_key, []).append(record)
+
+        rows = []
+        for (player_id, purpose), group_records in grouped.items():
+            rows.append(
+                {
+                    "playerId": player_id,
+                    "playerName": str(group_records[0][2]),
+                    "purpose": purpose,
+                    "total": sum(abs(int(record[5])) for record in group_records),
+                    "recordCount": len(group_records),
+                    "goods": contribution_groups(group_records, 4, absolute=True),
+                }
+            )
+        rows.sort(
+            key=lambda row: (
+                -int(row["total"]),
+                str(row["playerName"]).casefold(),
+                str(row["purpose"]).casefold(),
+            )
+        )
+        periods[key] = {
+            "recordCount": len(current),
+            "total": sum(abs(int(record[5])) for record in current),
+            "playerCount": len({str(record[1]) for record in current}),
+            "purposeCount": len({str(record[6]) for record in current}),
+            "rows": rows,
+        }
+    return periods
+
+
 def publish_contribution_assets(
     data_source: Path,
     output_dir: Path,
@@ -290,6 +334,7 @@ def publish_contribution_assets(
     records_by_player: dict[str, list[list[object]]] = {}
     for record in payload["records"]:
         records_by_player.setdefault(str(record[1]), []).append(record)
+    admin_usage_periods = build_admin_usage_periods(list(payload["records"]), latest_date)
 
     detail_assets: list[Path] = []
     detail_urls: dict[str, str] = {}
@@ -322,6 +367,8 @@ def publish_contribution_assets(
             "records": contribution_records[:CONTRIBUTION_DETAIL_RECORD_LIMIT],
             "usagePeriods": usage_periods,
         }
+        if player_id == ADMIN_CONTRIBUTION_PLAYER_ID:
+            detail_payload["adminUsagePeriods"] = admin_usage_periods
         content = json.dumps(detail_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         target = fingerprinted_asset(detail_source, output_dir, "contribution-detail", content)
         detail_assets.append(target)
