@@ -202,6 +202,7 @@ const el = {
   weightModeSelect: document.getElementById("weightModeSelect"),
   customWeights: document.getElementById("customWeights"),
   resetWeightsButton: document.getElementById("resetWeightsButton"),
+  tableWrap: document.querySelector(".table-wrap"),
   rankingBody: document.getElementById("rankingBody"),
   strengthLegend: document.getElementById("strengthLegend"),
   emptyState: document.getElementById("emptyState"),
@@ -285,7 +286,25 @@ function numberValue(value) {
 function customWeightRules(profile) {
   return profile === "kits"
     ? { min: 0, max: 10, step: 1, integer: true }
-    : { min: 0, max: 1000, step: 0.1, integer: false };
+    : { min: 0, max: 1000, step: 1, integer: false };
+}
+
+function handOffTableScroll(event) {
+  if (!event.cancelable || event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  const tableWrap = event.currentTarget;
+  const maxScrollTop = tableWrap.scrollHeight - tableWrap.clientHeight;
+  if (maxScrollTop <= 1) return;
+  const scrollingPastTop = event.deltaY < 0 && tableWrap.scrollTop <= 1;
+  const scrollingPastBottom = event.deltaY > 0 && tableWrap.scrollTop >= maxScrollTop - 1;
+  if (!scrollingPastTop && !scrollingPastBottom) return;
+
+  const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? Number.parseFloat(window.getComputedStyle(tableWrap).lineHeight) || 16
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? window.innerHeight
+      : 1;
+  event.preventDefault();
+  window.scrollBy({ top: event.deltaY * deltaScale, behavior: "auto" });
 }
 
 function sanitizeCustomWeight(profile, value) {
@@ -1551,7 +1570,7 @@ function renderCustomWeights() {
     }</p>
     <p class="section-note">${kitProfile
       ? "Kit weights use whole numbers from 0 to 10. Zero ignores a kit family."
-      : "Weights must be zero or greater. Zero ignores an attribute."
+      : "Weights must be zero or greater. Arrow controls change values by 1. Zero ignores an attribute."
     }</p>
     <div class="weight-list">
       ${rows.map((row) => {
@@ -2694,6 +2713,7 @@ function init() {
       }
     });
   });
+  el.tableWrap.addEventListener("wheel", handOffTableScroll, { passive: false });
   el.closeDrawer.addEventListener("click", closeDetail);
   el.drawerBackdrop.addEventListener("click", closeDetail);
   el.rankingBody.addEventListener("click", (event) => {
