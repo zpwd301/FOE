@@ -157,12 +157,12 @@ Validate the complete scheduled path without making a game request:
 ../CityAnalysis/.venv/bin/python -B automation/run_daily_refresh.py --validate-only
 ```
 
-Install the daily 2:05 AM local-time job with automatic generated-data
+Install the daily 2:10 AM local-time job with automatic generated-data
 publishing:
 
 ```bash
 ../CityAnalysis/.venv/bin/python -B automation/install_launch_agent.py \
-  --hour 2 --minute 5
+  --hour 2 --minute 10
 ```
 
 Installation replaces the same LaunchAgent if it already exists, but never

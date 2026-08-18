@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--project-dir", type=Path, default=DEFAULT_PROJECT_DIR)
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--hour", type=int, default=2)
-    parser.add_argument("--minute", type=int, default=5)
+    parser.add_argument("--minute", type=int, default=10)
     parser.add_argument("--label", default=DEFAULT_LABEL)
     parser.add_argument("--no-publish", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
