@@ -98,6 +98,7 @@ class BrowserConfig:
     contribution_input_dir: Path
     state_file: Path
     timeout_seconds: float
+    world_name: str = "Yorkton"
 
 
 def parse_args() -> argparse.Namespace:
@@ -157,6 +158,15 @@ def load_browser_config(args: argparse.Namespace) -> BrowserConfig:
     world = _setting(values, "FOE_WORLD", "us24").lower()
     if not re.fullmatch(r"[a-z]{2,4}[0-9]+", world):
         raise BrowserExportError("FOE_WORLD must look like us24, en1, or de12.")
+    world_name = _setting(
+        values,
+        "FOE_WORLD_NAME",
+        {"us24": "Yorkton"}.get(world, ""),
+    )
+    if not world_name:
+        raise BrowserExportError(
+            "FOE_WORLD_NAME is required when the configured world has no known display name."
+        )
     try:
         timeout = float(_setting(values, "FOE_FORGE_HAMMER_TIMEOUT_SECONDS", "600"))
     except ValueError as error:
@@ -182,6 +192,7 @@ def load_browser_config(args: argparse.Namespace) -> BrowserConfig:
         contribution_input_dir=args.contribution_input_dir.expanduser().resolve(),
         state_file=args.state_file.expanduser().resolve(),
         timeout_seconds=timeout,
+        world_name=world_name,
     )
 
 
@@ -728,6 +739,7 @@ def launch_chrome(
         TRIGGER_PREFIX.removesuffix("="): nonce,
         "treasury": "1" if export_treasury else "0",
         "contributions": "1" if export_contributions else "0",
+        "world_name": config.world_name,
     }
     if contribution_cutoff is not None:
         trigger_params["contribution_cutoff"] = contribution_cutoff.isoformat(timespec="seconds")
@@ -894,6 +906,7 @@ def main() -> int:
             "status": "started",
             "started_at": started_at.isoformat(),
             "world": config.world,
+            "world_name": config.world_name,
             "profile_directory": config.profile_directory,
             "nonce_fingerprint": hashlib.sha256(nonce.encode()).hexdigest()[:16],
             "requested_exports": {

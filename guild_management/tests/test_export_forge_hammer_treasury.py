@@ -19,6 +19,7 @@ from export_forge_hammer_treasury import (
     ensure_attempt_allowed,
     find_contribution_cutoff,
     find_reference_header,
+    launch_chrome,
     main,
     merge_treasury_csv_history,
     parse_args,
@@ -373,6 +374,32 @@ class ExistingExportWorkflowTests(unittest.TestCase):
 
 
 class ChromeProfileSafetyTests(unittest.TestCase):
+    def test_launcher_passes_the_world_display_name_to_the_companion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = BrowserConfig(
+                world="us24",
+                chrome_binary=root / "chrome",
+                user_data_dir=root / "chrome-data",
+                profile_directory="Profile 8",
+                download_dir=root / "downloads",
+                input_dir=root / "input",
+                contribution_input_dir=root / "contributions",
+                state_file=root / "state.json",
+                timeout_seconds=600,
+                world_name="Yorkton",
+            )
+            with mock.patch("export_forge_hammer_treasury.subprocess.Popen") as popen:
+                launch_chrome(
+                    config,
+                    "nonce",
+                    export_treasury=True,
+                    export_contributions=True,
+                    contribution_cutoff=dt.datetime(2026, 8, 17, 21, 55),
+                )
+            command = popen.call_args.args[0]
+            self.assertIn("world_name=Yorkton", command[-1])
+
     def test_default_data_directory_treats_any_chrome_as_a_conflict(self) -> None:
         result = mock.Mock(returncode=0, stdout="123 Google Chrome\n")
         with (
@@ -428,6 +455,7 @@ class CompanionExtensionSafetyTests(unittest.TestCase):
         content_script = self.manifest["content_scripts"][0]
         self.assertEqual(content_script["run_at"], "document_start")
         self.assertEqual(content_script["world"], "MAIN")
+        self.assertEqual(content_script["matches"], ["https://*.forgeofempires.com/*"])
 
     def test_uses_the_game_treasury_event_and_forge_hammer_correlation(self) -> None:
         self.assertIn("ShowClanWindowCommand_Event", self.source)
@@ -464,6 +492,20 @@ class CompanionExtensionSafetyTests(unittest.TestCase):
         self.assertIn("gameHooks.treasuryTriggerStarted = true", self.source)
         self.assertIn("gameHooks.contributionTriggerStarted = true", self.source)
         self.assertIn("no retry was made", self.source)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for the landing smoke test")
+    def test_landing_flow_clicks_play_and_yorkton_once(self) -> None:
+        result = subprocess.run(
+            [
+                "node",
+                str(Path(__file__).with_name("forge_hammer_landing_companion_smoke.js")),
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for the companion smoke test")
     def test_companion_offline_flow_triggers_exactly_once(self) -> None:

@@ -2,13 +2,223 @@
   'use strict';
 
   const triggerKey = 'forge-hammer-treasury-export';
-  const triggerParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const triggerStorageKey = '__goeForgeHammerDataExportTrigger';
+  const triggerWindowPrefix = '__goe_forge_hammer_trigger__:';
+  const directTriggerText = window.location.hash.replace(/^#/, '');
+  const directTriggerParams = new URLSearchParams(directTriggerText);
+  const liveDebugMode = directTriggerParams.get('foe_live_debug');
+  const liveDebug = liveDebugMode === '1' || liveDebugMode === 'play_once';
+
+  if (liveDebug) {
+    const normalizedDebugText = value => String(value || '').replace(/\s+/g, ' ').trim();
+    const safeUrl = value => {
+      try {
+        const parsed = new URL(value, window.location.href);
+        return `${parsed.origin}${parsed.pathname}`;
+      } catch (_error) {
+        return null;
+      }
+    };
+    const describeElement = element => {
+      const rect = element.getBoundingClientRect?.();
+      const style = window.getComputedStyle?.(element);
+      const dataset = Object.fromEntries(
+        Object.entries(element.dataset || {}).filter(([key]) => (
+          /action|play|world|server/i.test(key)
+        ))
+      );
+      return {
+        tag: element.tagName?.toLowerCase() || null,
+        text: normalizedDebugText(element.textContent).slice(0, 240),
+        value: normalizedDebugText(element.value).slice(0, 240),
+        ariaLabel: element.getAttribute?.('aria-label'),
+        title: element.getAttribute?.('title'),
+        type: element.getAttribute?.('type'),
+        role: element.getAttribute?.('role'),
+        id: element.id || null,
+        className: normalizedDebugText(element.className).slice(0, 240),
+        href: safeUrl(element.getAttribute?.('href')),
+        dataset,
+        disabled: Boolean(element.disabled),
+        hidden: Boolean(element.hidden),
+        visible: Boolean(
+          rect && rect.width > 0 && rect.height > 0 &&
+          style?.display !== 'none' && style?.visibility !== 'hidden'
+        ),
+        rect: rect ? {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        } : null,
+      };
+    };
+    const collectControls = root => {
+      const controls = [];
+      const visitedRoots = new Set();
+      const visit = currentRoot => {
+        if (!currentRoot || visitedRoots.has(currentRoot)) return;
+        visitedRoots.add(currentRoot);
+        const candidates = currentRoot.querySelectorAll?.([
+          'button',
+          'a',
+          'input[type="button"]',
+          'input[type="submit"]',
+          '[role="button"]',
+          '[onclick]',
+          '[data-action]',
+          '[data-world-name]',
+          '[data-world]',
+          '[data-server]',
+          '[class*="play" i]',
+          '[id*="play" i]',
+        ].join(',')) || [];
+        for (const candidate of candidates) {
+          controls.push(describeElement(candidate));
+          if (candidate.shadowRoot) visit(candidate.shadowRoot);
+          if (candidate.tagName === 'IFRAME') {
+            try {
+              visit(candidate.contentDocument);
+            } catch (_error) {
+              // Cross-origin frame metadata is reported separately below.
+            }
+          }
+        }
+        for (const element of currentRoot.querySelectorAll?.('*') || []) {
+          if (element.shadowRoot) visit(element.shadowRoot);
+        }
+      };
+      visit(root);
+      return controls.slice(0, 1000);
+    };
+    const saveLiveDebugReport = () => {
+      const report = {
+        capturedAt: new Date().toISOString(),
+        page: {
+          url: `${window.location.origin}${window.location.pathname}`,
+          title: document.title,
+          readyState: document.readyState,
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+        },
+        frames: Array.from(document.querySelectorAll('iframe')).map(frame => ({
+          src: safeUrl(frame.getAttribute('src')),
+          title: frame.getAttribute('title'),
+          visible: frame.getClientRects().length > 0,
+        })),
+        controls: collectControls(document),
+      };
+      const blob = new Blob([`${JSON.stringify(report, null, 2)}\n`], {
+        type: 'application/json',
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `foe-live-debug-${Date.now()}.json`;
+      link.hidden = true;
+      document.documentElement.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      document.title = `FOE LIVE DEBUG: ${report.controls.length} controls captured`;
+      console.info('[GoE live debug] Diagnostic-only report saved.', report);
+    };
+    const runLiveDebug = async () => {
+      await new Promise(resolve => window.setTimeout(resolve, 5000));
+      if (
+        liveDebugMode === 'play_once' &&
+        window.name !== '__goe_live_debug_play_clicked__'
+      ) {
+        const play = document.querySelector('#play_now_button');
+        const rect = play?.getBoundingClientRect?.();
+        if (play && !play.disabled && rect?.width > 0 && rect?.height > 0) {
+          window.name = '__goe_live_debug_play_clicked__';
+          play.click();
+          await new Promise(resolve => window.setTimeout(resolve, 5000));
+        }
+      }
+      saveLiveDebugReport();
+    };
+    void runLiveDebug();
+    return;
+  }
+  const directTrigger = (
+    directTriggerParams.get(triggerKey) || directTriggerParams.get('manual_capture') === '1'
+  );
+
+  const decodeWindowEnvelope = () => {
+    if (!String(window.name || '').startsWith(triggerWindowPrefix)) return null;
+    try {
+      return JSON.parse(decodeURIComponent(window.name.slice(triggerWindowPrefix.length)));
+    } catch (_error) {
+      return null;
+    }
+  };
+  const decodeSessionEnvelope = () => {
+    try {
+      const stored = window.sessionStorage?.getItem(triggerStorageKey);
+      return stored ? JSON.parse(stored) : null;
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const priorEnvelope = decodeWindowEnvelope() || decodeSessionEnvelope();
+  const triggerEnvelope = directTrigger
+    ? {
+        params: directTriggerText,
+        previousWindowName: priorEnvelope?.previousWindowName || (
+          String(window.name || '').startsWith(triggerWindowPrefix) ? '' : String(window.name || '')
+        ),
+        steps: priorEnvelope?.params === directTriggerText ? priorEnvelope.steps || {} : {},
+      }
+    : priorEnvelope;
+  if (!triggerEnvelope?.params) return;
+
+  const persistTriggerEnvelope = () => {
+    const encoded = triggerWindowPrefix + encodeURIComponent(JSON.stringify(triggerEnvelope));
+    window.name = encoded;
+    try {
+      window.sessionStorage?.setItem(triggerStorageKey, JSON.stringify(triggerEnvelope));
+    } catch (_error) {
+      // window.name carries the trigger across world-selection host changes.
+    }
+  };
+  const clearPersistedTrigger = () => {
+    try {
+      window.sessionStorage?.removeItem(triggerStorageKey);
+    } catch (_error) {
+      // Ignore storage restrictions; window.name is cleared below.
+    }
+    if (String(window.name || '').startsWith(triggerWindowPrefix)) {
+      window.name = triggerEnvelope.previousWindowName || '';
+    }
+    const current = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    if (current.get(triggerKey) || current.get('manual_capture') === '1') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+  };
+  const markNavigationStep = step => {
+    triggerEnvelope.steps ||= {};
+    if (triggerEnvelope.steps[step]) {
+      throw new Error(`The ${step} navigation action was already used; no retry was made.`);
+    }
+    triggerEnvelope.steps[step] = true;
+    persistTriggerEnvelope();
+  };
+  persistTriggerEnvelope();
+
+  const triggerParams = new URLSearchParams(triggerEnvelope.params);
   const manualCapture = triggerParams.get('manual_capture') === '1';
-  if (!triggerParams.get(triggerKey) && !manualCapture) return;
+  if (!triggerParams.get(triggerKey) && !manualCapture) {
+    clearPersistedTrigger();
+    return;
+  }
 
   const exportTreasury = !manualCapture && triggerParams.get('treasury') !== '0';
   const exportContributions = manualCapture || triggerParams.get('contributions') === '1';
   const contributionCutoffText = triggerParams.get('contribution_cutoff');
+  const expectedWorldName = triggerParams.get('world_name') || 'Yorkton';
+  const isGameClientPage = /^\/game\/index(?:\/|$)/.test(window.location.pathname);
   const runMarker = '__goeForgeHammerDataExportStarted';
   if (window[runMarker]) return;
   window[runMarker] = true;
@@ -89,6 +299,81 @@
       await sleep(pollMs);
     }
     throw new Error(message);
+  };
+
+  const normalizedText = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const interactiveSelector = [
+    'button',
+    'a',
+    'input[type="button"]',
+    'input[type="submit"]',
+    '[role="button"]',
+    '[data-world-name]',
+    '[data-world]',
+    '[data-server]',
+    'li',
+    'span',
+  ].join(',');
+  const isUsableAction = element => {
+    if (!element || element.hidden || element.disabled) return false;
+    if (typeof element.getClientRects === 'function' && element.getClientRects().length === 0) {
+      return false;
+    }
+    return typeof element.click === 'function';
+  };
+  const actionText = element => normalizedText([
+    element.textContent,
+    element.value,
+    element.getAttribute?.('aria-label'),
+    element.getAttribute?.('title'),
+    element.getAttribute?.('data-world-name'),
+    element.getAttribute?.('data-world'),
+    element.getAttribute?.('data-server'),
+  ].filter(Boolean).join(' '));
+  const clickableAncestor = element => (
+    element.closest?.('button,a,input[type="button"],input[type="submit"],[role="button"],[data-world-name],[data-world],[data-server],li')
+    || element
+  );
+  const findAction = (labels, { prefix = false } = {}) => {
+    const wanted = labels.map(normalizedText);
+    for (const candidate of document.querySelectorAll?.(interactiveSelector) || []) {
+      const text = actionText(candidate);
+      const matches = wanted.some(label => text === label || (prefix && text.startsWith(`${label} `)));
+      if (!matches) continue;
+      const action = clickableAncestor(candidate);
+      if (isUsableAction(action)) return action;
+    }
+    return null;
+  };
+  const clickNavigationAction = (step, element, status) => {
+    markNavigationStep(step);
+    setStatus(status);
+    element.click();
+  };
+  const enterConfiguredWorld = async () => {
+    setStatus(`Waiting for Play or ${expectedWorldName} world selection…`);
+    const firstAction = await waitUntil(() => {
+      const world = findAction([expectedWorldName], { prefix: true });
+      if (world) return { kind: 'world', element: world };
+      const play = findAction(['Play', 'Play now']);
+      return play ? { kind: 'play', element: play } : null;
+    }, `Could not find Play or the ${expectedWorldName} world selector; no retry was made.`);
+
+    if (firstAction.kind === 'world') {
+      clickNavigationAction(
+        'world',
+        firstAction.element,
+        `Selecting ${expectedWorldName} once…`
+      );
+      return;
+    }
+
+    clickNavigationAction('play', firstAction.element, 'Opening world selection once…');
+    const world = await waitUntil(
+      () => findAction([expectedWorldName], { prefix: true }),
+      `Play opened, but the ${expectedWorldName} world selector did not appear; no retry was made.`
+    );
+    clickNavigationAction('world', world, `Selecting ${expectedWorldName} once…`);
   };
 
   // ForgeHX keeps its class registry private, but assigns each Haxe class its
@@ -606,8 +891,6 @@
     Treasury.Export();
   };
 
-  installGameClientHooks();
-
   const run = async () => {
     if (!exportTreasury && !exportContributions) {
       throw new Error('No Forge Hammer export was requested.');
@@ -634,6 +917,9 @@
       ),
       'Forge Hammer did not initialize before the timeout; no requested game action was sent.'
     );
+    // Reaching an initialized game client makes the landing-page trigger
+    // single-use even if a later export step fails.
+    clearPersistedTrigger();
 
     if (exportTreasury) await exportStoredTreasury();
     if (exportContributions) await exportContributionLogs();
@@ -646,11 +932,14 @@
       exportContributions ? 'contributions' : null,
     ].filter(Boolean).join(' and ');
     setStatus(`Forge Hammer exported ${completed}.`, 'done');
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
   };
 
-  const task = manualCapture ? startManualCapture() : run();
+  if (isGameClientPage) installGameClientHooks();
+  const task = isGameClientPage
+    ? (manualCapture ? startManualCapture() : run())
+    : enterConfiguredWorld();
   task.catch(error => {
+    clearPersistedTrigger();
     gameHooks.restoreNameCapture?.();
     gameHooks.restoreClanLogModel?.();
     gameHooks.restoreBaseDispatcher?.();

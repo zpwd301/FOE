@@ -56,6 +56,10 @@ hourly and daily records, and exports `input/stats-YYYY-MM-DD.csv`. Because a
 new Chrome profile begins with no Forge Hammer history, the launcher merges the
 download into the longest compatible prior treasury CSV before rebuilding. A
 current-day snapshot can therefore extend, but never replace, saved history.
+If the browser session opens a pre-game page, the companion clicks the official
+**Play** action once and selects the configured world display name (`Yorkton`
+for `us24`) once before continuing. Both navigation steps are guarded against
+repetition and persist only across that launched tab's redirects.
 
 For contribution logs, the launcher reads the newest record timestamp from the
 latest prior `input/guild-goods-contribution/GuildTreasury-*.csv` and subtracts
@@ -139,6 +143,7 @@ workflow. Add these local-only settings to `.env.foe`:
 ```dotenv
 FOE_CHROME_USER_DATA_DIR=~/.foe-automation-chrome
 FOE_CHROME_PROFILE_DIRECTORY=Default
+FOE_WORLD_NAME=Yorkton
 ```
 
 Open that profile once for setup:
