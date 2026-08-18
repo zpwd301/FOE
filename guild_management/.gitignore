@@ -1,0 +1,5 @@
+.env.foe
+.foe-capture.har
+.foe-sync-diagnostic.json
+.foe-forge-hammer-state.json
+.foe-manual-contribution-capture.json

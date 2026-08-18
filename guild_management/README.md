@@ -42,6 +42,141 @@ This uses defaults:
 
 ## Static Dashboard
 
+### Forge Hammer treasury and contribution export (recommended)
+
+`export_forge_hammer_treasury.py` reuses Forge Hammer's real Chrome storage and
+CSV exporters. It never constructs a game request or chooses a request ID. The
+command starts Chrome once with `Profile 3` and the installed companion
+extension from `chrome/forge-hammer-treasury-exporter/`.
+
+For treasury balances, the companion dispatches the game's own **open Guild
+Treasury** action exactly once. It correlates Forge Hammer's outgoing request
+and incoming response by the game-assigned request ID, waits for the matching
+hourly and daily records, and exports `input/stats-YYYY-MM-DD.csv`.
+
+For contribution logs, the launcher reads the newest record timestamp from the
+latest prior `input/guild-goods-contribution/GuildTreasury-*.csv` and subtracts
+one hour. The companion opens the game's Message Center once so its contribution
+module is initialized, opens the official Guild Contribution window, resets
+Forge Hammer's in-memory export log, and advances through 10-row pages in
+order. Each page is requested once with the game client's own request ID. It
+stops when the first row on the current page is at or before the overlap cutoff,
+or when the server reports that no page remains, then invokes Forge Hammer's
+Guild Treasury Export Log feature. The launcher validates and imports the file
+as `input/guild-goods-contribution/GuildTreasury-YYYY-MM-DD.csv`.
+
+Official Google Chrome builds ignore the `--load-extension` command-line flag.
+Install the companion once by opening `chrome://extensions`, enabling Developer
+mode, choosing **Load unpacked**, and selecting
+`chrome/forge-hammer-treasury-exporter/`. Keep that extension and Forge Hammer
+enabled in Profile 3.
+
+Before every run, close Google Chrome completely so the correct profile can be
+started. The profile must already be signed in to the configured `FOE_WORLD`.
+Then run:
+
+```bash
+../CityAnalysis/.venv/bin/python -B export_forge_hammer_treasury.py
+```
+
+The command is intentionally fail-closed:
+
+- If both of today's validated CSVs already exist, it skips Chrome and refreshes
+  both dashboards from those local inputs. If only one exists, it requests only
+  the missing export.
+- It launches the browser once, triggers each required game action once, and
+  never retries a failed login, page load, treasury refresh, contribution page,
+  or export.
+- It exports only after Forge Hammer observes the matching response and stores
+  its resource map in both the current-hour and current-day records.
+- Contribution offsets must be `0, 10, 20, ...` with exactly one matching
+  response each. Paging stops only at the requested overlap or when the
+  response's total count proves that the server has no next page.
+- It requires the existing 110-good schema and a unique current-date row.
+- It requires Forge Hammer's **Guild Treasury Export Log** setting to be enabled.
+- A failed or interrupted attempt is recorded in the Git-ignored, mode-600
+  `.foe-forge-hammer-state.json`; another automatic attempt that day is refused.
+  A user-authorized diagnostic retry requires the explicit
+  `--allow-same-day-retry` flag and retains the previous attempt in the state file.
+
+After saving `stats-YYYY-MM-DD.csv` directly under `input/` and
+`GuildTreasury-YYYY-MM-DD.csv` under `input/guild-goods-contribution/`, the
+command refreshes both dashboards by default. Treasury uses the validated
+current-date CSV. Contribution refresh merges every CSV in its input directory
+because those exports are overlapping partial snapshots. Use `--no-refresh`
+only when CSV download and validation are intentionally being separated from
+dashboard generation; `--rebuild` remains as a compatibility alias.
+
+Use `--dry-run` to validate the Chrome profile, Forge Hammer installation,
+existing CSVs, and calculated contribution cutoff without opening the browser
+or writing state. Browser paths, the profile directory, download directory, and
+timeout can be overridden with the optional settings documented in
+`.env.foe.example`.
+
+### Direct game download
+
+`sync_foe_treasury.py` logs in to Forge of Empires, downloads the current
+guild-treasury snapshot and recent overlapping treasury transactions, and then
+rebuilds both dashboard datasets. The overlap is intentional: contribution
+exports are merged and deduplicated by the existing generator.
+
+The treasury output mirrors Forge Hammer's Statistics export. It takes the
+authoritative goods IDs and names from `StartupService.getData.goodsList`,
+stores the `ClanMain` treasury resource map as a daily snapshot, fills omitted
+resource IDs with zero, and writes `stats-YYYY-MM-DD.csv` in the same
+semicolon-delimited format while retaining the existing daily history.
+
+Create the local credential file once:
+
+```bash
+cp .env.foe.example .env.foe
+chmod 600 .env.foe
+```
+
+Fill in `FOE_USERNAME` and `FOE_PASSWORD` in `.env.foe`. `FOE_WORLD` defaults
+to `us24`. The credential file is ignored by Git, must not be committed, and is
+parsed directly rather than sourced by a shell. Login cookies stay in memory
+for the duration of the command.
+
+On every run, the sync reads the exact ForgeHX bundle referenced by the logged-in
+game page and extracts its client version and request-signature secret. It does
+not use cached or hard-coded fallback values. If the bundle cannot be loaded or
+parsed, the command stops before sending any game API request. Optional
+`FOE_CLIENT_VERSION` and `FOE_SIGNATURE_SECRET` values are safety assertions:
+the command aborts if either one differs from the live bundle.
+
+Validate authentication without writing data:
+
+```bash
+../CityAnalysis/.venv/bin/python -B sync_foe_treasury.py --login-only
+```
+
+Send exactly one startup gateway request and write a permission-restricted,
+Git-ignored diagnostic record containing only redacted protocol metadata:
+
+```bash
+../CityAnalysis/.venv/bin/python -B sync_foe_treasury.py --gateway-probe
+```
+
+Download only the current treasury snapshot using the startup, clan, and
+treasury gateway sequence, then exit before any contribution request:
+
+```bash
+../CityAnalysis/.venv/bin/python -B sync_foe_treasury.py --treasury-only
+```
+
+Download both CSVs and rebuild the portal:
+
+```bash
+../CityAnalysis/.venv/bin/python -B sync_foe_treasury.py
+```
+
+Use `--download-only` to stop after writing the input CSVs. The treasury file
+keeps the accumulated daily history and replaces today's row when rerun. The
+contribution file contains a configurable overlap with existing history so a
+rerun remains deterministic. Optional settings are documented in
+`.env.foe.example`.
+
 Build the portal from the templates and content in `site/` without changing
 treasury data:
 
