@@ -18,11 +18,13 @@ from automation.run_daily_refresh import (
     AutomationError,
     ensure_only_generated_changes,
     ensure_privacy,
+    ensure_treasury_history_preserved,
     exclusive_lock,
     is_allowed_generated_path,
     normalized_git_paths,
     project_changes,
     publish_generated_changes,
+    treasury_snapshot_dates,
     validate_generated_metadata,
 )
 
@@ -76,7 +78,11 @@ class MetadataTests(unittest.TestCase):
             for name in sources:
                 (input_dir / name).write_text("placeholder\n", encoding="utf-8")
             treasury = {
-                "meta": {"latestDate": "2026-08-18"},
+                "meta": {
+                    "firstDate": "2026-08-18",
+                    "latestDate": "2026-08-18",
+                    "availableDays": 1,
+                },
                 "dates": ["2026-08-18"],
                 "goods": [],
             }
@@ -108,6 +114,44 @@ class MetadataTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(AutomationError, "every available"):
                 validate_generated_metadata(project)
+
+    def test_rejects_a_treasury_history_regression(self) -> None:
+        previous = tuple(
+            dt.date(2026, 8, day)
+            for day in (15, 16, 17)
+        )
+        current = tuple(
+            dt.date(2026, 8, day)
+            for day in (17, 18)
+        )
+        with self.assertRaisesRegex(AutomationError, "history regressed"):
+            ensure_treasury_history_preserved(previous, current)
+
+    def test_accepts_an_appended_treasury_snapshot(self) -> None:
+        previous = tuple(dt.date(2026, 8, day) for day in (15, 16, 17))
+        current = (*previous, dt.date(2026, 8, 18))
+        ensure_treasury_history_preserved(previous, current)
+
+    def test_rejects_inconsistent_treasury_snapshot_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            data_dir = project / "site/data"
+            data_dir.mkdir(parents=True)
+            treasury = {
+                "meta": {
+                    "firstDate": "2026-08-17",
+                    "latestDate": "2026-08-18",
+                    "availableDays": 1,
+                },
+                "dates": ["2026-08-17", "2026-08-18"],
+                "goods": [],
+            }
+            (data_dir / "treasury-data.js").write_text(
+                "window.TREASURY_DATA = " + json.dumps(treasury) + ";\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(AutomationError, "metadata is inconsistent"):
+                treasury_snapshot_dates(project)
 
 
 class PrivacyTests(unittest.TestCase):

@@ -296,6 +296,147 @@ def validate_treasury_csv(
     )
 
 
+def find_treasury_history_reference(
+    input_dir: Path,
+    *,
+    expected_header: Sequence[str],
+    exclude: Path | None = None,
+) -> tuple[Path, CsvSummary] | None:
+    """Select the longest compatible prior export, not merely the newest file."""
+    candidates: list[tuple[int, dt.date, int, str, Path, CsvSummary]] = []
+    for path in input_dir.glob("stats-????-??-??.csv"):
+        if not path.is_file() or (exclude is not None and path.resolve() == exclude.resolve()):
+            continue
+        match = DOWNLOAD_RE.fullmatch(path.name)
+        if not match:
+            continue
+        try:
+            export_date = dt.date.fromisoformat(match.group(1))
+            summary = validate_treasury_csv(
+                path,
+                expected_date=export_date,
+                expected_header=expected_header,
+            )
+        except (ValueError, BrowserExportError):
+            continue
+        candidates.append(
+            (
+                summary.snapshots,
+                summary.last_date,
+                path.stat().st_mtime_ns,
+                path.name,
+                path,
+                summary,
+            )
+        )
+    if not candidates:
+        return None
+    *_, path, summary = max(candidates)
+    return path, summary
+
+
+def _read_treasury_rows(path: Path) -> tuple[list[str], list[list[str]]]:
+    try:
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.reader(handle, delimiter=";"))
+    except (OSError, csv.Error) as error:
+        raise BrowserExportError(f"Could not read treasury export {path}.") from error
+    if not rows:
+        raise BrowserExportError(f"Treasury export {path} is empty.")
+    return rows[0], rows[1:]
+
+
+def _write_treasury_rows(
+    path: Path,
+    header: Sequence[str],
+    rows: Sequence[Sequence[str]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(
+                handle,
+                delimiter=";",
+                lineterminator="\n",
+                quoting=csv.QUOTE_NONNUMERIC,
+            )
+            writer.writerow(header)
+            for row in rows:
+                writer.writerow([row[0], *(int(value) for value in row[1:])])
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def merge_treasury_csv_history(
+    downloaded: Path,
+    destination: Path,
+    *,
+    input_dir: Path,
+    expected_date: dt.date,
+    expected_header: Sequence[str] | None = None,
+) -> tuple[CsvSummary, CsvSummary, tuple[Path, CsvSummary] | None]:
+    """Merge a profile-local Forge Hammer export with the longest saved history."""
+    downloaded_summary = validate_treasury_csv(
+        downloaded,
+        expected_date=expected_date,
+        expected_header=expected_header,
+    )
+    header, downloaded_rows = _read_treasury_rows(downloaded)
+    reference = find_treasury_history_reference(
+        input_dir,
+        expected_header=header,
+        exclude=destination,
+    )
+
+    rows_by_date: dict[dt.date, list[str]] = {}
+    if reference is not None:
+        reference_path, _ = reference
+        reference_header, reference_rows = _read_treasury_rows(reference_path)
+        if reference_header != header:
+            raise BrowserExportError(
+                "Treasury history columns differ from the downloaded export; no data was replaced."
+            )
+        for row in reference_rows:
+            rows_by_date[dt.datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S").date()] = row
+
+    # The current download is authoritative for any date it contains, while all
+    # older dates absent from a fresh Chrome profile remain preserved.
+    for row in downloaded_rows:
+        rows_by_date[dt.datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S").date()] = row
+    merged_rows = [rows_by_date[date] for date in sorted(rows_by_date)]
+    staged = destination.with_name(f".{destination.name}.{os.getpid()}.merge")
+    try:
+        _write_treasury_rows(staged, header, merged_rows)
+        staged_summary = validate_treasury_csv(
+            staged,
+            expected_date=expected_date,
+            expected_header=header,
+        )
+        if reference is not None:
+            _, reference_summary = reference
+            expected_minimum = reference_summary.snapshots + int(
+                expected_date > reference_summary.last_date
+            )
+            if staged_summary.snapshots < expected_minimum:
+                raise BrowserExportError(
+                    "Treasury history merge lost prior snapshots; no dashboard refresh was attempted."
+                )
+        os.replace(staged, destination)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    merged_summary = validate_treasury_csv(
+        destination,
+        expected_date=expected_date,
+        expected_header=header,
+    )
+    return merged_summary, downloaded_summary, reference
+
+
 def contribution_export_files(
     input_dir: Path,
     *,
@@ -802,19 +943,17 @@ def main() -> int:
                     started_ns=started_ns,
                     timeout_seconds=config.timeout_seconds,
                 )
-                downloaded_treasury_summary = validate_treasury_csv(
+                (
+                    treasury_summary,
+                    downloaded_treasury_summary,
+                    treasury_history_reference,
+                ) = merge_treasury_csv_history(
                     treasury_downloaded,
-                    expected_date=sync_date,
-                    expected_header=reference_header,
-                )
-                import_export(treasury_downloaded, treasury_destination)
-                treasury_summary = validate_treasury_csv(
                     treasury_destination,
+                    input_dir=config.input_dir,
                     expected_date=sync_date,
                     expected_header=reference_header,
                 )
-                if treasury_summary.sha256 != downloaded_treasury_summary.sha256:
-                    raise BrowserExportError("Imported treasury CSV does not match the download.")
 
             if export_contributions:
                 contribution_downloaded = wait_for_download(
@@ -862,6 +1001,14 @@ def main() -> int:
             completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
             treasury={
                 "download_name": treasury_downloaded.name if treasury_downloaded else None,
+                "download_snapshots": (
+                    downloaded_treasury_summary.snapshots if treasury_downloaded else None
+                ),
+                "history_reference": (
+                    display_path(treasury_history_reference[0])
+                    if treasury_downloaded and treasury_history_reference
+                    else None
+                ),
                 "output": display_path(treasury_destination),
                 "snapshots": treasury_summary.snapshots,
                 "goods": treasury_summary.goods,

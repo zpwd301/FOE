@@ -154,22 +154,62 @@ def read_assignment(path: Path, variable: str) -> dict[str, object]:
     return payload
 
 
-def validate_generated_metadata(project_dir: Path) -> tuple[dt.date, dt.date]:
+def treasury_snapshot_dates(project_dir: Path) -> tuple[dt.date, ...]:
     treasury = read_assignment(
         project_dir / "site/data/treasury-data.js",
         "TREASURY_DATA",
     )
+    meta = treasury.get("meta")
+    raw_dates = treasury.get("dates")
+    goods = treasury.get("goods")
+    if not isinstance(meta, dict) or not isinstance(raw_dates, list) or not raw_dates:
+        raise AutomationError("Generated treasury history metadata is missing.")
+    if not isinstance(goods, list):
+        raise AutomationError("Generated treasury goods are missing.")
+    try:
+        dates = tuple(dt.date.fromisoformat(str(value)) for value in raw_dates)
+        first_date = dt.date.fromisoformat(str(meta["firstDate"]))
+        latest_date = dt.date.fromisoformat(str(meta["latestDate"]))
+        snapshot_count = int(meta["availableDays"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise AutomationError("Generated treasury history metadata is invalid.") from error
+    if dates != tuple(sorted(set(dates))):
+        raise AutomationError("Generated treasury snapshot dates are not unique and ordered.")
+    if first_date != dates[0] or latest_date != dates[-1] or snapshot_count != len(dates):
+        raise AutomationError("Generated treasury history metadata is inconsistent.")
+    for good in goods:
+        if not isinstance(good, dict) or not isinstance(good.get("values"), list):
+            raise AutomationError("Generated treasury good history is invalid.")
+        if len(good["values"]) != len(dates):
+            raise AutomationError("Generated treasury good history lost snapshot values.")
+    return dates
+
+
+def ensure_treasury_history_preserved(
+    previous_dates: Sequence[dt.date],
+    current_dates: Sequence[dt.date],
+) -> None:
+    missing = sorted(set(previous_dates) - set(current_dates))
+    if missing or len(current_dates) < len(previous_dates):
+        detail = ", ".join(date.isoformat() for date in missing[:5])
+        raise AutomationError(
+            "Treasury history regressed; refusing to publish. Missing prior snapshot dates: "
+            + (detail or "unknown")
+        )
+
+
+def validate_generated_metadata(project_dir: Path) -> tuple[dt.date, dt.date]:
+    treasury_dates = treasury_snapshot_dates(project_dir)
     contribution = read_assignment(
         project_dir / "site/data/contribution-data.js",
         "CONTRIBUTION_DATA",
     )
-    treasury_meta = treasury.get("meta")
     contribution_meta = contribution.get("meta")
-    if not isinstance(treasury_meta, dict) or not isinstance(contribution_meta, dict):
+    if not isinstance(contribution_meta, dict):
         raise AutomationError("Generated dashboard metadata is missing.")
 
     try:
-        treasury_date = dt.date.fromisoformat(str(treasury_meta["latestDate"]))
+        treasury_date = treasury_dates[-1]
         contribution_date = dt.datetime.fromisoformat(
             str(contribution_meta["latestTimestamp"])
         ).date()
@@ -386,10 +426,16 @@ def main() -> int:
             ensure_clean_start(project_dir)
             ensure_remote_is_current(project_dir, args.remote, args.branch)
             run_offline_validation(project_dir)
+            previous_treasury_dates = treasury_snapshot_dates(project_dir)
             # This is the only exporter invocation in an actual scheduled run.
             run(
                 [sys.executable, "-B", "export_forge_hammer_treasury.py"],
                 cwd=project_dir,
+            )
+            current_treasury_dates = treasury_snapshot_dates(project_dir)
+            ensure_treasury_history_preserved(
+                previous_treasury_dates,
+                current_treasury_dates,
             )
             treasury_date, contribution_date = validate_generated_metadata(project_dir)
             run_offline_validation(project_dir)

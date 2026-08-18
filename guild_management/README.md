@@ -52,7 +52,10 @@ extension from `chrome/forge-hammer-treasury-exporter/`.
 For treasury balances, the companion dispatches the game's own **open Guild
 Treasury** action exactly once. It correlates Forge Hammer's outgoing request
 and incoming response by the game-assigned request ID, waits for the matching
-hourly and daily records, and exports `input/stats-YYYY-MM-DD.csv`.
+hourly and daily records, and exports `input/stats-YYYY-MM-DD.csv`. Because a
+new Chrome profile begins with no Forge Hammer history, the launcher merges the
+download into the longest compatible prior treasury CSV before rebuilding. A
+current-day snapshot can therefore extend, but never replace, saved history.
 
 For contribution logs, the launcher reads the newest record timestamp from the
 latest prior `input/guild-goods-contribution/GuildTreasury-*.csv` and subtracts
@@ -126,7 +129,9 @@ commit and pushes it so Cloudflare Pages can deploy the refreshed dashboard.
 The runner never retries. A failed login, Chrome profile conflict, export,
 validation, commit, or push ends that day's scheduled run and produces a local
 notification. `KeepAlive` and `RunAtLoad` are deliberately disabled in the
-LaunchAgent. Logs and the process lock are local and ignored by Git.
+LaunchAgent. Before publishing, the runner also compares the rebuilt treasury
+dates with the previously published payload and refuses any update that drops a
+historical snapshot. Logs and the process lock are local and ignored by Git.
 
 For reliable unattended runs, use a Chrome data directory dedicated to this
 workflow. Add these local-only settings to `.env.foe`:

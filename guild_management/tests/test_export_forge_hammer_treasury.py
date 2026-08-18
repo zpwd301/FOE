@@ -20,6 +20,7 @@ from export_forge_hammer_treasury import (
     find_contribution_cutoff,
     find_reference_header,
     main,
+    merge_treasury_csv_history,
     parse_args,
     validate_contribution_csv,
     validate_treasury_csv,
@@ -27,18 +28,26 @@ from export_forge_hammer_treasury import (
 from generate_contribution_dashboard import REQUIRED_COLUMNS
 
 
-def write_export(path: Path, *, last_date: dt.date, goods: int = 110) -> list[str]:
+def write_export(
+    path: Path,
+    *,
+    last_date: dt.date,
+    goods: int = 110,
+    snapshots: int = 2,
+    value_offset: int = 0,
+) -> list[str]:
     header = ["DateTime", *[f"Good {index}" for index in range(goods)]]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle, delimiter=";", quoting=csv.QUOTE_NONNUMERIC)
         writer.writerow(header)
-        writer.writerow(
-            [
-                f"{(last_date - dt.timedelta(days=1)).isoformat()} 00:00:00",
-                *range(goods),
-            ]
-        )
-        writer.writerow([f"{last_date.isoformat()} 00:00:00", *range(1, goods + 1)])
+        for index in range(snapshots):
+            date = last_date - dt.timedelta(days=snapshots - index - 1)
+            writer.writerow(
+                [
+                    f"{date.isoformat()} 00:00:00",
+                    *range(value_offset + index, value_offset + index + goods),
+                ]
+            )
     return header
 
 
@@ -105,6 +114,46 @@ class CsvValidationTests(unittest.TestCase):
             os.utime(old, (1, 1))
             os.utime(new, (2, 2))
             self.assertEqual(find_reference_header(root), expected)
+
+    def test_merges_a_single_profile_snapshot_into_the_longest_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            history = root / "stats-2026-08-17.csv"
+            short_history = root / "stats-2026-08-16.csv"
+            downloaded = root / "download.csv"
+            destination = root / "stats-2026-08-18.csv"
+            header = write_export(
+                history,
+                last_date=dt.date(2026, 8, 17),
+                snapshots=4,
+            )
+            write_export(
+                short_history,
+                last_date=dt.date(2026, 8, 16),
+                snapshots=1,
+            )
+            write_export(
+                downloaded,
+                last_date=dt.date(2026, 8, 18),
+                snapshots=1,
+                value_offset=500,
+            )
+
+            merged, fresh, reference = merge_treasury_csv_history(
+                downloaded,
+                destination,
+                input_dir=root,
+                expected_date=dt.date(2026, 8, 18),
+                expected_header=header,
+            )
+
+            self.assertEqual(fresh.snapshots, 1)
+            self.assertEqual(merged.snapshots, 5)
+            self.assertEqual(reference[0], history)
+            with destination.open(encoding="utf-8", newline="") as handle:
+                rows = list(csv.reader(handle, delimiter=";"))
+            self.assertEqual(rows[-1][0], "2026-08-18 00:00:00")
+            self.assertEqual(rows[-1][1], "500")
 
 
 class ContributionCsvValidationTests(unittest.TestCase):
