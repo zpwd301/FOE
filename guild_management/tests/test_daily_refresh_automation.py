@@ -248,12 +248,12 @@ class LaunchAgentTests(unittest.TestCase):
                 python=Path("python3"),
                 label="example.refresh",
                 hour=2,
-                minute=10,
+                minute=15,
                 publish=True,
             )
             self.assertEqual(
                 payload["StartCalendarInterval"],
-                {"Hour": 2, "Minute": 10},
+                {"Hour": 2, "Minute": 15},
             )
             self.assertFalse(payload["RunAtLoad"])
             self.assertNotIn("KeepAlive", payload)
