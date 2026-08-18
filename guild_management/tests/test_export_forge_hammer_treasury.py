@@ -14,6 +14,8 @@ from unittest import mock
 from export_forge_hammer_treasury import (
     BrowserConfig,
     BrowserExportError,
+    DEFAULT_CHROME_USER_DATA_DIR,
+    chrome_is_running,
     ensure_attempt_allowed,
     find_contribution_cutoff,
     find_reference_header,
@@ -319,6 +321,49 @@ class ExistingExportWorkflowTests(unittest.TestCase):
             refresh_treasury.assert_called_once_with(treasury)
             refresh_contributions.assert_called_once_with(contribution_dir)
             launch_chrome.assert_not_called()
+
+
+class ChromeProfileSafetyTests(unittest.TestCase):
+    def test_default_data_directory_treats_any_chrome_as_a_conflict(self) -> None:
+        result = mock.Mock(returncode=0, stdout="123 Google Chrome\n")
+        with (
+            mock.patch("export_forge_hammer_treasury.sys.platform", "darwin"),
+            mock.patch(
+                "export_forge_hammer_treasury.subprocess.run",
+                return_value=result,
+            ),
+        ):
+            self.assertTrue(
+                chrome_is_running(Path("chrome"), DEFAULT_CHROME_USER_DATA_DIR)
+            )
+
+    def test_dedicated_data_directory_ignores_regular_chrome(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = mock.Mock(returncode=0, stdout="123 Google Chrome\n")
+            with (
+                mock.patch("export_forge_hammer_treasury.sys.platform", "darwin"),
+                mock.patch(
+                    "export_forge_hammer_treasury.subprocess.run",
+                    return_value=result,
+                ),
+            ):
+                self.assertFalse(chrome_is_running(Path("chrome"), Path(directory)))
+
+    def test_dedicated_data_directory_detects_its_own_chrome(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory).resolve()
+            result = mock.Mock(
+                returncode=0,
+                stdout=f"123 Google Chrome --user-data-dir={data_dir}\n",
+            )
+            with (
+                mock.patch("export_forge_hammer_treasury.sys.platform", "darwin"),
+                mock.patch(
+                    "export_forge_hammer_treasury.subprocess.run",
+                    return_value=result,
+                ),
+            ):
+                self.assertTrue(chrome_is_running(Path("chrome"), data_dir))
 
 
 class CompanionExtensionSafetyTests(unittest.TestCase):

@@ -466,16 +466,28 @@ def find_forge_hammer_manifest(config: BrowserConfig) -> Path:
     return manifests[0]
 
 
-def chrome_is_running(chrome_binary: Path) -> bool:
+def chrome_is_running(chrome_binary: Path, user_data_dir: Path) -> bool:
     if sys.platform != "darwin":
         return False
     result = subprocess.run(
-        ["pgrep", "-f", str(chrome_binary)],
-        stdout=subprocess.DEVNULL,
+        ["pgrep", "-lf", str(chrome_binary)],
+        stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         check=False,
+        text=True,
     )
-    return result.returncode == 0
+    if result.returncode != 0:
+        return False
+
+    configured_data_dir = user_data_dir.expanduser().resolve(strict=False)
+    default_data_dir = DEFAULT_CHROME_USER_DATA_DIR.expanduser().resolve(strict=False)
+    if configured_data_dir == default_data_dir:
+        # Chrome omits --user-data-dir when it uses its normal data directory,
+        # so any running instance can hold the configured profile lock.
+        return True
+
+    marker = f"--user-data-dir={configured_data_dir}"
+    return any(marker in line for line in result.stdout.splitlines())
 
 
 def preflight(config: BrowserConfig, *, require_stopped_chrome: bool = True) -> Path:
@@ -495,10 +507,14 @@ def preflight(config: BrowserConfig, *, require_stopped_chrome: bool = True) -> 
         raise BrowserExportError(
             f"Contribution input directory was not found: {config.contribution_input_dir}."
         )
-    if require_stopped_chrome and chrome_is_running(config.chrome_binary):
+    if require_stopped_chrome and chrome_is_running(
+        config.chrome_binary,
+        config.user_data_dir,
+    ):
         raise BrowserExportError(
-            "Google Chrome is already running. Close it fully so the script can start Profile 3 "
-            "with the installed companion extension; no browser was opened."
+            "The configured Chrome automation data directory is already in use. Close that "
+            f"Chrome instance so the script can start {config.profile_directory!r} with the "
+            "installed companion extension; no browser was opened."
         )
     return manifest
 

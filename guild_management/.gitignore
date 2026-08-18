@@ -3,3 +3,6 @@
 .foe-sync-diagnostic.json
 .foe-forge-hammer-state.json
 .foe-manual-contribution-capture.json
+.foe-dashboard-refresh.lock
+.foe-launchd.out.log
+.foe-launchd.err.log

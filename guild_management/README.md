@@ -113,6 +113,62 @@ or writing state. Browser paths, the profile directory, download directory, and
 timeout can be overridden with the optional settings documented in
 `.env.foe.example`.
 
+### Daily automatic refresh and deployment
+
+`automation/run_daily_refresh.py` is the fail-closed orchestration entry point
+for unattended updates. A scheduled run requires a clean `main` branch that
+exactly matches `origin/main`, runs the offline test suite before touching the
+game, invokes the Forge Hammer exporter exactly once, validates both generated
+datasets, and permits changes only under `dashboard/` plus the two source data
+payloads. When publishing is enabled, it creates a generated-data-only `FOE-30`
+commit and pushes it so Cloudflare Pages can deploy the refreshed dashboard.
+
+The runner never retries. A failed login, Chrome profile conflict, export,
+validation, commit, or push ends that day's scheduled run and produces a local
+notification. `KeepAlive` and `RunAtLoad` are deliberately disabled in the
+LaunchAgent. Logs and the process lock are local and ignored by Git.
+
+For reliable unattended runs, use a Chrome data directory dedicated to this
+workflow. Add these local-only settings to `.env.foe`:
+
+```dotenv
+FOE_CHROME_USER_DATA_DIR=~/.foe-automation-chrome
+FOE_CHROME_PROFILE_DIRECTORY=Default
+```
+
+Open that profile once for setup:
+
+```bash
+open -na "Google Chrome" --args \
+  --user-data-dir="$HOME/.foe-automation-chrome" \
+  --profile-directory=Default
+```
+
+Install Forge Hammer and the unpacked companion extension in that profile,
+sign in to the configured world, then quit that Chrome instance. A dedicated
+data directory allows ordinary Chrome windows to remain open; the preflight
+check blocks only another process using the automation directory. If the normal
+Chrome data directory remains configured, all Chrome windows must be closed at
+the scheduled time.
+
+Validate the complete scheduled path without making a game request:
+
+```bash
+../CityAnalysis/.venv/bin/python -B automation/run_daily_refresh.py --validate-only
+```
+
+Install the daily 2:05 AM local-time job with automatic generated-data
+publishing:
+
+```bash
+../CityAnalysis/.venv/bin/python -B automation/install_launch_agent.py \
+  --hour 2 --minute 5
+```
+
+Installation replaces the same LaunchAgent if it already exists, but never
+starts it immediately. Use `--no-publish` for local-only dashboard generation,
+or `--uninstall` to unload and remove the job.
+
 ### Direct game download
 
 `sync_foe_treasury.py` logs in to Forge of Empires, downloads the current
