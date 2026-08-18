@@ -146,6 +146,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow one explicitly authorized attempt despite today's recorded state.",
     )
+    parser.add_argument(
+        "--live-debug",
+        action="store_true",
+        help=(
+            "Record a browser-side one-shot trace and leave Chrome open for manual "
+            "inspection after completion or failure."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -734,6 +742,7 @@ def launch_chrome(
     export_treasury: bool,
     export_contributions: bool,
     contribution_cutoff: dt.datetime | None,
+    live_debug: bool = False,
 ) -> subprocess.Popen[bytes]:
     trigger_params = {
         TRIGGER_PREFIX.removesuffix("="): nonce,
@@ -741,6 +750,8 @@ def launch_chrome(
         "contributions": "1" if export_contributions else "0",
         "world_name": config.world_name,
     }
+    if live_debug:
+        trigger_params["live_debug"] = "1"
     if contribution_cutoff is not None:
         trigger_params["contribution_cutoff"] = contribution_cutoff.isoformat(timespec="seconds")
     game_url = (
@@ -913,6 +924,7 @@ def main() -> int:
                 "treasury": export_treasury,
                 "contributions": export_contributions,
             },
+            "live_debug": args.live_debug,
             "contribution_reference": display_path(contribution_reference),
             "contribution_reference_timestamp": contribution_reference_timestamp.isoformat(),
             "contribution_cutoff": contribution_cutoff.isoformat(),
@@ -931,6 +943,7 @@ def main() -> int:
             export_treasury=export_treasury,
             export_contributions=export_contributions,
             contribution_cutoff=contribution_cutoff if export_contributions else None,
+            live_debug=args.live_debug,
         )
         requested_description = " and ".join(
             label
@@ -944,6 +957,11 @@ def main() -> int:
             f"Chrome started with {config.profile_directory}; the game will request "
             f"{requested_description} through its official UI, with no request retries."
         )
+        if args.live_debug:
+            print(
+                "Live diagnostic tracing is enabled; Chrome will remain open for manual "
+                "inspection after the run."
+            )
 
         treasury_downloaded: Path | None = None
         contribution_downloaded: Path | None = None

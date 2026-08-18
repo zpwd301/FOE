@@ -170,6 +170,9 @@
           String(window.name || '').startsWith(triggerWindowPrefix) ? '' : String(window.name || '')
         ),
         steps: priorEnvelope?.params === directTriggerText ? priorEnvelope.steps || {} : {},
+        diagnostics: priorEnvelope?.params === directTriggerText
+          ? priorEnvelope.diagnostics || []
+          : [],
       }
     : priorEnvelope;
   if (!triggerEnvelope?.params) return;
@@ -184,6 +187,7 @@
     }
   };
   const clearPersistedTrigger = () => {
+    triggerEnvelope.cleared = true;
     try {
       window.sessionStorage?.removeItem(triggerStorageKey);
     } catch (_error) {
@@ -218,13 +222,33 @@
   const exportContributions = manualCapture || triggerParams.get('contributions') === '1';
   const contributionCutoffText = triggerParams.get('contribution_cutoff');
   const expectedWorldName = triggerParams.get('world_name') || 'Yorkton';
+  const liveExportDebug = triggerParams.get('live_debug') === '1';
   const isGameClientPage = /^\/game\/index(?:\/|$)/.test(window.location.pathname);
+  const diagnosticTrace = triggerEnvelope.diagnostics ||= [];
+  const trace = (event, data = {}) => {
+    if (!liveExportDebug) return;
+    diagnosticTrace.push({
+      at: new Date().toISOString(),
+      event,
+      ...data,
+    });
+    if (diagnosticTrace.length > 500) diagnosticTrace.shift();
+    if (!isGameClientPage && !triggerEnvelope.cleared) persistTriggerEnvelope();
+    console.info('[GoE live export debug]', event, data);
+  };
   const runMarker = '__goeForgeHammerDataExportStarted';
   if (window[runMarker]) return;
   window[runMarker] = true;
+  trace('companion-started', {
+    page: `${window.location.origin}${window.location.pathname}`,
+    exportTreasury,
+    exportContributions,
+    expectedWorldName,
+  });
 
   const showClanEventName =
     'de.innogames.strategycity.shared.ui.window.clans.controller.ShowClanWindowCommand_Event';
+  const windowEventName = 'de.innogames.strategycity.shared.event.WindowEvent';
   const conversationWindowEventName =
     'de.innogames.strategycity.shared.event.ConversationWindowEvent';
   const clanLogModelName =
@@ -233,6 +257,7 @@
   const moduleDispatcherName = 'org.robotlegs.utilities.modular.base.ModuleEventDispatcher';
   const showClanEventType =
     'de.innogames.strategycity.shared.ui.window.clans.controller.ShowClanWindowCommand/EVENT_TYPE';
+  const closeAllWindowsEventType = 'WindowEvent/CLOSE_ALL_WINDOW';
   const contributionEventType = 'ConversationWindowEvent/OPEN_GUILD_CONTRIBUTION';
   const messageCenterEventType = 'ConversationWindowEvent/REQUEST_MESSAGE_CENTER';
   const contributionPageSize = 10;
@@ -254,9 +279,53 @@
     restoreDispatcher: null,
     restoreClanLogModel: null,
     treasuryTriggerStarted: false,
+    closeAllWindowsStarted: false,
     messageCenterTriggerStarted: false,
     contributionTriggerStarted: false,
   };
+
+  const saveDiagnosticReport = (result, message = null) => {
+    if (!liveExportDebug) return;
+    const report = {
+      capturedAt: new Date().toISOString(),
+      result,
+      message,
+      page: `${window.location.origin}${window.location.pathname}`,
+      requestedExports: {
+        treasury: exportTreasury,
+        contributions: exportContributions,
+      },
+      navigationSteps: { ...(triggerEnvelope.steps || {}) },
+      gameActions: {
+        closeAllWindowsStarted: gameHooks.closeAllWindowsStarted,
+        treasuryTriggerStarted: gameHooks.treasuryTriggerStarted,
+        messageCenterTriggerStarted: gameHooks.messageCenterTriggerStarted,
+        contributionTriggerStarted: gameHooks.contributionTriggerStarted,
+      },
+      capturedClasses: Array.from(gameHooks.classes.keys()),
+      capturedDispatcherCount: gameHooks.dispatchers.size,
+      trace: [...diagnosticTrace],
+    };
+    const blob = new Blob([`${JSON.stringify(report, null, 2)}\n`], {
+      type: 'application/json',
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `foe-export-debug-${result}-${Date.now()}.json`;
+    link.hidden = true;
+    document.documentElement.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    console.info('[GoE live export debug] Report saved.', report);
+  };
+  if (liveExportDebug) {
+    window.__goeForgeHammerLiveDebug = {
+      trace: diagnosticTrace,
+      saveReport: () => saveDiagnosticReport('manual'),
+    };
+  }
 
   const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
   const manualLog = (kind, data) => {
@@ -269,6 +338,7 @@
   };
 
   const setStatus = (message, state = 'working') => {
+    trace('status', { message, state });
     let element = document.getElementById(statusId);
     if (!element) {
       element = document.createElement('div');
@@ -346,6 +416,12 @@
     return null;
   };
   const clickNavigationAction = (step, element, status) => {
+    trace('navigation-click', {
+      step,
+      tag: element.tagName?.toLowerCase() || null,
+      id: element.id || null,
+      label: actionText(element).slice(0, 120),
+    });
     markNavigationStep(step);
     setStatus(status);
     element.click();
@@ -360,6 +436,7 @@
     }, `Could not find Play or the ${expectedWorldName} world selector; no retry was made.`);
 
     if (firstAction.kind === 'world') {
+      trace('landing-action-found', { kind: 'world' });
       clickNavigationAction(
         'world',
         firstAction.element,
@@ -368,6 +445,7 @@
       return;
     }
 
+    trace('landing-action-found', { kind: 'play' });
     clickNavigationAction('play', firstAction.element, 'Opening world selection once…');
     const world = await waitUntil(
       () => findAction([expectedWorldName], { prefix: true }),
@@ -383,7 +461,10 @@
     const originalNameDescriptor = Object.getOwnPropertyDescriptor(Function.prototype, '__name__');
     const wantedNames = new Set([moduleDispatcherName]);
     if (exportContributions) wantedNames.add(baseDispatcherName);
-    if (exportTreasury) wantedNames.add(showClanEventName);
+    if (exportTreasury) {
+      wantedNames.add(windowEventName);
+      wantedNames.add(showClanEventName);
+    }
     if (exportContributions) {
       wantedNames.add(conversationWindowEventName);
       wantedNames.add(clanLogModelName);
@@ -502,6 +583,9 @@
       armBaseDispatcherCapture();
       armModuleDispatcherCapture();
       armClanLogModelCapture();
+      trace('game-hooks-armed', {
+        capturedClasses: Array.from(gameHooks.classes.keys()),
+      });
     };
 
     try {
@@ -521,6 +605,7 @@
           });
           if (wantedNames.has(value)) {
             gameHooks.classes.set(value, this);
+            trace('game-class-captured', { name: value });
             if (gameHooks.classes.size === wantedNames.size) {
               restoreNameCapture();
               Promise.resolve().then(armCapturedClasses);
@@ -557,7 +642,21 @@
     if (typeof ShowClanWindowEvent !== 'function') {
       throw new Error('The game treasury event class is unavailable; no request was sent.');
     }
+    trace('treasury-action-dispatch', { selectedTabId: 'treasury' });
     dispatcher.dispatchEvent(new ShowClanWindowEvent(null, 'treasury'));
+  };
+
+  const closeAllGameWindowsOnce = dispatcher => {
+    if (gameHooks.closeAllWindowsStarted) {
+      throw new Error('The close-all-windows action was already used; no retry was made.');
+    }
+    gameHooks.closeAllWindowsStarted = true;
+    const WindowEvent = gameHooks.classes.get(windowEventName);
+    if (typeof WindowEvent !== 'function') {
+      throw new Error('The game close-window event class is unavailable; Treasury was not opened.');
+    }
+    trace('close-all-windows-dispatch', { eventType: closeAllWindowsEventType });
+    dispatcher.dispatchEvent(new WindowEvent(closeAllWindowsEventType));
   };
 
   const triggerContributionLogOnce = dispatcher => {
@@ -569,6 +668,7 @@
     if (typeof ConversationWindowEvent !== 'function') {
       throw new Error('The game contribution event class is unavailable; no request was sent.');
     }
+    trace('contribution-action-dispatch', { eventType: contributionEventType });
     dispatcher.dispatchEvent(new ConversationWindowEvent(contributionEventType));
   };
 
@@ -581,6 +681,7 @@
     if (typeof ConversationWindowEvent !== 'function') {
       throw new Error('The game Message Center event class is unavailable; no request was sent.');
     }
+    trace('message-center-action-dispatch', { eventType: messageCenterEventType });
     dispatcher.dispatchEvent(new ConversationWindowEvent(messageCenterEventType));
   };
 
@@ -607,10 +708,18 @@
         requestId: request?.requestId,
         bagType,
       });
+      trace('treasury-request', {
+        requestId: request?.requestId ?? null,
+        bagType: bagType || null,
+      });
     };
     const responseHandler = data => {
       if (!outgoingRequest || data?.requestId !== outgoingRequest.requestId) return;
       response = data;
+      trace('treasury-response', {
+        requestId: data.requestId,
+        hasResources: Boolean(responseResources(data)),
+      });
       stop();
     };
     FH.proxy.addRequestHandler('ClanService', 'getTreasuryBag', requestHandler);
@@ -652,9 +761,22 @@
         requestId: request.requestId,
         offset,
       });
+      trace('contribution-page-request', {
+        requestId: request.requestId,
+        offset,
+        limit,
+      });
     };
     const responseHandler = data => {
       if (!activeRequest || data?.requestId !== activeRequest.requestId) return;
+      trace('contribution-page-response', {
+        requestId: data.requestId,
+        offset: activeRequest?.requestData?.[1] ?? null,
+        rowCount: Array.isArray(data?.responseData?.logs)
+          ? data.responseData.logs.length
+          : null,
+        totalCount: data?.responseData?.count ?? null,
+      });
       responses.push({ request: activeRequest, response: data });
       activeRequest = null;
     };
@@ -740,11 +862,21 @@
   };
 
   const exportStoredTreasury = async () => {
+    const windowDispatcher = await waitUntil(
+      () => findDispatcher(closeAllWindowsEventType),
+      'The game client did not expose its close-window action; Treasury was not opened.'
+    );
+    setStatus('Closing existing game windows once before opening Treasury…');
+    closeAllGameWindowsOnce(windowDispatcher);
+    await sleep(750);
+    trace('close-all-windows-settled', { settleMilliseconds: 750 });
     const dispatcher = await waitUntil(
       () => findDispatcher(showClanEventType),
       'The game client did not expose its Treasury action before the timeout; no request was sent.'
     );
+    trace('treasury-dispatcher-ready');
     await IndexDB.getDB();
+    trace('forge-hammer-database-ready');
     const observer = createTreasuryRequestObserver();
     try {
       setStatus('Requesting the guild treasury once through the game client…');
@@ -773,6 +905,11 @@
           sameResourceMap(daily.resources, freshResources)
         );
       }, 'Forge Hammer observed the response but did not store it; no export or retry was attempted.');
+      trace('treasury-storage-verified', {
+        requestId: observed.response.requestId,
+        currentHour,
+        currentDay,
+      });
     } finally {
       observer.stop();
     }
@@ -794,6 +931,10 @@
     if (Math.max(...timestamps) !== Number(moment().startOf('day'))) {
       throw new Error('Forge Hammer daily history does not contain today\'s stored snapshot.');
     }
+    trace('treasury-export-invoked', {
+      goods: series.length,
+      latestTimestamp: Math.max(...timestamps),
+    });
     Stats.exportCSV(series, `stats-${moment().format('YYYY-MM-DD')}.csv`);
   };
 
@@ -827,6 +968,7 @@
         'Message Center opened, but its Guild Contributions action did not initialize; no contribution request was sent.'
       );
     }
+    trace('contribution-dispatcher-ready');
     Treasury.Logs = [];
     const observer = createContributionPageObserver();
     let accumulatedRows = 0;
@@ -888,6 +1030,12 @@
       cutoff: contributionCutoffText,
       stopReason,
     });
+    trace('contribution-pagination-complete', {
+      pages: page + 1,
+      rows: accumulatedRows,
+      stopReason,
+    });
+    trace('contribution-export-invoked', { rows: accumulatedRows });
     Treasury.Export();
   };
 
@@ -917,6 +1065,10 @@
       ),
       'Forge Hammer did not initialize before the timeout; no requested game action was sent.'
     );
+    trace('forge-hammer-ready', {
+      capturedClasses: Array.from(gameHooks.classes.keys()),
+      capturedDispatcherCount: gameHooks.dispatchers.size,
+    });
     // Reaching an initialized game client makes the landing-page trigger
     // single-use even if a later export step fails.
     clearPersistedTrigger();
@@ -931,7 +1083,14 @@
       exportTreasury ? 'treasury' : null,
       exportContributions ? 'contributions' : null,
     ].filter(Boolean).join(' and ');
-    setStatus(`Forge Hammer exported ${completed}.`, 'done');
+    trace('workflow-complete', { completed });
+    saveDiagnosticReport('complete');
+    setStatus(
+      liveExportDebug
+        ? `Forge Hammer exported ${completed}. Live debug is waiting for manual input.`
+        : `Forge Hammer exported ${completed}.`,
+      'done'
+    );
   };
 
   if (isGameClientPage) installGameClientHooks();
@@ -944,9 +1103,12 @@
     gameHooks.restoreClanLogModel?.();
     gameHooks.restoreBaseDispatcher?.();
     gameHooks.restoreDispatcher?.();
+    trace('workflow-error', { message: error.message });
+    saveDiagnosticReport('error', error.message);
     setStatus(`Forge Hammer export stopped: ${error.message}`, 'error');
     console.error('[GoE data exporter]', {
       error,
+      closeAllWindowsStarted: gameHooks.closeAllWindowsStarted,
       treasuryTriggerStarted: gameHooks.treasuryTriggerStarted,
       messageCenterTriggerStarted: gameHooks.messageCenterTriggerStarted,
       contributionTriggerStarted: gameHooks.contributionTriggerStarted,
@@ -955,6 +1117,7 @@
     });
     console.error('[GoE data exporter] diagnostic ' + JSON.stringify({
       message: error.message,
+      closeAllWindowsStarted: gameHooks.closeAllWindowsStarted,
       treasuryTriggerStarted: gameHooks.treasuryTriggerStarted,
       messageCenterTriggerStarted: gameHooks.messageCenterTriggerStarted,
       contributionTriggerStarted: gameHooks.contributionTriggerStarted,

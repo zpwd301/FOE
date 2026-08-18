@@ -396,9 +396,11 @@ class ChromeProfileSafetyTests(unittest.TestCase):
                     export_treasury=True,
                     export_contributions=True,
                     contribution_cutoff=dt.datetime(2026, 8, 17, 21, 55),
+                    live_debug=True,
                 )
             command = popen.call_args.args[0]
             self.assertIn("world_name=Yorkton", command[-1])
+            self.assertIn("live_debug=1", command[-1])
 
     def test_default_data_directory_treats_any_chrome_as_a_conflict(self) -> None:
         result = mock.Mock(returncode=0, stdout="123 Google Chrome\n")
@@ -458,8 +460,14 @@ class CompanionExtensionSafetyTests(unittest.TestCase):
         self.assertEqual(content_script["matches"], ["https://*.forgeofempires.com/*"])
 
     def test_uses_the_game_treasury_event_and_forge_hammer_correlation(self) -> None:
+        self.assertIn("WindowEvent/CLOSE_ALL_WINDOW", self.source)
+        self.assertIn("new WindowEvent(closeAllWindowsEventType)", self.source)
         self.assertIn("ShowClanWindowCommand_Event", self.source)
         self.assertIn("new ShowClanWindowEvent(null, 'treasury')", self.source)
+        self.assertLess(
+            self.source.index("closeAllGameWindowsOnce(windowDispatcher)"),
+            self.source.index("triggerGameTreasuryRefreshOnce(dispatcher)"),
+        )
         self.assertIn("addRequestHandler('ClanService', 'getTreasuryBag'", self.source)
         self.assertIn("data?.requestId !== outgoingRequest.requestId", self.source)
 

@@ -50,9 +50,11 @@ command starts Chrome once with `Profile 3` and the installed companion
 extension from `chrome/forge-hammer-treasury-exporter/`.
 
 For treasury balances, the companion dispatches the game's own **open Guild
-Treasury** action exactly once. It correlates Forge Hammer's outgoing request
-and incoming response by the game-assigned request ID, waits for the matching
-hourly and daily records, and exports `input/stats-YYYY-MM-DD.csv`. Because a
+Treasury** action exactly once. Immediately beforehand it dispatches the game's
+close-all-windows action once, which clears the visible window stack and queued
+popups, then waits for window disposal to settle. It correlates Forge Hammer's
+outgoing request and incoming response by the game-assigned request ID, waits
+for the matching hourly and daily records, and exports `input/stats-YYYY-MM-DD.csv`. Because a
 new Chrome profile begins with no Forge Hammer history, the launcher merges the
 download into the longest compatible prior treasury CSV before rebuilding. A
 current-day snapshot can therefore extend, but never replace, saved history.
@@ -113,6 +115,12 @@ current-date CSV. Contribution refresh merges every CSV in its input directory
 because those exports are overlapping partial snapshots. Use `--no-refresh`
 only when CSV download and validation are intentionally being separated from
 dashboard generation; `--rebuild` remains as a compatibility alias.
+
+Use `--live-debug` for an explicitly authorized diagnostic attempt. It records
+the one-shot navigation, game-assigned request IDs, matching responses, Forge
+Hammer storage, pagination, and export milestones to a local
+`foe-export-debug-*.json` download. Chrome remains open at the final success or
+error state for manual inspection; the mode does not retry any game action.
 
 Use `--dry-run` to validate the Chrome profile, Forge Hammer installation,
 existing CSVs, and calculated contribution cutoff without opening the browser

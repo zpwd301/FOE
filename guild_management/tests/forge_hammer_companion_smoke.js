@@ -4,6 +4,7 @@ const path = require('path');
 
 const showEventType =
   'de.innogames.strategycity.shared.ui.window.clans.controller.ShowClanWindowCommand/EVENT_TYPE';
+const closeAllWindowsEventType = 'WindowEvent/CLOSE_ALL_WINDOW';
 const resources = { stone: 123, lumber: 456 };
 const elements = new Map();
 let storedHourly = null;
@@ -113,9 +114,10 @@ require(path.resolve(__dirname, '../chrome/forge-hammer-treasury-exporter/export
 function BaseDispatcher() {}
 BaseDispatcher.prototype.addEventListener = function () {};
 BaseDispatcher.prototype.hasEventListener = function (type) {
-  return type === showEventType;
+  return type === showEventType || type === closeAllWindowsEventType;
 };
 BaseDispatcher.prototype.dispatchEvent = function (event) {
+  if (event.type === closeAllWindowsEventType) return true;
   if (event.type !== showEventType || event.selectedTabId !== 'treasury') return true;
   requestCount += 1;
   const request = {
@@ -139,6 +141,11 @@ function ModuleDispatcher() {}
 ModuleDispatcher.__name__ = 'org.robotlegs.utilities.modular.base.ModuleEventDispatcher';
 ModuleDispatcher.prototype = Object.create(BaseDispatcher.prototype);
 ModuleDispatcher.prototype.constructor = ModuleDispatcher;
+
+function WindowEvent(type) {
+  this.type = type;
+}
+WindowEvent.__name__ = 'de.innogames.strategycity.shared.event.WindowEvent';
 
 function ShowClanWindowEvent(clanId, selectedTabId) {
   this.type = showEventType;

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GoE Forge Hammer Data Exporter",
   "description": "Exports game-owned guild-treasury balances and overlapping contribution logs through Forge Hammer.",
-  "version": "1.4.1",
+  "version": "1.4.3",
   "content_scripts": [
     {
       "matches": ["https://*.forgeofempires.com/*"],
