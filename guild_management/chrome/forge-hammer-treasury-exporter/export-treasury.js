@@ -372,7 +372,7 @@
   };
 
   const normalizedText = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  const interactiveSelector = [
+  const directActionSelector = [
     'button',
     'a',
     'input[type="button"]',
@@ -381,6 +381,9 @@
     '[data-world-name]',
     '[data-world]',
     '[data-server]',
+  ].join(',');
+  const interactiveSelector = [
+    directActionSelector,
     'li',
     'span',
   ].join(',');
@@ -400,10 +403,12 @@
     element.getAttribute?.('data-world'),
     element.getAttribute?.('data-server'),
   ].filter(Boolean).join(' '));
-  const clickableAncestor = element => (
-    element.closest?.('button,a,input[type="button"],input[type="submit"],[role="button"],[data-world-name],[data-world],[data-server],li')
-    || element
-  );
+  const clickableAncestor = element => {
+    if (element.matches?.(directActionSelector)) return element;
+    return element.closest?.(directActionSelector)
+      || element.querySelector?.(directActionSelector)
+      || element;
+  };
   const findAction = (labels, { prefix = false } = {}) => {
     const wanted = labels.map(normalizedText);
     for (const candidate of document.querySelectorAll?.(interactiveSelector) || []) {
