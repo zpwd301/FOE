@@ -17,6 +17,10 @@ from typing import Iterator, Sequence
 
 
 DEFAULT_PROJECT_DIR = Path(__file__).resolve().parents[1]
+DAILY_EXPORTER_ARGUMENTS = (
+    "export_forge_hammer_treasury.py",
+    "--close-running-profile",
+)
 ALLOWED_EXACT_PATHS = {
     "site/data/contribution-data.js",
     "site/data/treasury-data.js",
@@ -429,7 +433,11 @@ def main() -> int:
             previous_treasury_dates = treasury_snapshot_dates(project_dir)
             # This is the only exporter invocation in an actual scheduled run.
             run(
-                [sys.executable, "-B", "export_forge_hammer_treasury.py"],
+                [
+                    sys.executable,
+                    "-B",
+                    *DAILY_EXPORTER_ARGUMENTS,
+                ],
                 cwd=project_dir,
             )
             current_treasury_dates = treasury_snapshot_dates(project_dir)

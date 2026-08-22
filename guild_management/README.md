@@ -138,7 +138,10 @@ datasets, and permits changes only under `dashboard/` plus the two source data
 payloads. When publishing is enabled, it creates a generated-data-only `FOE-30`
 commit and pushes it so Cloudflare Pages can deploy the refreshed dashboard.
 
-The runner never retries. A failed login, Chrome profile conflict, export,
+The runner never retries. Before an export, it gracefully closes a stale Chrome
+process only when that process was launched with the configured automation data
+directory and profile. It refuses to close Chrome processes that do not match
+both settings. A failed login, unresolved Chrome profile conflict, export,
 validation, commit, or push ends that day's scheduled run and produces a local
 notification. `KeepAlive` and `RunAtLoad` are deliberately disabled in the
 LaunchAgent. Before publishing, the runner also compares the rebuilt treasury

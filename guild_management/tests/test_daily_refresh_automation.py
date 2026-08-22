@@ -15,6 +15,7 @@ from automation.install_launch_agent import (
     validate_schedule,
 )
 from automation.run_daily_refresh import (
+    DAILY_EXPORTER_ARGUMENTS,
     AutomationError,
     ensure_only_generated_changes,
     ensure_privacy,
@@ -284,6 +285,9 @@ class LockTests(unittest.TestCase):
 
 
 class LaunchAgentTests(unittest.TestCase):
+    def test_daily_runner_closes_the_stale_automation_profile(self) -> None:
+        self.assertIn("--close-running-profile", DAILY_EXPORTER_ARGUMENTS)
+
     def test_installs_one_daily_non_retrying_job(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)

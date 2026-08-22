@@ -4,6 +4,7 @@ import csv
 import datetime as dt
 import json
 import os
+import signal
 import shutil
 import subprocess
 import tempfile
@@ -15,6 +16,7 @@ from export_forge_hammer_treasury import (
     BrowserConfig,
     BrowserExportError,
     DEFAULT_CHROME_USER_DATA_DIR,
+    close_running_chrome_profile,
     chrome_is_running,
     ensure_attempt_allowed,
     find_contribution_cutoff,
@@ -304,6 +306,13 @@ class CommandLineTests(unittest.TestCase):
         ):
             self.assertTrue(parse_args().refresh)
 
+    def test_can_close_the_configured_running_profile(self) -> None:
+        with mock.patch(
+            "sys.argv",
+            ["export_forge_hammer_treasury.py", "--close-running-profile"],
+        ):
+            self.assertTrue(parse_args().close_running_profile)
+
 
 class ExistingExportWorkflowTests(unittest.TestCase):
     def test_refreshes_both_dashboards_without_opening_chrome(self) -> None:
@@ -374,6 +383,23 @@ class ExistingExportWorkflowTests(unittest.TestCase):
 
 
 class ChromeProfileSafetyTests(unittest.TestCase):
+    @staticmethod
+    def config(root: Path, *, user_data_dir: Path | None = None) -> BrowserConfig:
+        return BrowserConfig(
+            world="us24",
+            chrome_binary=Path(
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            ),
+            user_data_dir=user_data_dir or root / "chrome-data",
+            profile_directory="Profile 8",
+            download_dir=root / "downloads",
+            input_dir=root / "input",
+            contribution_input_dir=root / "contributions",
+            state_file=root / "state.json",
+            timeout_seconds=600,
+            world_name="Yorkton",
+        )
+
     def test_launcher_passes_the_world_display_name_to_the_companion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -442,6 +468,50 @@ class ChromeProfileSafetyTests(unittest.TestCase):
                 ),
             ):
                 self.assertTrue(chrome_is_running(Path("chrome"), data_dir))
+
+    def test_closes_only_the_exact_automation_profile_process(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self.config(root)
+            data_dir = config.user_data_dir.resolve()
+            command = (
+                f"{config.chrome_binary} --user-data-dir={data_dir} "
+                f"--profile-directory={config.profile_directory} --new-window"
+            )
+            running = mock.Mock(returncode=0, stdout=f"123 {command}\n")
+            stopped = mock.Mock(returncode=1, stdout="")
+            with (
+                mock.patch("export_forge_hammer_treasury.sys.platform", "darwin"),
+                mock.patch(
+                    "export_forge_hammer_treasury.subprocess.run",
+                    side_effect=[running, stopped, stopped],
+                ),
+                mock.patch("export_forge_hammer_treasury.os.kill") as kill,
+            ):
+                self.assertTrue(close_running_chrome_profile(config))
+            kill.assert_called_once_with(123, signal.SIGTERM)
+
+    def test_refuses_to_close_unrelated_chrome(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.config(
+                Path(directory),
+                user_data_dir=DEFAULT_CHROME_USER_DATA_DIR,
+            )
+            unrelated = mock.Mock(
+                returncode=0,
+                stdout=f"123 {config.chrome_binary}\n",
+            )
+            with (
+                mock.patch("export_forge_hammer_treasury.sys.platform", "darwin"),
+                mock.patch(
+                    "export_forge_hammer_treasury.subprocess.run",
+                    return_value=unrelated,
+                ),
+                mock.patch("export_forge_hammer_treasury.os.kill") as kill,
+            ):
+                with self.assertRaisesRegex(BrowserExportError, "does not match"):
+                    close_running_chrome_profile(config)
+            kill.assert_not_called()
 
 
 class CompanionExtensionSafetyTests(unittest.TestCase):

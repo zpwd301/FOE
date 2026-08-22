@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -62,6 +63,7 @@ CONTRIBUTION_DOWNLOAD_RE = re.compile(
     r"^GuildTreasury-(\d{4}-\d{2}-\d{2})(?: \(\d+\))?\.csv$"
 )
 CONTRIBUTION_PAGE_SIZE = 10
+CHROME_CLOSE_TIMEOUT_SECONDS = 15.0
 
 
 class BrowserExportError(SyncError):
@@ -145,6 +147,15 @@ def parse_args() -> argparse.Namespace:
         "--allow-same-day-retry",
         action="store_true",
         help="Allow one explicitly authorized attempt despite today's recorded state.",
+    )
+    parser.add_argument(
+        "--close-running-profile",
+        action="store_true",
+        help=(
+            "Before exporting, gracefully close only a Chrome process launched with the "
+            "configured automation data directory and profile. Unrelated Chrome processes "
+            "are never closed."
+        ),
     )
     parser.add_argument(
         "--live-debug",
@@ -626,9 +637,9 @@ def find_forge_hammer_manifest(config: BrowserConfig) -> Path:
     return manifests[0]
 
 
-def chrome_is_running(chrome_binary: Path, user_data_dir: Path) -> bool:
+def running_chrome_processes(chrome_binary: Path) -> tuple[tuple[int, str], ...]:
     if sys.platform != "darwin":
-        return False
+        return ()
     result = subprocess.run(
         ["pgrep", "-lf", str(chrome_binary)],
         stdout=subprocess.PIPE,
@@ -637,6 +648,26 @@ def chrome_is_running(chrome_binary: Path, user_data_dir: Path) -> bool:
         text=True,
     )
     if result.returncode != 0:
+        return ()
+
+    processes: list[tuple[int, str]] = []
+    for line in result.stdout.splitlines():
+        pid_text, separator, command = line.strip().partition(" ")
+        if not separator:
+            continue
+        try:
+            pid = int(pid_text)
+        except ValueError:
+            continue
+        processes.append((pid, command))
+    return tuple(processes)
+
+
+def chrome_data_dir_is_running(
+    processes: Sequence[tuple[int, str]],
+    user_data_dir: Path,
+) -> bool:
+    if not processes:
         return False
 
     configured_data_dir = user_data_dir.expanduser().resolve(strict=False)
@@ -647,7 +678,70 @@ def chrome_is_running(chrome_binary: Path, user_data_dir: Path) -> bool:
         return True
 
     marker = f"--user-data-dir={configured_data_dir}"
-    return any(marker in line for line in result.stdout.splitlines())
+    return any(marker in command for _, command in processes)
+
+
+def chrome_is_running(chrome_binary: Path, user_data_dir: Path) -> bool:
+    return chrome_data_dir_is_running(
+        running_chrome_processes(chrome_binary),
+        user_data_dir,
+    )
+
+
+def close_running_chrome_profile(config: BrowserConfig) -> bool:
+    processes = running_chrome_processes(config.chrome_binary)
+    if not chrome_data_dir_is_running(processes, config.user_data_dir):
+        return False
+
+    chrome_binary = str(config.chrome_binary)
+    configured_data_dir = config.user_data_dir.expanduser().resolve(strict=False)
+    data_dir_marker = f"--user-data-dir={configured_data_dir}"
+    profile_marker = f"--profile-directory={config.profile_directory}"
+    matching_pids = tuple(
+        pid
+        for pid, command in processes
+        if (command == chrome_binary or command.startswith(f"{chrome_binary} "))
+        and data_dir_marker in command
+        and profile_marker in command
+    )
+    if not matching_pids:
+        raise BrowserExportError(
+            "The configured Chrome data directory is in use, but no Chrome process "
+            f"launched for {config.profile_directory!r} was found. Refusing to close "
+            "a Chrome process that does not match the configured profile."
+        )
+
+    print(f"Closing the running Chrome automation instance for {config.profile_directory!r}.")
+    for pid in matching_pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+        except PermissionError as error:
+            raise BrowserExportError(
+                f"Could not close Chrome process {pid} for {config.profile_directory!r}."
+            ) from error
+
+    deadline = time.monotonic() + CHROME_CLOSE_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        remaining = {pid for pid, _ in running_chrome_processes(config.chrome_binary)}
+        if not remaining.intersection(matching_pids):
+            break
+        time.sleep(0.25)
+    else:
+        raise BrowserExportError(
+            f"Chrome did not close {config.profile_directory!r} within "
+            f"{CHROME_CLOSE_TIMEOUT_SECONDS:g} seconds."
+        )
+
+    if chrome_is_running(config.chrome_binary, config.user_data_dir):
+        raise BrowserExportError(
+            f"Chrome closed the automation process for {config.profile_directory!r}, but "
+            "the shared data directory is still in use by another Chrome process. "
+            "Refusing to close a process that does not match the configured profile."
+        )
+    print(f"Chrome automation instance for {config.profile_directory!r} closed.")
+    return True
 
 
 def preflight(config: BrowserConfig, *, require_stopped_chrome: bool = True) -> Path:
@@ -874,6 +968,8 @@ def main() -> int:
                 print("Treasury and contribution dashboards rebuilt.")
             return 0
 
+        if not args.dry_run and args.close_running_profile:
+            close_running_chrome_profile(config)
         manifest = preflight(config, require_stopped_chrome=not args.dry_run)
         previous_state = _read_state(config.state_file)
         ensure_attempt_allowed(
