@@ -12,14 +12,48 @@
   const timestampFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const adminMemberId = "855340115";
   const adminPasscode = "856444949🦆";
-  const leaderCelebrations = {
-    "WMonkey the Fuzzy": ["🐒", "🐵", "🙈", "🙉", "🙊"],
-    zpwd: ["😊"],
-    "Seleukus the Hard": ["🦆"],
-    "Trinity-Primrose": ["🌸", "🌼", "🌺", "🌷", "🌻"],
-    "3 Point": ["⛺", "🦌"],
-    "Justin 2556": ["🐈‍⬛"],
+  // Player IDs keep celebrations attached to members when their display names change.
+  const memberCelebrations = {
+    "15316773": ["🏕", "🦌", "🎯"], // 3 Point
+    "854838909": ["🏛️", "⚔️", "🛡️"], // 427troy
+    "15707921": ["🌙", "💎", "✨"], // Aint2Lucid
+    "850173136": ["🌹", "💗", "🌿"], // anitarose228
+    "854199299": ["⚡", "🐞", "🪩"], // Arcadius2 ElectricBugalu
+    "852925920": ["🥩", "🔥", "🥢"], // Bulgoki
+    "853996216": ["⛵", "✂️", "🌊"], // Clipper
+    "856372577": ["5️⃣", "🎲", "⭐"], // david5555
+    "13880455": ["🐸", "🫎", "🧞"], // Fergus Ferguson
+    "11336148": ["🔥", "🗡️", "8️⃣"], // Fireblade84
+    "850068349": ["🎨", "🟢", "🖌️"], // Greenpaint9
+    "20790356": ["🐷", "🎸", "🪨"], // hamstein
+    "856227627": ["🎭"], // Jaqen Hghar
+    "19531771": ["🎤", "🦇", "🤘"], // JOsborne32
+    "856034122": ["🐈‍⬛"], // Justin 2556
+    "852609056": ["👒", "🫖", "🌼"], // Little lady
+    "856211546": ["🦊", "♟️", "👑"], // Livia 2135 the Cunning
+    "855603707": ["🦎", "🎀", "✨"], // Lizzie1998
+    "851256976": ["🐺", "👑", "🌫️"], // Lord Gray Wolf
+    "855865172": ["🥀", "🗡️", "🖤"], // Melina 2169 the Cruel
+    "857089839": ["🪞", "⚖️", "💫"], // Messalina 5303 the Fair
+    "855901906": ["🤔", "💭", "🙃"], // Not well thought out
+    "856604772": ["😺", "😸", "😹", "😼", "😻"], // oneye
+    "855761769": ["🦨", "💨", "🌹"], // Pepe Le Pew II
+    "856213206": ["💎", "👸", "🏹"], // Roxana 2195
+    "856444949": ["🦆"], // Seleukus the Hard
+    "14923207": ["🏍️", "💥", "🔥"], // Sir BackFire
+    "15857412": ["🏦", "📈", "💰", "💵", "🥃"], // SirWalter929
+    "14210627": ["🌲", "🥾", "🏕️"], // Theoutdoorsman71
+    "19909277": ["🎣", "🐟", "🌊"], // Tiberius the Fisher
+    "8629248": ["🚂", "2️⃣", "1️⃣"], // treyn21
+    "13368644": ["🌸", "🌼", "🌺", "🌷", "🌻"], // Trinity-Primrose
+    "2605963": ["♊", "✌️"], // Twogelius
+    "849341420": ["⚖️", "📜", "⭐"], // Urania 1690 the Lawgiver
+    "17463852": ["⚔️", "🛡️", "👩‍👧‍👦"], // WARRIOR MOTHER1115
+    "852268218": ["🤖", "🦾", "🛰️"], // WeRBorg
+    "851889177": ["🐒", "🐵", "🙈", "🙉", "🙊"], // WMonkey the Fuzzy
+    "855340115": ["😊"], // zpwd
   };
+  const digitEmojis = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"];
   const sessionUnlockKey = "goe-contribution-unlocked-members-v2";
   const detailCache = new Map();
   const unlockedMembers = (() => {
@@ -71,7 +105,9 @@
 
   function updateLeaderEasterEgg(leader) {
     const card = $("#leading-producer-card");
-    activeLeaderCelebration = leader ? leaderCelebrations[leader.name] || null : null;
+    activeLeaderCelebration = leader
+      ? memberCelebrations[String(leader.id)] || ["🎉", "✨", ...String(leader.id).split("").map((digit) => digitEmojis[Number(digit)]).filter(Boolean)]
+      : null;
     if (activeLeaderCelebration) {
       card.setAttribute("role", "button");
       card.setAttribute("tabindex", "0");
@@ -83,42 +119,135 @@
     }
   }
 
+  function shuffledEmojiDeck(count) {
+    const deck = Array.from({ length: count }, (_, index) => activeLeaderCelebration[index % activeLeaderCelebration.length]);
+    for (let index = deck.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
+    }
+    return deck;
+  }
+
+  function distributedTargetSlots(count, launchCount) {
+    const launchSlots = Array.from({ length: launchCount }, (_, index) => Math.round(index * (count - 1) / Math.max(launchCount - 1, 1)));
+    const launchSet = new Set(launchSlots);
+    const remainingSlots = Array.from({ length: count }, (_, index) => index).filter((index) => !launchSet.has(index));
+    for (let index = remainingSlots.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [remainingSlots[index], remainingSlots[swapIndex]] = [remainingSlots[swapIndex], remainingSlots[index]];
+    }
+    return [...launchSlots, ...remainingSlots];
+  }
+
+  function positionCelebrationParticle(particle, bounds, startX, startY, mobile, depth, targetSlot, targetCount) {
+    const edgePadding = mobile ? 16 : 30;
+    const slotWidth = (window.innerWidth - edgePadding * 2) / targetCount;
+    const peakX = edgePadding + (targetSlot + 0.5) * slotWidth + (Math.random() - 0.5) * slotWidth * 0.55;
+    const peakY = 18 + Math.random() * (mobile ? 100 : 125);
+    const drift = (Math.random() - 0.5) * (mobile ? 70 : 140);
+    const clampX = (value) => Math.max(edgePadding * 0.5, Math.min(window.innerWidth - edgePadding * 0.5, value));
+    const middleX = clampX(peakX + drift * 0.48);
+    const middleY = peakY + (window.innerHeight - peakY) * (0.3 + Math.random() * 0.18);
+    const spin = (Math.random() - 0.5) * (depth === 0 ? 620 : 1080);
+    particle.style.setProperty("--x-start", `${startX + (Math.random() - 0.5) * bounds.width * 0.55}px`);
+    particle.style.setProperty("--y-start", `${startY + (Math.random() - 0.5) * bounds.height * 0.35}px`);
+    particle.style.setProperty("--x-peak", `${peakX}px`);
+    particle.style.setProperty("--y-peak", `${peakY}px`);
+    particle.style.setProperty("--x-mid", `${middleX}px`);
+    particle.style.setProperty("--y-mid", `${middleY}px`);
+    particle.style.setProperty("--x-end", `${clampX(peakX + drift)}px`);
+    particle.style.setProperty("--y-end", `${window.innerHeight + 70}px`);
+    particle.style.setProperty("--x-linger", `${clampX(peakX + drift * 0.2)}px`);
+    particle.style.setProperty("--y-linger", `${peakY + 20 + Math.random() * 42}px`);
+    particle.style.setProperty("--spin-peak", `${spin * 0.22}deg`);
+    particle.style.setProperty("--spin-mid", `${spin * 0.58}deg`);
+    particle.style.setProperty("--spin", `${spin}deg`);
+  }
+
+  function launchReducedMotionCelebration(bounds, layer) {
+    const fragment = document.createDocumentFragment();
+    const count = Math.min(activeLeaderCelebration.length, 5);
+    const radiusX = Math.min(bounds.width * 0.43, 130);
+    const radiusY = Math.min(bounds.height * 0.42, 48);
+    for (let index = 0; index < count; index += 1) {
+      const angle = -Math.PI + (Math.PI * index / Math.max(count - 1, 1));
+      const emoji = document.createElement("span");
+      emoji.className = "leader-confetti leader-confetti--reduced";
+      emoji.setAttribute("aria-hidden", "true");
+      emoji.textContent = activeLeaderCelebration[index];
+      emoji.style.setProperty("--x-rest", `${bounds.left + bounds.width / 2 + Math.cos(angle) * radiusX}px`);
+      emoji.style.setProperty("--y-rest", `${bounds.top + bounds.height / 2 + Math.sin(angle) * radiusY}px`);
+      emoji.style.setProperty("--delay", `${index * 70}ms`);
+      fragment.appendChild(emoji);
+    }
+    layer.appendChild(fragment);
+  }
+
   function launchLeaderConfetti() {
     if (!activeLeaderCelebration) return;
     const card = $("#leading-producer-card");
-    card.classList.remove("leader-celebration");
-    void card.offsetWidth;
-    card.classList.add("leader-celebration");
-    window.setTimeout(() => card.classList.remove("leader-celebration"), 650);
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
     const bounds = card.getBoundingClientRect();
     const startX = bounds.left + bounds.width / 2;
     const startY = bounds.top + bounds.height / 2;
-    const count = window.innerWidth < 600 ? 30 : 48;
-    const fragment = document.createDocumentFragment();
-    for (let index = 0; index < count; index += 1) {
-      const emoji = document.createElement("span");
-      const horizontalSpread = (Math.random() - 0.5) * Math.min(window.innerWidth * 0.9, 900);
-      const drift = (Math.random() - 0.5) * 180;
-      emoji.className = "leader-confetti";
-      emoji.setAttribute("aria-hidden", "true");
-      emoji.textContent = activeLeaderCelebration[index % activeLeaderCelebration.length];
-      emoji.style.setProperty("--x-start", `${startX + (Math.random() - 0.5) * bounds.width * 0.65}px`);
-      emoji.style.setProperty("--y-start", `${startY + (Math.random() - 0.5) * bounds.height * 0.45}px`);
-      emoji.style.setProperty("--x-peak", `${startX + horizontalSpread}px`);
-      emoji.style.setProperty("--y-peak", `${Math.max(18, startY - 130 - Math.random() * 260)}px`);
-      emoji.style.setProperty("--x-end", `${startX + horizontalSpread + drift}px`);
-      emoji.style.setProperty("--y-end", `${window.innerHeight + 70}px`);
-      const spin = (Math.random() - 0.5) * 1080;
-      emoji.style.setProperty("--spin-mid", `${spin * 0.45}deg`);
-      emoji.style.setProperty("--spin", `${spin}deg`);
-      emoji.style.setProperty("--delay", `${Math.random() * 250}ms`);
-      emoji.style.setProperty("--duration", `${3600 + Math.random() * 1600}ms`);
-      fragment.appendChild(emoji);
-      window.setTimeout(() => emoji.remove(), 5800);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    $(".leader-celebration-layer")?.remove();
+
+    const layer = document.createElement("div");
+    layer.className = "leader-celebration-layer";
+    layer.setAttribute("aria-hidden", "true");
+    if (reducedMotion) {
+      launchReducedMotionCelebration(bounds, layer);
+      document.body.appendChild(layer);
+      window.setTimeout(() => layer.remove(), 1500);
+      return;
     }
-    document.body.appendChild(fragment);
+
+    const mobile = window.innerWidth < 600;
+    const emojiCount = mobile ? 18 : 30;
+    const sparkCount = mobile ? 8 : 12;
+    const heroCount = mobile ? 2 : 3;
+    const launchCount = Math.min(6, emojiCount);
+    const targetCount = emojiCount + sparkCount;
+    const targetSlots = distributedTargetSlots(targetCount, launchCount);
+    const emojiDeck = shuffledEmojiDeck(emojiCount);
+    const addEmoji = (fragment, index, immediate) => {
+      const emoji = document.createElement("span");
+      const depth = index % 3;
+      emoji.className = `leader-confetti leader-confetti--emoji leader-confetti--depth-${depth}${index < heroCount ? " leader-confetti--hero" : ""}`;
+      emoji.setAttribute("aria-hidden", "true");
+      emoji.textContent = emojiDeck[index];
+      emoji.style.setProperty("--particle-size", `${(mobile ? 18 : 22) + depth * 6 + Math.random() * (mobile ? 8 : 12)}px`);
+      emoji.style.setProperty("--delay", immediate ? "0ms" : `${12 + Math.random() * 78}ms`);
+      emoji.style.setProperty("--duration", `${index < heroCount ? 2500 + Math.random() * 500 : 2400 + depth * 300 + Math.random() * 500}ms`);
+      positionCelebrationParticle(emoji, bounds, startX, startY, mobile, depth, targetSlots[index], targetCount);
+      fragment.appendChild(emoji);
+    };
+
+    const launchFragment = document.createDocumentFragment();
+    for (let index = 0; index < launchCount; index += 1) addEmoji(launchFragment, index, true);
+    layer.appendChild(launchFragment);
+    document.body.appendChild(layer);
+
+    window.requestAnimationFrame(() => {
+      if (!layer.isConnected) return;
+      const fragment = document.createDocumentFragment();
+      for (let index = launchCount; index < emojiCount; index += 1) addEmoji(fragment, index, false);
+      for (let index = 0; index < sparkCount; index += 1) {
+        const spark = document.createElement("span");
+        const depth = index % 3;
+        spark.className = `leader-confetti leader-confetti--spark leader-confetti--depth-${depth}`;
+        spark.setAttribute("aria-hidden", "true");
+        spark.textContent = index % 2 ? "✦" : "◆";
+        spark.style.setProperty("--particle-size", `${7 + depth * 2 + Math.random() * 5}px`);
+        spark.style.setProperty("--spark-color", index % 3 === 0 ? "#f0ca68" : index % 3 === 1 ? "#2f7b53" : "#fff2b8");
+        spark.style.setProperty("--delay", `${20 + Math.random() * 100}ms`);
+        spark.style.setProperty("--duration", `${2200 + depth * 280 + Math.random() * 450}ms`);
+        positionCelebrationParticle(spark, bounds, startX, startY, mobile, depth, targetSlots[emojiCount + index], targetCount);
+        fragment.appendChild(spark);
+      }
+      layer.appendChild(fragment);
+    });
+    window.setTimeout(() => layer.remove(), 4000);
   }
 
   function renderSummary() {
