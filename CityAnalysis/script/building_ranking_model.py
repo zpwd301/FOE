@@ -45,6 +45,7 @@ AGE_BY_LEVEL = {
     20: "SpaceAgeJupiterMoon",
     21: "SpaceAgeTitan",
     22: "SpaceAgeSpaceHub",
+    23: "StellarAgeDiscovery",
 }
 AGE_ORDER = {age: idx for idx, age in AGE_BY_LEVEL.items()}
 

@@ -29,13 +29,14 @@ from export_forge_hammer_treasury import (
     validate_treasury_csv,
 )
 from generate_contribution_dashboard import REQUIRED_COLUMNS
+from generate_treasury_dashboard import age_mapping
 
 
 def write_export(
     path: Path,
     *,
     last_date: dt.date,
-    goods: int = 110,
+    goods: int = 115,
     snapshots: int = 2,
     value_offset: int = 0,
 ) -> list[str]:
@@ -80,6 +81,16 @@ def write_contribution_export(
 
 
 class CsvValidationTests(unittest.TestCase):
+    def test_maps_current_and_legacy_full_treasury_schemas(self) -> None:
+        legacy_goods = [f"Legacy {index}" for index in range(110)]
+        current_goods = [f"Current {index}" for index in range(115)]
+        legacy = age_mapping(legacy_goods)
+        current = age_mapping(current_goods)
+        self.assertEqual(legacy[legacy_goods[0]], "Bronze Age")
+        self.assertEqual(legacy[legacy_goods[-1]], "Space Age Space Hub")
+        self.assertEqual(current[current_goods[0]], "Bronze Age")
+        self.assertEqual(current[current_goods[-1]], "Stellar Age: Discovery")
+
     def test_validates_a_forge_hammer_daily_export(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "stats-2026-08-17.csv"
@@ -89,7 +100,7 @@ class CsvValidationTests(unittest.TestCase):
                 expected_date=dt.date(2026, 8, 17),
                 expected_header=header,
             )
-            self.assertEqual(summary.goods, 110)
+            self.assertEqual(summary.goods, 115)
             self.assertEqual(summary.snapshots, 2)
             self.assertEqual(len(summary.sha256), 64)
 
@@ -103,9 +114,21 @@ class CsvValidationTests(unittest.TestCase):
     def test_rejects_changed_goods_schema(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "stats-2026-08-17.csv"
-            write_export(path, last_date=dt.date(2026, 8, 17), goods=105)
-            with self.assertRaisesRegex(BrowserExportError, "105 goods; expected 110"):
+            write_export(path, last_date=dt.date(2026, 8, 17), goods=110)
+            with self.assertRaisesRegex(BrowserExportError, "110 goods; expected 115"):
                 validate_treasury_csv(path, expected_date=dt.date(2026, 8, 17))
+
+    def test_allows_legacy_history_only_when_explicitly_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "stats-2026-08-16.csv"
+            header = write_export(path, last_date=dt.date(2026, 8, 16), goods=110)
+            summary = validate_treasury_csv(
+                path,
+                expected_date=dt.date(2026, 8, 16),
+                expected_header=header,
+                allow_legacy_goods=True,
+            )
+            self.assertEqual(summary.goods, 110)
 
     def test_selects_latest_reference_header(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -157,6 +180,43 @@ class CsvValidationTests(unittest.TestCase):
                 rows = list(csv.reader(handle, delimiter=";"))
             self.assertEqual(rows[-1][0], "2026-08-18 00:00:00")
             self.assertEqual(rows[-1][1], "500")
+
+    def test_extends_legacy_history_with_zeroes_for_a_new_age(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            history = root / "stats-2026-08-17.csv"
+            downloaded = root / "download.csv"
+            destination = root / "stats-2026-08-18.csv"
+            legacy_header = write_export(
+                history,
+                last_date=dt.date(2026, 8, 17),
+                goods=110,
+                snapshots=2,
+            )
+            current_header = write_export(
+                downloaded,
+                last_date=dt.date(2026, 8, 18),
+                goods=115,
+                snapshots=1,
+                value_offset=500,
+            )
+
+            merged, fresh, reference = merge_treasury_csv_history(
+                downloaded,
+                destination,
+                input_dir=root,
+                expected_date=dt.date(2026, 8, 18),
+                expected_header=legacy_header,
+            )
+
+            self.assertEqual(fresh.goods, 115)
+            self.assertEqual(merged.snapshots, 3)
+            self.assertEqual(reference[0], history)
+            with destination.open(encoding="utf-8", newline="") as handle:
+                rows = list(csv.reader(handle, delimiter=";"))
+            self.assertEqual(rows[0], current_header)
+            self.assertEqual(rows[1][-5:], ["0"] * 5)
+            self.assertEqual(rows[-1][-5:], [str(value) for value in range(610, 615)])
 
 
 class ContributionCsvValidationTests(unittest.TestCase):

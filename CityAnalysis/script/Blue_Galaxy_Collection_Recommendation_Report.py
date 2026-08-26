@@ -38,6 +38,7 @@ AGE_BY_LEVEL: Dict[int, Tuple[str, str]] = {
     20: ("SAJM", "SpaceAgeJupiterMoon"),
     21: ("SAT", "SpaceAgeTitan"),
     22: ("SASH", "SpaceAgeSpaceHub"),
+    23: ("SAD", "StellarAgeDiscovery"),
 }
 
 FIELDNAMES_AVERAGE_FP = [

@@ -55,6 +55,7 @@ CONTRIBUTION_COLUMNS = (
     "Message",
     "Date/Time",
 )
+LEGACY_FULL_GOODS_COUNT = 110
 
 
 class SyncError(RuntimeError):
@@ -879,8 +880,7 @@ class GoodsCatalog:
         self.goods = list(goods)
         self.by_normalized: dict[str, GoodInfo] = {}
         self.by_display_name: dict[str, GoodInfo] = {}
-        age_names = _age_names_for_goods(len(goods))
-        age_start = len(_all_age_names()) - len(age_names)
+        age_start, age_names = _age_mapping_for_goods(len(goods))
         game_goods_by_name: dict[str, dict[str, Any]] = {}
         if game_goods is not None:
             for item in game_goods:
@@ -935,12 +935,16 @@ class GoodsCatalog:
             raise SyncError(f"Treasury history contains unknown good {display_name!r}.") from error
 
 
-def _age_names_for_goods(good_count: int) -> list[str]:
+def _age_mapping_for_goods(good_count: int) -> tuple[int, list[str]]:
     age_order = _all_age_names()
     age_count = good_count // 5
     if age_count > len(age_order):
         raise SyncError("Treasury history contains more eras than the dashboard supports.")
-    return age_order[len(age_order) - age_count :]
+    if good_count == LEGACY_FULL_GOODS_COUNT and age_count == len(age_order) - 1:
+        age_start = 0
+    else:
+        age_start = len(age_order) - age_count
+    return age_start, age_order[age_start : age_start + age_count]
 
 
 def _all_age_names() -> list[str]:

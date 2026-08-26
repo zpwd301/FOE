@@ -46,6 +46,7 @@ AGE_ORDER = [
     "Space Age Jupiter Moon",
     "Space Age Titan",
     "Space Age Space Hub",
+    "Stellar Age: Discovery",
 ]
 KNOWN_AGES = set(AGE_ORDER)
 BRONZE_GOODS = {"wine", "dye", "marble", "lumber", "stone"}
@@ -291,9 +292,9 @@ def infer_good_age_map_by_order(columns: Sequence[str]) -> Dict[str, str]:
         return {}
 
     group_count = len(columns) // 5
-    if group_count == len(AGE_ORDER):
+    if group_count in {len(AGE_ORDER), len(AGE_ORDER) - 1}:
         start_idx = 0
-    elif group_count == len(AGE_ORDER) - 1:
+    elif group_count == len(AGE_ORDER) - 2:
         start_idx = 1
     else:
         return {}

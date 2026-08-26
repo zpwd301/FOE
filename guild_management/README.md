@@ -101,7 +101,9 @@ The command is intentionally fail-closed:
 - Contribution offsets must be `0, 10, 20, ...` with exactly one matching
   response each. Paging stops only at the requested overlap or when the
   response's total count proves that the server has no next page.
-- It requires the existing 110-good schema and a unique current-date row.
+- It requires the 115-good Stellar Age: Discovery schema and a unique
+  current-date row. During the one-age transition, the importer accepts only an
+  exact 110-column prefix and appends five zeroes to older history rows.
 - It requires Forge Hammer's **Guild Treasury Export Log** setting to be enabled.
 - A failed or interrupted attempt is recorded in the Git-ignored, mode-600
   `.foe-forge-hammer-state.json`; another automatic attempt that day is refused.

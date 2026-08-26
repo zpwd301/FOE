@@ -57,7 +57,8 @@ DEFAULT_STATE_FILE = PROJECT_DIR / ".foe-forge-hammer-state.json"
 COMPANION_EXTENSION_DIR = PROJECT_DIR / "chrome/forge-hammer-treasury-exporter"
 FORGE_HAMMER_EXTENSION_ID = "kmicglnhmpaebfcoiojigbnepklclboa"
 TRIGGER_PREFIX = "forge-hammer-treasury-export="
-EXPECTED_GOODS = 110
+LEGACY_GOODS = 110
+EXPECTED_GOODS = 115
 DOWNLOAD_RE = re.compile(r"^stats-(\d{4}-\d{2}-\d{2})(?: \(\d+\))?\.csv$")
 CONTRIBUTION_DOWNLOAD_RE = re.compile(
     r"^GuildTreasury-(\d{4}-\d{2}-\d{2})(?: \(\d+\))?\.csv$"
@@ -246,9 +247,25 @@ def find_reference_header(input_dir: Path, *, exclude: Path | None = None) -> li
             header = read_csv_header(path)
         except BrowserExportError:
             continue
-        if header and header[0] == "DateTime":
+        if (
+            header
+            and header[0] == "DateTime"
+            and len(header) - 1 in {LEGACY_GOODS, EXPECTED_GOODS}
+        ):
             return header
     return None
+
+
+def treasury_headers_compatible(first: Sequence[str], second: Sequence[str]) -> bool:
+    """Accept only the known one-age migration, with five columns appended."""
+    if list(first) == list(second):
+        return True
+    shorter, longer = sorted((list(first), list(second)), key=len)
+    return (
+        len(shorter) == LEGACY_GOODS + 1
+        and len(longer) == EXPECTED_GOODS + 1
+        and longer[: len(shorter)] == shorter
+    )
 
 
 def validate_treasury_csv(
@@ -256,6 +273,7 @@ def validate_treasury_csv(
     *,
     expected_date: dt.date,
     expected_header: Sequence[str] | None = None,
+    allow_legacy_goods: bool = False,
 ) -> CsvSummary:
     try:
         with path.open(encoding="utf-8-sig", newline="") as handle:
@@ -268,15 +286,21 @@ def validate_treasury_csv(
     header = rows[0]
     if not header or header[0] != "DateTime":
         raise BrowserExportError("Treasury export is missing the DateTime header.")
-    if len(header) != EXPECTED_GOODS + 1:
+    goods_count = len(header) - 1
+    allowed_goods = {EXPECTED_GOODS}
+    if allow_legacy_goods:
+        allowed_goods.add(LEGACY_GOODS)
+    if goods_count not in allowed_goods:
+        expected = " or ".join(str(count) for count in sorted(allowed_goods))
         raise BrowserExportError(
-            f"Treasury export has {len(header) - 1} goods; expected {EXPECTED_GOODS}."
+            f"Treasury export has {goods_count} goods; expected {expected}."
         )
     if len(set(header)) != len(header):
         raise BrowserExportError("Treasury export contains duplicate columns.")
-    if expected_header is not None and list(expected_header) != header:
+    if expected_header is not None and not treasury_headers_compatible(expected_header, header):
         raise BrowserExportError(
-            "Treasury export goods columns differ from the existing history; manual review required."
+            "Treasury export goods columns are not an exact match or the supported "
+            "five-column age extension; manual review required."
         )
 
     seen_dates: set[dt.datetime] = set()
@@ -346,6 +370,7 @@ def find_treasury_history_reference(
                 path,
                 expected_date=export_date,
                 expected_header=expected_header,
+                allow_legacy_goods=True,
             )
         except (ValueError, BrowserExportError):
             continue
@@ -401,6 +426,25 @@ def _write_treasury_rows(
         raise
 
 
+def _expand_legacy_treasury_rows(
+    source_header: Sequence[str],
+    rows: Sequence[Sequence[str]],
+    target_header: Sequence[str],
+) -> list[list[str]]:
+    if list(source_header) == list(target_header):
+        return [list(row) for row in rows]
+    if not treasury_headers_compatible(source_header, target_header):
+        raise BrowserExportError(
+            "Treasury history columns differ from the downloaded export; no data was replaced."
+        )
+    if len(source_header) >= len(target_header):
+        raise BrowserExportError(
+            "Treasury history cannot replace a newer goods schema; no data was replaced."
+        )
+    missing_values = len(target_header) - len(source_header)
+    return [list(row) + ["0"] * missing_values for row in rows]
+
+
 def merge_treasury_csv_history(
     downloaded: Path,
     destination: Path,
@@ -426,10 +470,11 @@ def merge_treasury_csv_history(
     if reference is not None:
         reference_path, _ = reference
         reference_header, reference_rows = _read_treasury_rows(reference_path)
-        if reference_header != header:
-            raise BrowserExportError(
-                "Treasury history columns differ from the downloaded export; no data was replaced."
-            )
+        reference_rows = _expand_legacy_treasury_rows(
+            reference_header,
+            reference_rows,
+            header,
+        )
         for row in reference_rows:
             rows_by_date[dt.datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S").date()] = row
 

@@ -308,6 +308,16 @@ class TreasurySnapshotTests(unittest.TestCase):
         )
         self.assertEqual(goods[0]["id"], "fine_lumber")
 
+    def test_maps_legacy_full_schema_before_stellar_age(self) -> None:
+        goods = [f"Good {index}" for index in range(110)]
+        catalog = GoodsCatalog(goods)
+        self.assertEqual(catalog.by_display_name[goods[0]].era_name, "Bronze Age")
+        self.assertEqual(
+            catalog.by_display_name[goods[-1]].era_name,
+            "Space Age Space Hub",
+        )
+        self.assertEqual(catalog.by_display_name[goods[-1]].era_id, 23)
+
     def test_writes_an_idempotent_daily_snapshot(self) -> None:
         goods = [f"Good {index}" for index in range(10)]
         resources = {f"good_{index}": 1000 + index for index in range(10)}
@@ -410,7 +420,7 @@ class ContributionTests(unittest.TestCase):
         )
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["good"], "Good 7")
-        self.assertEqual(rows[0]["era"], "23 - Space Age Space Hub")
+        self.assertEqual(rows[0]["era"], "24 - Stellar Age: Discovery")
         self.assertEqual(rows[0]["amount"], 50)
 
 

@@ -86,9 +86,21 @@
     $("#critical-mark").textContent = hasCriticalGoods ? "!" : "✓";
     $("#critical-label").textContent = hasCriticalGoods ? "Critical stock alert" : "Treasury healthy";
     if (criticalGoods.length) {
-      const list = criticalGoods.map((good) => `${good.name} (${good.age}): ${fmt.format(good.current)}`).join(", ");
       const shortfall = sum(criticalGoods.map((good) => data.meta.lowStockThreshold - good.current));
-      $("#critical-summary").textContent = `${list} in stock. ${fmt.format(shortfall)} needed to reach the ${fmt.format(data.meta.lowStockThreshold)} target.`;
+      const sameAge = criticalGoods.every((good) => good.age === criticalGoods[0].age);
+      const sameStock = criticalGoods.every((good) => good.current === criticalGoods[0].current);
+      if (criticalGoods.length > 1 && sameAge && sameStock) {
+        const perGoodShortfall = data.meta.lowStockThreshold - criticalGoods[0].current;
+        const names = criticalGoods.map((good) => good.name);
+        const nameList = names.length === 2 ? `${names[0]} and ${names[1]}` : `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
+        $("#critical-summary").textContent = `${criticalGoods.length} ${criticalGoods[0].age} goods are critically low at ${fmt.format(criticalGoods[0].current)} each: ${nameList}. Each needs ${fmt.format(perGoodShortfall)} to reach the ${fmt.format(data.meta.lowStockThreshold)} per-good target (${fmt.format(shortfall)} combined).`;
+      } else if (criticalGoods.length === 1) {
+        const good = criticalGoods[0];
+        $("#critical-summary").textContent = `${good.name} (${good.age}) has ${fmt.format(good.current)} in stock and needs ${fmt.format(shortfall)} to reach the ${fmt.format(data.meta.lowStockThreshold)} target.`;
+      } else {
+        const list = criticalGoods.map((good) => `${good.name} (${good.age}): ${fmt.format(good.current)}`).join("; ");
+        $("#critical-summary").textContent = `${criticalGoods.length} goods are critically low. Current stock: ${list}. The target is ${fmt.format(data.meta.lowStockThreshold)} per good; combined shortfall: ${fmt.format(shortfall)}.`;
+      }
       $("#critical-guidance").textContent = "GBG officers: Please avoid spending any good marked as critically low unless it is truly necessary. Donations to replenish low goods are greatly appreciated! ❤️";
     } else {
       $("#critical-summary").textContent = "All tracked goods are above the critical threshold.";

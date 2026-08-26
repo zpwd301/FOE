@@ -53,6 +53,7 @@ AGE_BY_LEVEL = {
     20: "SpaceAgeJupiterMoon",
     21: "SpaceAgeTitan",
     22: "SpaceAgeSpaceHub",
+    23: "StellarAgeDiscovery",
 }
 
 

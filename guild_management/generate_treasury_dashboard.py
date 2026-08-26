@@ -24,8 +24,10 @@ AGE_ORDER = [
     "Future Era", "Arctic Future", "Oceanic Future", "Virtual Future",
     "Space Age Mars", "Space Age Asteroid Belt", "Space Age Venus",
     "Space Age Jupiter Moon", "Space Age Titan", "Space Age Space Hub",
+    "Stellar Age: Discovery",
 ]
 BRONZE_GOODS = {"wine", "dye", "marble", "lumber", "stone"}
+LEGACY_FULL_GOODS_COUNT = 110
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,7 +93,11 @@ def read_export(path: Path) -> tuple[list[str], list[tuple[dt.date, dict[str, in
 def age_mapping(goods: list[str]) -> dict[str, str]:
     if len(goods) % 5:
         raise ValueError("Cannot infer goods-to-age mapping: expected groups of five goods.")
-    age_offset = len(AGE_ORDER) - len(goods) // 5
+    age_count = len(goods) // 5
+    if len(goods) == LEGACY_FULL_GOODS_COUNT and age_count == len(AGE_ORDER) - 1:
+        age_offset = 0
+    else:
+        age_offset = len(AGE_ORDER) - age_count
     if age_offset < 0:
         raise ValueError("Cannot infer goods-to-age mapping: too many goods columns.")
     return {good: AGE_ORDER[age_offset + index // 5] for index, good in enumerate(goods)}

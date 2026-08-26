@@ -4,6 +4,7 @@
   const triggerKey = 'forge-hammer-treasury-export';
   const triggerStorageKey = '__goeForgeHammerDataExportTrigger';
   const triggerWindowPrefix = '__goe_forge_hammer_trigger__:';
+  const expectedTreasuryGoods = 115;
   const directTriggerText = window.location.hash.replace(/^#/, '');
   const directTriggerParams = new URLSearchParams(directTriggerText);
   const liveDebugMode = directTriggerParams.get('foe_live_debug');
@@ -929,8 +930,10 @@
     Stats.DatePickerTo = null;
     const result = await Stats.createTreasureSeries();
     const series = result && result.series;
-    if (!Array.isArray(series) || series.length !== 110) {
-      throw new Error(`Forge Hammer prepared ${series?.length || 0} goods; expected 110.`);
+    if (!Array.isArray(series) || series.length !== expectedTreasuryGoods) {
+      throw new Error(
+        `Forge Hammer prepared ${series?.length || 0} goods; expected ${expectedTreasuryGoods}.`
+      );
     }
     const timestamps = series.flatMap(item => item.data.map(point => Number(point[0])));
     if (Math.max(...timestamps) !== Number(moment().startOf('day'))) {

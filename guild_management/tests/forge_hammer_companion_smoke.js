@@ -96,13 +96,13 @@ global.Stats = {
   async createTreasureSeries() {
     const today = Number(startOf('day'));
     return {
-      series: Array.from({ length: 110 }, (_unused, index) => ({
+      series: Array.from({ length: 115 }, (_unused, index) => ({
         data: [[today, index]],
       })),
     };
   },
   exportCSV(series, filename) {
-    if (series.length !== 110 || !/^stats-\d{4}-\d{2}-\d{2}\.csv$/.test(filename)) {
+    if (series.length !== 115 || !/^stats-\d{4}-\d{2}-\d{2}\.csv$/.test(filename)) {
       throw new Error('Unexpected Forge Hammer export arguments.');
     }
     exported = true;
