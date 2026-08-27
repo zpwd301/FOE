@@ -1,105 +1,109 @@
 {
   "ageAssets": {
     "ArcticFuture": {
-      "compressedSha256": "1998d4479038e3071e5cd7b2608f207636fac646250e7b72b95625ff2b2a059a",
-      "sha256": "edb1db4652392613c944e2a8717e5216ea3545a8c4376dbfc49a35e4d13bd528"
+      "compressedSha256": "bd9774fd1ef1fd5d4610d711160793c5292a09c674885dac7d1d3a6eb10d12fc",
+      "sha256": "1e960d0d984b0e00535cc43f26c2afa4d7158fd6b785118244ce410ae4269b67"
     },
     "BronzeAge": {
-      "compressedSha256": "b76be536846333592ef5f86b5092355c5282e624882f37863f6cfd4b32095d54",
-      "sha256": "423c53310ac92f9ad08153036b681587c34e5c50d5615734430f53c656192067"
+      "compressedSha256": "0fd5f4a872a58d100de663148d9ccc6160116d31e011bc92a7b5c8e7661fd765",
+      "sha256": "4f1b2ac21c89f9ac2e498da78fb9554cc4026dc1f8b332e8dac65d52a4c1042d"
     },
     "ColonialAge": {
-      "compressedSha256": "dde31194db6c9b802b9b8b75944d3ca8d56afc831587434aa66fa984189af5c3",
-      "sha256": "ae1ccd84ca419eaa5e79da4a0859e2c3c6f73427968fb14137f532746c90e366"
+      "compressedSha256": "676017de69848e1efa64952eaa44909eb207e748e6a9743a1016e34584b9bf6b",
+      "sha256": "b960da6eb75f4f6fd690f0fe77f21bbb414da8bc0294a382c24954b8640c21a7"
     },
     "ContemporaryEra": {
-      "compressedSha256": "57ebb4964b4e7b5ad1b6cbeb54007f7163d9b682eba378a44af41145630d915b",
-      "sha256": "c9304c5c5a22ac8f144514994b2296bcfa40f6f3e76de02730d612772c7bcdb1"
+      "compressedSha256": "96f8ceedc92f762b7c6aaae9f5172c2b881d07a246378b36ad37d9eabb8ba28d",
+      "sha256": "db0ddbc66c45f263b83bb6a3d173bbcda21c1255e92043c62cf000d17335bd77"
     },
     "EarlyMiddleAge": {
-      "compressedSha256": "4a7bea660e0f69928f6d165474965eea8d07d0bedbc88e5a0c9883a85cddd301",
-      "sha256": "1c026645351c3c96817914c2bbbe97c7fa5db6ffff6542ae577b74fac9636a7d"
+      "compressedSha256": "b7e3c586371ab04e310b675470b59c8ec68db3f3826a4bd378741b2edf49efeb",
+      "sha256": "1b137433b7c587fc0294f2bbe22cc062f6b6c18f1f5ee23caf204598d1a3970c"
     },
     "FutureEra": {
-      "compressedSha256": "3e52b6837b754d7ab08b6edf1cbfe644a18579aac32be492ff47c80c01ed29f0",
-      "sha256": "c21b4b07bbad123cd88a757f6905af49d296412d36d16261c516cb65b610cfaf"
+      "compressedSha256": "6ab7a502d9d7a70774de9d91005060cfb0677459a7d964b90230027606997014",
+      "sha256": "0c454f5a28f2cd406809f41a712b91f92a715ae93292fd667e860a8d6bbcb49d"
     },
     "HighMiddleAge": {
-      "compressedSha256": "f620da0feb16e45f0ee7f4ffdc1442d76c0ad91ac2aa476b358b7d0494c9e063",
-      "sha256": "990f0f53fbdbce2a1ae6d66e2b377423044286036fefbc6a3df07e0939d0b7b8"
+      "compressedSha256": "3284dcad8b766d9b377c9d3f675ed992e01842d5e25a5ae8569b6113f7a14c3f",
+      "sha256": "bd1512bbb7dd9f248df59ae1b1cace529cda0ac58c23c7f592bbdffb218d4030"
     },
     "IndustrialAge": {
-      "compressedSha256": "850cd009ba01df1ed08518e64e40e1fe13141b83a21596e0f6d91c94ece98f3c",
-      "sha256": "0a3c9a3d3ba24441c02d55990a671c32a9b763fd436ad274f436452e274dcc79"
+      "compressedSha256": "7987893769fbd9f7f55c037e12b2c1cc3a4604727175591e1e76e2985c8f25c7",
+      "sha256": "bb35b080027a324733f6219565c89e0f49e277673660057334887bbe62e4ea78"
     },
     "IronAge": {
-      "compressedSha256": "ca5eaa38d11be726f34ad462b4a27690eae8c6c24c1334f8764ba49d842d07c1",
-      "sha256": "45176620b5646442c39f3f75dc88b2273cd29610c2cf754ac589a0b7b3487549"
+      "compressedSha256": "25f72f2986f3f389ceeddfa7359859ee55c6ecca7d9bd339de4b9942104caa3a",
+      "sha256": "22d39d8da6fe2402e647e0fba13a26670c8ccbcbb78f7fea4ae0581065e81ff0"
     },
     "LateMiddleAge": {
-      "compressedSha256": "8553f4602bc3f98914d81bbadbf797377f807fbbc371f3b5d9914f068534d5ab",
-      "sha256": "a80f0f750b3841e246b9c717e73d6794b2e4d6198db40e01ea8b80a43a79d3ab"
+      "compressedSha256": "3ec07b2953d234df5509376f4cc8c125ca28b4cc6c8e51733bed5940b13d5a22",
+      "sha256": "9a621b31d58fe2cd1286890f9ddaf1779de0404ea01124513b2f71e3d9060a6e"
     },
     "ModernEra": {
-      "compressedSha256": "3617951a49f551aa74b7ab62d88567a5938cf65f6575fe6e22de1571aff62fd2",
-      "sha256": "03b36f92cfc9a400546948c2663ab137e7f9f88dd0557f6d107aeb1cd6923366"
+      "compressedSha256": "aa4ed7cfa64d265c2014cba345742e577ba17f82d65d7486dbbad4cdd1401ceb",
+      "sha256": "14e035ba130c148c77ffeceb610543dcab2476c73d889654ee8454f8e08082d3"
     },
     "OceanicFuture": {
-      "compressedSha256": "e979a305611065e7ce6a61a63fee30e9b487ee748f80bdcb4ba4810f03a3f50c",
-      "sha256": "c93bec06cd976c33d333380aadad96b59951640048e90f6a778750f127dd86b4"
+      "compressedSha256": "76c93400ed3317bd75402bf729267c98a58f401688ec1d845bc8c83999445cc7",
+      "sha256": "9e5483a3adbd989653288b2b846df9d84388725312347f8483611e99744cbb8f"
     },
     "PostModernEra": {
-      "compressedSha256": "438a2bb96cade1fed08813842edc0333e4593c3be3adad359d2fdb2e1f311091",
-      "sha256": "cd729196dc603e0389e1ceb73f17c8180172e5398538aee7bf1b102c6a0b51b2"
+      "compressedSha256": "15a502b0bed7c919575d940402ac866e5c27f7b575eb1d541869449f4cf546d6",
+      "sha256": "a010a3ad19c7a26fd2d1edfa2537a68093a4f5b304052051876049a992d2ed38"
     },
     "ProgressiveEra": {
-      "compressedSha256": "7ccca7440f9f4eefd416c777d6d10aa042c8d6e628e1d840d1b6ee348b2e3eef",
-      "sha256": "e06cc509197a0964e545c34df0a304e33d15c91ebbaafe51ed5cb0195fa9c3cc"
+      "compressedSha256": "771d6a87f997418bc484745d9b01e8aa38711a752e7467be0e69b70374f871fb",
+      "sha256": "f14243bf1a891f6dd5dd16d37fdc471737eeac71c8d1c395128d17b527f55445"
     },
     "SpaceAgeAsteroidBelt": {
-      "compressedSha256": "a9a0e0f2543d39ebb82b263ae62c989094c3b3c9b6d903a98a042348677f679a",
-      "sha256": "90875c12d5f28fa1ed99bbe7203594a896a100101178f30149ee390bbb919894"
+      "compressedSha256": "4379f43c9ce125344cbcceee355764ef2fa89429cbb235ef3daea111baacfb37",
+      "sha256": "4f8bca30f336a2fcc255603888101fab0e2b7bdd140a2097eebaf7c9215b3943"
     },
     "SpaceAgeJupiterMoon": {
-      "compressedSha256": "089cf5aa3f961df340c76b4282905fb486aacf8aed49a439efd5b7c28be36be3",
-      "sha256": "eec832e51fd0db6b9dc2f6521f44c0ce2ffbf2eedfaff7a182dff6bc4270d2c0"
+      "compressedSha256": "c8b9a9153386931a4a22adacc61d909c751d2d8f70e050d94e19686d5167660d",
+      "sha256": "710c041d0e83ce8d04838262ba2e2b5b1a566fd07b10ed10477aa441bb6c84f5"
     },
     "SpaceAgeMars": {
-      "compressedSha256": "a628d2b46ff7e2cc8a13ce393ed701a64cd6d15dcef6a07572bf1d64a109e45b",
-      "sha256": "022386672c91f1d3e1172f1d7c3bca6ec5b3b9bf88a043192aa5249bfc5d1a5e"
+      "compressedSha256": "b3a02ce62f9f0e4140116f657fb781db9c9710b7fcaf37f10089a7047d777f8f",
+      "sha256": "cd24556f055e8aa5275d7ff61d6af44c9ed780222c964e1b9dba55fccf9c2c84"
     },
     "SpaceAgeSpaceHub": {
-      "compressedSha256": "5c749609debaf6059bbc344d0cd46622e266578d3460659ed2c0cb843c9a0a41",
-      "sha256": "4f51f2b300f188be16a370d3fecb2f2bff9374bde838b46bf194dae3a4204204"
+      "compressedSha256": "8e1bc5e27d5b568fdce39b88866262614951ea9a5a582cda63b97f9eb9d34e82",
+      "sha256": "d606fa515b3ae9b118fdd3c8637a9f0b89374e89aae0d185b7c436a9a8620345"
     },
     "SpaceAgeTitan": {
-      "compressedSha256": "2c3cb51b01499209944c9907737d217baf686e653e91103b5e334c72a8873f18",
-      "sha256": "e3822cd0e948b803ca1a5b0c3803024299e625c9d586e7ba36735104348bcb50"
+      "compressedSha256": "f443cf4840286f9f21e3e78eebf004c9fb6fb4c2ffd4f6e295fc1694ba6e854a",
+      "sha256": "39131f0a9c6ba5a76d7d089bdf15ad029b9cbb8d36fa5f6ea4bb09a223b33ecb"
     },
     "SpaceAgeVenus": {
-      "compressedSha256": "9c6ba8b529a0ae0db8a216e42e7d98245a3f5da8ae94f099621579e716bdd63c",
-      "sha256": "d3d8baa8690d3a361de08643119168213b2410fec3063a088a9e5afa4540c47e"
+      "compressedSha256": "a9ade73cee813de09a1cc77fdf61ab622af731f7e029282d56c199619a660774",
+      "sha256": "ea56e03d0496b1ee11ef3d339a4628e9f60d257c162a021c1ec112beadedc448"
+    },
+    "StellarAgeDiscovery": {
+      "compressedSha256": "b3f5b2fd9d25cce5c4e02ef1e298a866c69efa5bbffdeb0a7a9a86e4e302bb88",
+      "sha256": "dabe7606f4bf35349e934a756cfc2dc6045d89647906b99002ecf8ac5c22d199"
     },
     "StoneAge": {
-      "compressedSha256": "49c335e6894af1b4d46702057f01f28fe74fc49e01cf581705388f3a62244c7a",
-      "sha256": "0feb99bceab614a8977ac592014fab2baa157a297b0f6c8d72a75be45d6dcb7d"
+      "compressedSha256": "12b899f7f6f54445bb50fa8cfe4a81f0cb45acc63927dda9e24aa81fada0532d",
+      "sha256": "4ad9f2ac23e912851394aafd2ead7b0913615005048989ccaa9cc83128313eed"
     },
     "TomorrowEra": {
-      "compressedSha256": "4ee8216817c4802f14aa6a38fcb16d4c76587804ebadac6e76038f9e099f777d",
-      "sha256": "3427779fbeecb1ccc4966fe9d3bfde706d5b12ec118325fb5b44ddfcb25c709f"
+      "compressedSha256": "861700c501bebbb84ce122147c43519b5cb0c4713f39674a552665f0f6e6f42f",
+      "sha256": "c7317575aca48cc6b532f97c73e761ce2dd217fa78d366aaa36552119283d1b6"
     },
     "VirtualFuture": {
-      "compressedSha256": "30076b000274ac8726c477e2b25745c770b9b0c008bca109933df1bb980ca2f7",
-      "sha256": "69fb71702a7e5a418a4f501775a489babf7297fb5a7a8becfa3026fd263ae83c"
+      "compressedSha256": "f4fc8bdb9667c73788c4877653c5c3f434f2544dc982a3e161ddd0b5ce651a7a",
+      "sha256": "75762ccde5d31f721e9f8f10dc7da16bb9a81bc8e4fafb01a0d6c6aab01de7de"
     }
   },
-  "coreCompressedSha256": "1832cdc01c06e8c31ad7ad43c22e6f77326c1763ee09bf1e2e558431e1b20fc4",
-  "coreSha256": "b99f235635a8cea4d2cea47f0395772b0fda1c1ebd4ce5fb0aae7d074de01754",
-  "dataVersion": "cb075acefb8f",
+  "coreCompressedSha256": "d8ce5da1565ad64f2a5c2da59692690419ae85aa40fd76673d4b378eb89420ed",
+  "coreSha256": "63de55c49923b925fa69b5599fb9acc68b19a4cbd8cfe9ca7cdcf73664fc56ab",
+  "dataVersion": "a76e1545c9ba",
   "exporterSha256": "1391e20e927ecca5a5889f62bc4cd481844450956351d471b3436c6e0e8def32",
-  "modelSha256": "5dc328ede7a53c38f283133838f9cd4e3ab72033fc31c8c7c89f83662597066e",
-  "modelVersion": "1.0.51",
+  "modelSha256": "3dfb9b3414cc79cbf62a3024c41e76b85bbdeee8e47141f395103ba712a519d3",
+  "modelVersion": "1.0.52",
   "schemaVersion": 6,
   "source": "input/ref/zpwd-ref",
-  "sourceSha256": "03417d605b4632a34c8bdfd8fbea32fcc928b16a95342e65ae2e979934b794a5"
+  "sourceSha256": "c2fd0f435f6d9d414c59531cde49bc08538e1107721c1a495b9f75d8ccf7add8"
 }
