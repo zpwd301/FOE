@@ -54,6 +54,7 @@ CONTRIBUTION_COLUMNS = (
     "Amount",
     "Message",
     "Date/Time",
+    "Transaction ID",
 )
 LEGACY_FULL_GOODS_COUNT = 110
 
@@ -1100,16 +1101,13 @@ def fetch_contribution_logs(
     return logs, total_count, page_count
 
 
-def _contribution_key(row: dict[str, Any]) -> tuple[Any, ...]:
-    player = str(row["player_id"]) or str(row["player_name"])
-    return (
-        player,
-        row["era"],
-        row["good"],
-        row["amount"],
-        row["message"],
-        row["timestamp"],
-    )
+def _contribution_transaction_id(item: dict[str, Any]) -> str:
+    """Extract an immutable log identifier when the game response provides one."""
+    for field in ("id", "log_id", "logId", "transaction_id", "transactionId"):
+        value = item.get(field)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
 
 
 def transform_contribution_logs(
@@ -1118,7 +1116,7 @@ def transform_contribution_logs(
     catalog: GoodsCatalog,
     cutoff: dt.datetime,
 ) -> list[dict[str, Any]]:
-    rows_by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+    rows: list[dict[str, Any]] = []
     for item in logs:
         timestamp = parse_game_timestamp(str(item.get("createdAt") or ""))
         if timestamp < cutoff:
@@ -1136,9 +1134,13 @@ def transform_contribution_logs(
             "amount": int(item.get("amount") or 0),
             "message": str(item.get("action") or "Unspecified").strip(),
             "timestamp": timestamp,
+            "transaction_id": _contribution_transaction_id(item),
         }
-        rows_by_key[_contribution_key(row)] = row
-    return sorted(rows_by_key.values(), key=lambda row: row["timestamp"], reverse=True)
+        # Do not collapse identical-looking rows here. Forge Hammer timestamps
+        # have minute-level precision, and repeated goods deposits are legitimate.
+        # Exact IDs, when present, are retained for the dashboard merge step.
+        rows.append(row)
+    return sorted(rows, key=lambda row: row["timestamp"], reverse=True)
 
 
 def write_contribution_export(
@@ -1161,6 +1163,7 @@ def write_contribution_export(
                     row["amount"],
                     row["message"],
                     row["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
+                    row.get("transaction_id", ""),
                 ]
             )
     return output_path

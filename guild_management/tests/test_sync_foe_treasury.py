@@ -423,6 +423,44 @@ class ContributionTests(unittest.TestCase):
         self.assertEqual(rows[0]["era"], "24 - Stellar Age: Discovery")
         self.assertEqual(rows[0]["amount"], 50)
 
+    def test_preserves_identical_logs_without_transaction_ids(self) -> None:
+        catalog = GoodsCatalog([f"Good {index}" for index in range(10)])
+        log = {
+            "createdAt": "2026-08-17T10:00:00",
+            "resource": "good_7",
+            "amount": 5,
+            "action": "Guild treasury donation",
+            "player": {"player_id": 123, "name": "Member"},
+        }
+
+        rows = transform_contribution_logs(
+            [log, log.copy()],
+            catalog=catalog,
+            cutoff=dt.datetime(2026, 8, 16),
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([row["amount"] for row in rows], [5, 5])
+
+    def test_retains_game_transaction_id_when_available(self) -> None:
+        catalog = GoodsCatalog([f"Good {index}" for index in range(10)])
+        rows = transform_contribution_logs(
+            [
+                {
+                    "id": "treasury-log-123",
+                    "createdAt": "2026-08-17T10:00:00",
+                    "resource": "good_7",
+                    "amount": 5,
+                    "action": "Guild treasury donation",
+                    "player": {"player_id": 123, "name": "Member"},
+                }
+            ],
+            catalog=catalog,
+            cutoff=dt.datetime(2026, 8, 16),
+        )
+
+        self.assertEqual(rows[0]["transaction_id"], "treasury-log-123")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+from collections import Counter
 from pathlib import Path
 
 from build_dashboard import DEFAULT_CONTRIBUTION_DATA_SOURCE, publish_dashboard
@@ -21,6 +22,7 @@ REQUIRED_COLUMNS = (
     "Message",
     "Date/Time",
 )
+TRANSACTION_ID_COLUMN = "Transaction ID"
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,6 +97,7 @@ def read_export(path: Path) -> list[dict[str, object]]:
                     "good": (row["Good"] or "Unknown good").strip(),
                     "amount": amount,
                     "message": (row["Message"] or "Unspecified").strip(),
+                    "transactionId": (row.get(TRANSACTION_ID_COLUMN) or "").strip(),
                 }
             )
     if not rows:
@@ -103,9 +106,9 @@ def read_export(path: Path) -> list[dict[str, object]]:
 
 
 def record_key(row: dict[str, object]) -> tuple[object, ...]:
-    """Identify one transaction without depending on a player's display name."""
+    """Return the strongest transaction signature available in an export."""
     player = str(row["playerId"]) or str(row["playerName"])
-    return (
+    visible_signature = (
         player,
         row["era"],
         row["good"],
@@ -113,19 +116,108 @@ def record_key(row: dict[str, object]) -> tuple[object, ...]:
         row["message"],
         row["timestamp"],
     )
+    transaction_id = str(row.get("transactionId") or "")
+    if transaction_id:
+        # Some game events may share a batch ID across multiple goods, so retain
+        # the visible signature as part of the key instead of trusting the ID alone.
+        return ("transaction-id", transaction_id, *visible_signature)
+    return ("legacy-signature", *visible_signature)
+
+
+def production_context(row: dict[str, object]) -> tuple[object, ...] | None:
+    """Identify one contiguous building-production group in Forge Hammer order."""
+    if row["message"] != "Building production" or row.get("transactionId"):
+        return None
+    player = str(row["playerId"]) or str(row["playerName"])
+    return (player, row["era"], row["message"], row["timestamp"])
+
+
+def malformed_production_indexes(rows: list[dict[str, object]]) -> set[int]:
+    """Find impossible five-good batches caused by unstable offset pagination.
+
+    A guild building production posts one equal amount for each of an era's five
+    goods. When new log entries shift offset pagination during an export, the end
+    of one page can be spliced onto the start of another and create a mixed-amount
+    five-good batch. Runs may begin partway through a real batch, so choose the
+    alignment that preserves the most complete, uniform batches before rejecting
+    only complete five-good batches with mixed amounts.
+    """
+    malformed: set[int] = set()
+    index = 0
+    while index < len(rows):
+        context = production_context(rows[index])
+        if context is None:
+            index += 1
+            continue
+        end = index + 1
+        while end < len(rows) and production_context(rows[end]) == context:
+            end += 1
+
+        run_length = end - index
+        best_alignment = 0
+        best_score: tuple[int, int, int] | None = None
+        for alignment in range(min(5, run_length + 1)):
+            uniform_count = 0
+            complete_count = 0
+            for batch_start in range(index + alignment, end - 4, 5):
+                batch = rows[batch_start : batch_start + 5]
+                if len({row["good"] for row in batch}) != 5:
+                    continue
+                complete_count += 1
+                if len({row["amount"] for row in batch}) == 1:
+                    uniform_count += 1
+            score = (uniform_count, complete_count, -alignment)
+            if best_score is None or score > best_score:
+                best_score = score
+                best_alignment = alignment
+
+        for batch_start in range(index + best_alignment, end - 4, 5):
+            batch = rows[batch_start : batch_start + 5]
+            if (
+                len({row["good"] for row in batch}) == 5
+                and len({row["amount"] for row in batch}) > 1
+            ):
+                malformed.update(range(batch_start, batch_start + 5))
+        index = end
+    return malformed
 
 
 def merge_exports(paths: list[Path]) -> tuple[list[dict[str, object]], int]:
-    """Merge non-cumulative, potentially overlapping exports deterministically."""
-    records_by_key: dict[tuple[object, ...], dict[str, object]] = {}
+    """Merge overlapping exports without collapsing repeated real transactions.
+
+    Legacy Forge Hammer CSVs do not contain a transaction ID. For those files,
+    identical rows are treated as a multiset: the merged occurrence count is the
+    largest count present in any source snapshot. Impossible mixed-amount legacy
+    production batches are rejected as offset-pagination splices. Rows with a
+    transaction ID are exact-deduplicated within and across exports.
+    """
+    merged_counts: Counter[tuple[object, ...]] = Counter()
+    latest_rows: dict[tuple[object, ...], dict[str, object]] = {}
     input_count = 0
     for path in paths:
-        for row in read_export(path):
-            input_count += 1
+        source_counts: Counter[tuple[object, ...]] = Counter()
+        source_rows = read_export(path)
+        input_count += len(source_rows)
+        malformed_indexes = malformed_production_indexes(source_rows)
+        for row_index, row in enumerate(source_rows):
+            if row_index in malformed_indexes:
+                continue
+            key = record_key(row)
+            if row.get("transactionId"):
+                source_counts[key] = 1
+            else:
+                source_counts[key] += 1
             # Paths are oldest to newest, so a later snapshot supplies the most
-            # current display name if the same transaction appears more than once.
-            records_by_key[record_key(row)] = row
-    rows = sorted(records_by_key.values(), key=lambda row: row["timestamp"], reverse=True)
+            # current display name for every occurrence of an overlapping row.
+            latest_rows[key] = row
+        merged_counts |= source_counts
+
+    rows = [
+        latest_rows[key].copy()
+        for key, count in merged_counts.items()
+        for _ in range(count)
+    ]
+    rows.sort(key=lambda row: row["timestamp"], reverse=True)
     return rows, input_count - len(rows)
 
 
@@ -189,8 +281,8 @@ def main() -> None:
     print(f"Contribution data generated: {args.output}")
     print("Published assets: " + ", ".join(path.name for path in assets.values()))
     print(
-        f"Sources: {len(sources)} CSV files, {len(rows)} unique records, "
-        f"{duplicate_count} duplicates removed "
+        f"Sources: {len(sources)} CSV files, {len(rows)} merged transaction rows, "
+        f"{duplicate_count} overlapping or malformed copies removed "
         f"({positive_count} positive, {negative_count} negative)"
     )
 
