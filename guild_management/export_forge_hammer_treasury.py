@@ -1008,8 +1008,8 @@ def main() -> int:
                     "treasury file and all contribution CSVs."
                 )
             elif args.refresh:
-                rebuild_treasury_dashboard(treasury_destination)
                 rebuild_contribution_dashboard(config.contribution_input_dir)
+                rebuild_treasury_dashboard(treasury_destination)
                 print("Treasury and contribution dashboards rebuilt.")
             return 0
 
@@ -1156,8 +1156,8 @@ def main() -> int:
                 raise BrowserExportError("A requested Forge Hammer export did not complete.")
 
             if args.refresh:
-                rebuild_treasury_dashboard(treasury_destination)
                 rebuild_contribution_dashboard(config.contribution_input_dir)
+                rebuild_treasury_dashboard(treasury_destination)
         except BaseException as error:
             state.update(
                 status="failed",
