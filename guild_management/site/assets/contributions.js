@@ -289,7 +289,11 @@
   function renderEras() {
     const period = selectedPeriod();
     const maximum = period.eras.length ? period.eras[0][1] : 1;
-    $("#era-production-list").innerHTML = period.eras.map(([era, amount], index) => `<li><span class="era-production-rank">${index + 1}</span><span><strong>${escapeHtml(eraName(era))}</strong><small>${(amount / Math.max(period.total, 1) * 100).toFixed(1)}% of contributions</small><span class="era-production-bar" style="--era-width:${Math.max(3, amount / maximum * 100).toFixed(2)}%"></span></span><strong>${fmt.format(amount)}</strong></li>`).join("");
+    $("#era-production-list").innerHTML = period.eras.map(([era, amount], index) => {
+      const contributors = ((period.eraContributors && period.eraContributors[era]) || []).slice(0, 3);
+      const contributorRows = contributors.map((contributor, contributorIndex) => `<li><span><span class="era-contributor-rank">${contributorIndex + 1}</span><strong>${escapeHtml(contributor.name)}</strong></span><strong>${fmt.format(contributor.total)}</strong></li>`).join("");
+      return `<li class="era-production-item"><details class="era-production-detail"><summary><span class="era-production-rank">${index + 1}</span><span class="era-production-summary"><strong>${escapeHtml(eraName(era))}</strong><small>${(amount / Math.max(period.total, 1) * 100).toFixed(1)}% of contributions</small><span class="era-production-bar" style="--era-width:${Math.max(3, amount / maximum * 100).toFixed(2)}%"></span></span><strong class="era-production-total">${fmt.format(amount)}</strong><span class="era-production-expander" aria-hidden="true"></span></summary><div class="era-contributors"><span>Top contributors in this period</span><ol>${contributorRows}</ol></div></details></li>`;
+    }).join("");
   }
 
   function renderProductionSummary(producer) {

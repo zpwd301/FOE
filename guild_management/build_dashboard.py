@@ -27,6 +27,7 @@ BANNER_FORMATS = ("avif", "webp", "jpg")
 CONTRIBUTION_PERIODS = (("3", 3), ("7", 7), ("30", 30))
 DEFAULT_CONTRIBUTION_PERIOD = "30"
 CONTRIBUTION_DETAIL_RECORD_LIMIT = 500
+CONTRIBUTION_ERA_LEADER_LIMIT = 3
 ADMIN_CONTRIBUTION_PLAYER_ID = "855340115"
 CACHEABLE_ASSET_SUFFIXES = frozenset(
     {".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".json", ".png", ".svg", ".webp", ".woff", ".woff2"}
@@ -232,6 +233,41 @@ def contribution_groups(records: list[list[object]], label_index: int, *, absolu
     ]
 
 
+def contribution_era_leaders(
+    records: list[list[object]],
+    eras: list[list[object]],
+) -> dict[str, list[dict[str, object]]]:
+    totals: dict[str, dict[str, int]] = {}
+    player_names: dict[str, str] = {}
+    for record in records:
+        player_id = str(record[1])
+        era = str(record[3])
+        player_names.setdefault(player_id, str(record[2]))
+        era_totals = totals.setdefault(era, {})
+        era_totals[player_id] = era_totals.get(player_id, 0) + int(record[5])
+
+    leaders: dict[str, list[dict[str, object]]] = {}
+    for era, _amount in eras:
+        era_name = str(era)
+        ranked = sorted(
+            totals.get(era_name, {}).items(),
+            key=lambda item: (
+                -item[1],
+                player_names[item[0]].casefold(),
+                item[0],
+            ),
+        )[:CONTRIBUTION_ERA_LEADER_LIMIT]
+        leaders[era_name] = [
+            {
+                "id": player_id,
+                "name": player_names[player_id],
+                "total": amount,
+            }
+            for player_id, amount in ranked
+        ]
+    return leaders
+
+
 def build_contribution_summary_payload(payload: dict[str, object]) -> dict[str, object]:
     records = list(payload["records"])
     latest = dt.datetime.fromisoformat(str(payload["meta"]["latestTimestamp"]))
@@ -270,6 +306,7 @@ def build_contribution_summary_payload(payload: dict[str, object]) -> dict[str, 
             )
         producers.sort(key=lambda producer: (-int(producer["total"]), str(producer["name"]).casefold()))
         total = sum(int(record[5]) for record in current)
+        eras = contribution_groups(current, 3)[:8]
         periods[key] = {
             "startDate": start_date.isoformat(),
             "endDate": latest_date.isoformat(),
@@ -277,7 +314,8 @@ def build_contribution_summary_payload(payload: dict[str, object]) -> dict[str, 
             "total": total,
             "dailyAverage": int(total / contribution_days + 0.5),
             "producers": producers,
-            "eras": contribution_groups(current, 3)[:8],
+            "eras": eras,
+            "eraContributors": contribution_era_leaders(current, eras),
         }
     return {"meta": payload["meta"], "periods": periods}
 
@@ -503,16 +541,30 @@ def load_contribution_summary(data_source: Path = DEFAULT_CONTRIBUTION_DATA_SOUR
         )
     era_rows = []
     eras = default_period["eras"]
+    era_contributors = default_period["eraContributors"]
     maximum = int(eras[0][1]) if eras else 1
     for rank, (era, amount) in enumerate(eras, start=1):
-        label = html.escape(re.sub(r"^\d+\s*-\s*", "", str(era)))
+        era_key = str(era)
+        label = html.escape(re.sub(r"^\d+\s*-\s*", "", era_key))
         share = int(amount) / max(int(default_period["total"]), 1) * 100
         width = max(3, int(amount) / maximum * 100)
+        contributor_rows = []
+        for contributor_rank, contributor in enumerate(era_contributors[era_key], start=1):
+            contributor_rows.append(
+                f'<li><span><span class="era-contributor-rank">{contributor_rank}</span>'
+                f'<strong>{html.escape(str(contributor["name"]))}</strong></span>'
+                f'<strong>{int(contributor["total"]):,}</strong></li>'
+            )
         era_rows.append(
-            f'<li><span class="era-production-rank">{rank}</span><span><strong>{label}</strong>'
+            '<li class="era-production-item"><details class="era-production-detail"><summary>'
+            f'<span class="era-production-rank">{rank}</span>'
+            f'<span class="era-production-summary"><strong>{label}</strong>'
             f'<small>{share:.1f}% of contributions</small>'
             f'<span class="era-production-bar" style="--era-width:{width:.2f}%"></span></span>'
-            f'<strong>{int(amount):,}</strong></li>'
+            f'<strong class="era-production-total">{int(amount):,}</strong>'
+            '<span class="era-production-expander" aria-hidden="true"></span></summary>'
+            '<div class="era-contributors"><span>Top contributors in this period</span>'
+            f'<ol>{"".join(contributor_rows)}</ol></div></details></li>'
         )
     return {
         "contribution_total": f"{total:,}",
