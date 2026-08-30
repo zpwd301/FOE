@@ -22,7 +22,7 @@ import building_ranking_model as model  # noqa: E402
 DEFAULT_AGE = "SpaceAgeAsteroidBelt"
 DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
 # Increment when the serialized website payload shape or semantics change.
-EXPORT_SCHEMA_VERSION = 6
+EXPORT_SCHEMA_VERSION = 7
 
 
 def file_sha256(path: str) -> str:

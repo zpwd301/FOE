@@ -49,7 +49,7 @@
             <ul>
               <li><strong>Ranking benchmark age</strong> defines the common comparison scale for scores and ranks.</li>
               <li><strong>Source category</strong> shows every reward building or only one event or game-mode group.</li>
-              <li><strong>Search</strong> can find a building by its name or find buildings that produce fragments for a named reward.</li>
+              <li><strong>Search</strong> can find a building by name, reward fragment, or an exact production type such as next-age goods or units.</li>
               <li><strong>My City Map</strong> can read a city-map JSON file locally. Each building uses its own placed age for raw values while the ranking benchmark stays common, and copies at different ages appear on separate rows.</li>
             </ul>
           </div>
@@ -83,11 +83,13 @@
                 <select id="searchModeSelect" aria-label="Search by">
                   <option value="building">Name</option>
                   <option value="fragment">Reward frag.</option>
+                  <option value="production">Production</option>
                 </select>
               </label>
               <label class="search-input-label">
                 <span id="searchInputLabel" class="sr-only">Building name</span>
                 <input id="searchInput" type="search" placeholder="e.g. Neo Globe" autocomplete="off" aria-describedby="searchHint">
+                <select id="productionSearchSelect" aria-label="Production type" aria-describedby="searchHint" hidden></select>
               </label>
             </div>
             <small id="searchHint" class="selection-preview">Find a building by its name.</small>
@@ -385,9 +387,9 @@
     </aside>
 
     <script
-      src="src/bootstrap.js?v=20260817-1"
-      data-data-version="a76e1545c9ba"
-      data-app-version="20260817-1"
+      src="src/bootstrap.js?v=20260829-1"
+      data-data-version="22f909808f99"
+      data-app-version="20260829-1"
     ></script>
   </body>
 </html>

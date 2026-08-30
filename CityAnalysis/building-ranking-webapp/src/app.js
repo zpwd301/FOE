@@ -4,9 +4,11 @@ const PRESET_PROFILES_ENABLED = false;
 const MAX_STRENGTH_BADGES = 6;
 const SEARCH_MODE_BUILDING = "building";
 const SEARCH_MODE_FRAGMENT = "fragment";
+const SEARCH_MODE_PRODUCTION = "production";
 const { recordProducesSpecialGoods } = window.FOE_BUILDING_RANKING_STRENGTHS;
 const cityMapApi = window.FOE_BUILDING_RANKING_CITY_MAP;
 const unitProductionApi = window.FOE_BUILDING_RANKING_UNIT_PRODUCTION;
+const productionSearchApi = window.FOE_BUILDING_RANKING_PRODUCTION_SEARCH;
 
 const PROFILE_CONFIG = {
   overallEfficiency: {
@@ -165,6 +167,7 @@ const el = {
   categorySelectionPreview: document.getElementById("categorySelectionPreview"),
   searchModeSelect: document.getElementById("searchModeSelect"),
   searchInput: document.getElementById("searchInput"),
+  productionSearchSelect: document.getElementById("productionSearchSelect"),
   searchInputLabel: document.getElementById("searchInputLabel"),
   searchHint: document.getElementById("searchHint"),
   cityMapFile: document.getElementById("cityMapFile"),
@@ -399,11 +402,14 @@ function syncStrengthFilterSummary() {
 }
 
 function controls() {
+  const searchMode = el.searchModeSelect.value;
   return {
     age: el.ageSelect.value,
     category: el.categorySelect.value,
-    searchMode: el.searchModeSelect.value,
-    search: el.searchInput.value.trim(),
+    searchMode,
+    search: searchMode === SEARCH_MODE_PRODUCTION
+      ? el.productionSearchSelect.value
+      : el.searchInput.value.trim(),
     qiRole: el.qiRoleSelect.value,
     gbgGeFocus: numberValue(el.gbgGeFocus.value),
     redBlueFocus: numberValue(el.redBlueFocus.value),
@@ -582,7 +588,7 @@ function preferenceAllowlist() {
     profiles: Object.keys(PROFILE_CONFIG),
     ages: DATA.ages.map((age) => age.key),
     categories: DATA.categories,
-    searchModes: [SEARCH_MODE_BUILDING, SEARCH_MODE_FRAGMENT],
+    searchModes: [SEARCH_MODE_BUILDING, SEARCH_MODE_FRAGMENT, SEARCH_MODE_PRODUCTION],
     qiRoles: Array.from(el.qiRoleSelect.options).map((option) => option.value),
     strengths: strengthFilterInputs().map((input) => input.value),
     topNs: Array.from(el.topNSelect.options).map((option) => option.value),
@@ -732,19 +738,29 @@ function syncLongValuePresentation() {
   el.categorySelectionPreview.hidden = category.length <= 30;
   el.compareA.title = el.compareA.value;
   el.compareB.title = el.compareB.value;
+  el.productionSearchSelect.title = el.productionSearchSelect.selectedOptions[0]?.textContent || "";
 }
 
 function syncSearchModePresentation() {
   const fragmentMode = el.searchModeSelect.value === SEARCH_MODE_FRAGMENT;
-  const inputLabel = fragmentMode ? "Reward fragment name" : "Building name";
+  const productionMode = el.searchModeSelect.value === SEARCH_MODE_PRODUCTION;
+  const inputLabel = productionMode
+    ? "Production type"
+    : fragmentMode
+      ? "Reward fragment name"
+      : "Building name";
   el.searchInputLabel.textContent = inputLabel;
   el.searchInput.setAttribute("aria-label", inputLabel);
+  el.searchInput.hidden = productionMode;
+  el.productionSearchSelect.hidden = !productionMode;
   el.searchInput.placeholder = fragmentMode
     ? "e.g. Legends of Camelot"
     : "e.g. Neo Globe";
-  el.searchHint.textContent = fragmentMode
-    ? "Find buildings that produce fragments for the named reward."
-    : "Find a building by its name.";
+  el.searchHint.textContent = productionMode
+    ? "Find buildings with the selected direct production."
+    : fragmentMode
+      ? "Find buildings that produce fragments for the named reward."
+      : "Find a building by its name.";
 }
 
 function attrInfo(key) {
@@ -825,6 +841,9 @@ function recordMatchesSearch(record, search, searchMode) {
   if (!query) return true;
   if (searchMode === SEARCH_MODE_FRAGMENT) {
     return matchingFragmentRewards(record, query).length > 0;
+  }
+  if (searchMode === SEARCH_MODE_PRODUCTION) {
+    return productionSearchApi?.recordMatches(record, search) || false;
   }
   return normalizeSearchText(record.name).includes(query);
 }
@@ -1382,8 +1401,11 @@ function renderTable(rows) {
   const visible = sorted.slice(0, limit);
   el.placedAgeHeader.hidden = !c.cityOnly;
   el.placedCountHeader.hidden = !c.cityOnly;
+  const productionOption = productionSearchApi?.optionForKey(c.search);
   el.emptyState.textContent = c.searchMode === SEARCH_MODE_FRAGMENT && c.search
     ? `No buildings produce fragments matching "${c.search}". Try a shorter reward name.`
+    : c.searchMode === SEARCH_MODE_PRODUCTION && productionOption
+      ? `No buildings produce ${productionOption.label.toLocaleLowerCase()} with the current filters.`
     : c.cityOnly
       ? "No buildings from the loaded city match the current filters."
     : isKitProfile()
@@ -1411,6 +1433,15 @@ function renderTable(rows) {
     const fragmentMatch = fragmentMatches.length
       ? `<div class="fragment-search-match" title="${escapeHtml(fragmentMatchText)}"><strong>Fragment reward:</strong> ${visibleFragmentMatches}${additionalFragmentMatches}</div>`
       : "";
+    const productionOption = c.searchMode === SEARCH_MODE_PRODUCTION
+      ? productionSearchApi?.optionForKey(c.search)
+      : null;
+    const productionValue = productionOption
+      ? productionSearchApi.productionValue(row.record, c.search)
+      : 0;
+    const productionMatch = productionOption && productionValue > 0
+      ? `<div class="fragment-search-match production-search-match"><strong>Production:</strong> ${escapeHtml(productionOption.label)}: ${escapeHtml(`${fmtCompact(productionValue)} ${productionOption.unit}`)}</div>`
+      : "";
     return `
       <tr data-row-key="${escapeHtml(row.key)}">
         <td class="rank">${row.rank}</td>
@@ -1418,6 +1449,7 @@ function renderTable(rows) {
           <div class="building-name">${escapeHtml(row.record.name)}</div>
           <div class="building-meta">${escapeHtml(row.record.category)}</div>
           ${fragmentMatch}
+          ${productionMatch}
         </td>
         <td>${fmt(row.score)}</td>
         <td>${fmt(row.efficiency, 3)}</td>
@@ -1460,7 +1492,17 @@ function filterChips(c) {
     chips.push(`Loaded city: ${state.cityMap.fileName}`);
     chips.push("Actual placed ages");
   }
-  if (c.search) chips.push(`${c.searchMode === SEARCH_MODE_FRAGMENT ? "Reward fragment" : "Building"}: ${el.searchInput.value.trim()}`);
+  if (c.search) {
+    const searchLabel = c.searchMode === SEARCH_MODE_FRAGMENT
+      ? "Reward fragment"
+      : c.searchMode === SEARCH_MODE_PRODUCTION
+        ? "Production"
+        : "Building";
+    const searchValue = c.searchMode === SEARCH_MODE_PRODUCTION
+      ? productionSearchApi?.optionForKey(c.search)?.label || c.search
+      : el.searchInput.value.trim();
+    chips.push(`${searchLabel}: ${searchValue}`);
+  }
   if (c.category !== ALL_CATEGORIES) chips.push(c.category);
   c.strengths.forEach((strength) => chips.push(`Strength: ${strengthFilterLabel(strength)}`));
   if (areaValidation.message) {
@@ -2293,6 +2335,7 @@ function resetDefaults() {
   el.categorySelect.value = ALL_CATEGORIES;
   el.searchModeSelect.value = SEARCH_MODE_BUILDING;
   el.searchInput.value = "";
+  el.productionSearchSelect.value = "";
   if (!state.cityMap) el.cityScopeSelect.value = "all";
   el.qiRoleSelect.value = defaults.qiFighterRole;
   el.gbgGeFocus.value = defaults.fightingGbgGeFocus;
@@ -2435,10 +2478,17 @@ function applyUrlState() {
   setActiveProfile(params.get("profile") || state.profile);
   if (DATA.ages.some((age) => age.key === params.get("age"))) el.ageSelect.value = params.get("age");
   if (params.get("category")) el.categorySelect.value = params.get("category");
-  if ([SEARCH_MODE_BUILDING, SEARCH_MODE_FRAGMENT].includes(params.get("searchMode"))) {
+  if ([SEARCH_MODE_BUILDING, SEARCH_MODE_FRAGMENT, SEARCH_MODE_PRODUCTION].includes(params.get("searchMode"))) {
     el.searchModeSelect.value = params.get("searchMode");
   }
-  if (params.get("search")) el.searchInput.value = params.get("search");
+  if (params.get("search")) {
+    if (el.searchModeSelect.value === SEARCH_MODE_PRODUCTION
+      && productionSearchApi?.optionForKey(params.get("search"))) {
+      el.productionSearchSelect.value = params.get("search");
+    } else {
+      el.searchInput.value = params.get("search");
+    }
+  }
   if (params.get("role")) el.qiRoleSelect.value = params.get("role");
   if (params.get("gbgGe")) el.gbgGeFocus.value = params.get("gbgGe");
   if (params.get("redBlue")) el.redBlueFocus.value = params.get("redBlue");
@@ -2512,6 +2562,12 @@ function init() {
   el.versionLabel.textContent = `Model ${DATA.metadata.workbookModelVersion} · Last updated ${DATA.metadata.generatedAt}`;
   el.ageSelect.innerHTML = DATA.ages.map((age) => `<option value="${escapeHtml(age.key)}" title="${escapeHtml(age.label)}">${escapeHtml(age.label)}</option>`).join("");
   el.categorySelect.innerHTML = DATA.categories.map((category) => `<option value="${escapeHtml(category)}" title="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("");
+  el.productionSearchSelect.innerHTML = [
+    '<option value="">Choose production…</option>',
+    ...(productionSearchApi?.OPTIONS || []).map((option) => (
+      `<option value="${escapeHtml(option.key)}">${escapeHtml(option.label)}</option>`
+    )),
+  ].join("");
   resetDefaults();
   applyPreferences(sanitizedPreferences(preferenceStore.read()));
   applyUrlState();
@@ -2575,6 +2631,7 @@ function init() {
   [
     el.categorySelect,
     el.searchModeSelect,
+    el.productionSearchSelect,
     el.qiRoleSelect,
     el.strengthFilter,
     el.noRoadFilter,

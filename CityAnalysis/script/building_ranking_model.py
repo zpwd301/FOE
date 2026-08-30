@@ -82,7 +82,7 @@ XLSX_MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 # Increment this version before each pushed code change to this workbook generator.
-WORKBOOK_VERSION = "1.0.52"
+WORKBOOK_VERSION = "1.0.53"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
@@ -208,6 +208,9 @@ PROD_FP_ATTR = "prod_resource_strategy_points"
 PROD_GOODS_ATTR = "prod_resource_goods_total"
 PROD_GUILD_GOODS_ATTR = "prod_resource_guild_goods"
 PROD_MEDALS_ATTR = "prod_resource_medals"
+PROD_BLUEPRINT_ATTR = "prod_resource_blueprint"
+PROD_BLUEPRINT_CURRENT_OR_HIGHER_ATTR = "prod_resource_blueprint_current_or_higher_age"
+PROD_BLUEPRINT_RANDOM_ATTR = "prod_resource_blueprint_random"
 UNIT_AGE_DEFINITIONS = {
     "prod_unit_current_age": ("current", "Current age"),
     "prod_unit_next_age": ("next", "Next age"),
@@ -746,6 +749,10 @@ def attr_label(key: str) -> str:
         return "Production: Rogue"
     if key == "prod_resource_premium":
         return "Production: Diamonds/day"
+    if key == PROD_BLUEPRINT_CURRENT_OR_HIGHER_ATTR:
+        return "Production: Blueprints - Current and Higher Age"
+    if key == PROD_BLUEPRINT_RANDOM_ATTR:
+        return "Production: Blueprints - Random"
     if key == "prod_resource_money":
         return "Production: Coins"
     if key == "generic_limited_config_expiretime":
@@ -866,7 +873,9 @@ def attr_description(key: str) -> str:
         "prod_resource_all_goods_of_next_age": "Daily-equivalent next-age regular goods bundle. Already rolls into Goods Total.",
         "prod_resource_all_goods_of_previous_age": "Daily-equivalent previous-age regular goods bundle. Already rolls into Goods Total.",
         "prod_resource_special_goods_up_to_age": "Daily-equivalent special goods up to the selected age. Already rolls into Goods Total.",
-        "prod_resource_blueprint": "Daily-equivalent blueprint reward count.",
+        PROD_BLUEPRINT_ATTR: "Daily-equivalent blueprint reward count across all supported blueprint reward types.",
+        PROD_BLUEPRINT_CURRENT_OR_HIGHER_ATTR: "Daily-equivalent blueprints from Current or Higher Age blueprint chests.",
+        PROD_BLUEPRINT_RANDOM_ATTR: "Daily-equivalent random blueprints for a Great Building from the current age or earlier.",
         "prod_resource_premium": "Daily-equivalent diamonds from the building.",
         "prod_unit_current_age": "Current-age military units produced per day-equivalent collection.",
         "prod_unit_next_age": "Next-age military units produced per day-equivalent collection.",
@@ -1884,12 +1893,29 @@ def collect_reward(
     if reward_type == "chest":
         possible_rewards = reward.get("possible_rewards") or reward.get("possibleRewards")
         if isinstance(possible_rewards, list):
+            current_or_higher = str(reward.get("id", "")).startswith(
+                "genb_higher_age_blueprints_chest_"
+            )
+            collected_attrs = {} if current_or_higher else attrs
             for item in possible_rewards:
                 if not isinstance(item, dict):
                     continue
                 nested_reward = item.get("reward")
                 if isinstance(nested_reward, dict):
-                    collect_reward(attrs, nested_reward, factor * probability_factor(item), reward_lookup)
+                    collect_reward(
+                        collected_attrs,
+                        nested_reward,
+                        factor * probability_factor(item),
+                        reward_lookup,
+                    )
+            if current_or_higher:
+                for key, value in collected_attrs.items():
+                    add_attr(attrs, key, value)
+                add_attr(
+                    attrs,
+                    PROD_BLUEPRINT_CURRENT_OR_HIGHER_ATTR,
+                    collected_attrs.get(PROD_BLUEPRINT_ATTR),
+                )
         return
     if reward_type == "unit":
         add_unit_production(attrs, reward, factor)
@@ -1910,6 +1936,10 @@ def collect_reward(
     collect_resources(attrs, "prod_resource", reward, factor)
     subtype = resource_key(str(reward.get("subType", reward.get("type", ""))))
     amount = reward.get("amount", reward.get("value", 1))
+    if reward_type in {"blueprint", "blueprints"} and (
+        subtype == "random" or str(reward.get("id", "")).startswith("blueprint#copper#random#")
+    ):
+        add_attr(attrs, PROD_BLUEPRINT_RANDOM_ATTR, amount, factor)
     if subtype == "fragment":
         add_attr(attrs, "prod_fragments", amount, factor)
         fragment_key = kit_fragment_key(reward)
@@ -3503,6 +3533,9 @@ SHARED_MODEL_NAMES = (
     "PROD_GOODS_ATTR",
     "PROD_GUILD_GOODS_ATTR",
     "PROD_MEDALS_ATTR",
+    "PROD_BLUEPRINT_ATTR",
+    "PROD_BLUEPRINT_CURRENT_OR_HIGHER_ATTR",
+    "PROD_BLUEPRINT_RANDOM_ATTR",
     "BOOST_FP_ATTR",
     "BOOST_GOODS_ATTR",
     "BOOST_SPECIAL_GOODS_ATTR",

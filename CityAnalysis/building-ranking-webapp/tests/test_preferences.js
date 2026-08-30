@@ -35,7 +35,7 @@ const allowed = {
   profiles: ["overallEfficiency", "kit"],
   ages: ["VirtualFuture", "SpaceAgeSpaceHub"],
   categories: ["All Building Categories", "CARE 2026 Event Rewards"],
-  searchModes: ["building", "fragment"],
+  searchModes: ["building", "fragment", "production"],
   qiRoles: ["Both", "Blue", "Red"],
   strengths: ["combat", "special-goods", "kit-oneUp"],
   topNs: ["50", "200", "all"],
