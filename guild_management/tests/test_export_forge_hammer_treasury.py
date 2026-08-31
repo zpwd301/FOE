@@ -645,7 +645,10 @@ class CompanionExtensionSafetyTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    @unittest.skipUnless(shutil.which("node"), "Node.js is required for the companion smoke test")
+    @unittest.skipUnless(
+        shutil.which("node"),
+        "Node.js is required for the companion smoke test",
+    )
     def test_companion_offline_flow_triggers_exactly_once(self) -> None:
         result = subprocess.run(
             ["node", str(Path(__file__).with_name("forge_hammer_companion_smoke.js"))],
@@ -656,12 +659,45 @@ class CompanionExtensionSafetyTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    @unittest.skipUnless(shutil.which("node"), "Node.js is required for the companion smoke test")
+    @unittest.skipUnless(
+        shutil.which("node"),
+        "Node.js is required for the companion smoke test",
+    )
     def test_contribution_pages_advance_once_until_cutoff(self) -> None:
         result = subprocess.run(
             [
                 "node",
                 str(Path(__file__).with_name("forge_hammer_contribution_companion_smoke.js")),
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for the companion smoke test")
+    def test_contribution_page_growth_removes_only_proven_overlap(self) -> None:
+        result = subprocess.run(
+            [
+                "node",
+                str(Path(__file__).with_name("forge_hammer_contribution_overlap_smoke.js")),
+                "overlap",
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for the companion smoke test")
+    def test_contribution_page_growth_fails_when_overlap_is_ambiguous(self) -> None:
+        result = subprocess.run(
+            [
+                "node",
+                str(Path(__file__).with_name("forge_hammer_contribution_overlap_smoke.js")),
+                "mismatch",
             ],
             capture_output=True,
             check=False,

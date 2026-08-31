@@ -99,8 +99,12 @@ The command is intentionally fail-closed:
 - It exports only after Forge Hammer observes the matching response and stores
   its resource map in both the current-hour and current-day records.
 - Contribution offsets must be `0, 10, 20, ...` with exactly one matching
-  response each. Paging stops only at the requested overlap or when the
-  response's total count proves that the server has no next page.
+  response each. If new records increase the server's total between pages, the
+  companion removes only the exact page-boundary overlap proven by that increase.
+  A shrinking count, a full-page shift, or an overlap mismatch fails closed
+  instead of exporting ambiguous rows. Paging stops only at the requested
+  overlap or when the response's total count proves that the server has no next
+  page.
 - It requires the 115-good Stellar Age: Discovery schema and a unique
   current-date row. During the one-age transition, the importer accepts only an
   exact 110-column prefix and appends five zeroes to older history rows.

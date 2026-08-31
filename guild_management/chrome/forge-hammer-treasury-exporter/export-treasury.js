@@ -867,6 +867,62 @@
     return timestamp;
   };
 
+  const contributionLogFingerprint = log => {
+    for (const field of ['id', 'log_id', 'logId', 'transaction_id', 'transactionId']) {
+      const value = log?.[field];
+      if (value !== undefined && value !== null && String(value).trim()) {
+        return JSON.stringify(['id', String(value).trim()]);
+      }
+    }
+    const player = log?.player;
+    const playerKey = player?.player_id ?? player?.id ?? player?.name ?? '';
+    return JSON.stringify([
+      'visible',
+      String(playerKey),
+      String(log?.resource ?? ''),
+      Number(log?.amount ?? 0),
+      String(log?.action ?? ''),
+      contributionTimestamp(log?.createdAt),
+    ]);
+  };
+
+  const provenContributionPageOverlap = (
+    previousLogs,
+    currentLogs,
+    previousTotalCount,
+    currentTotalCount
+  ) => {
+    if (!previousLogs) return 0;
+    const growth = currentTotalCount - previousTotalCount;
+    if (growth < 0) {
+      throw new Error(
+        `Contribution total count decreased from ${previousTotalCount} to ${currentTotalCount}; ` +
+        'stable one-shot pagination cannot be proven.'
+      );
+    }
+    if (growth === 0) return 0;
+    if (
+      growth >= contributionPageSize ||
+      growth > previousLogs.length ||
+      growth > currentLogs.length
+    ) {
+      throw new Error(
+        `Contribution list grew by ${growth} rows between pages; ` +
+        'one-shot pagination cannot safely bridge a full page.'
+      );
+    }
+
+    const previousTail = previousLogs.slice(-growth).map(contributionLogFingerprint);
+    const currentHead = currentLogs.slice(0, growth).map(contributionLogFingerprint);
+    if (!previousTail.every((fingerprint, index) => fingerprint === currentHead[index])) {
+      throw new Error(
+        `Contribution list grew by ${growth} rows, but the expected page-boundary ` +
+        'overlap did not match; no ambiguous rows were exported.'
+      );
+    }
+    return growth;
+  };
+
   const exportStoredTreasury = async () => {
     const windowDispatcher = await waitUntil(
       () => findDispatcher(closeAllWindowsEventType),
@@ -979,7 +1035,11 @@
     trace('contribution-dispatcher-ready');
     Treasury.Logs = [];
     const observer = createContributionPageObserver();
-    let accumulatedRows = 0;
+    const canonicalLogs = [];
+    let rawAccumulatedRows = 0;
+    let boundaryDuplicatesRemoved = 0;
+    let previousPageLogs = null;
+    let previousTotalCount = null;
     let page = 0;
     let stopReason = null;
     try {
@@ -997,11 +1057,29 @@
             `Contribution response ${observed.response?.requestId} is incomplete; no retry was made.`
           );
         }
-        accumulatedRows += logs.length;
+        const pageStart = rawAccumulatedRows;
+        rawAccumulatedRows += logs.length;
         await waitUntil(
-          () => Array.isArray(Treasury.Logs) && Treasury.Logs.length >= accumulatedRows,
+          () => Array.isArray(Treasury.Logs) && Treasury.Logs.length >= rawAccumulatedRows,
           `Forge Hammer did not append contribution page ${page + 1}; no retry was made.`
         );
+        const forgeHammerPage = Treasury.Logs.slice(pageStart, rawAccumulatedRows);
+        if (forgeHammerPage.length !== logs.length) {
+          throw new Error(
+            `Forge Hammer appended ${forgeHammerPage.length} rows for contribution page ` +
+            `${page + 1}; expected ${logs.length}.`
+          );
+        }
+        const overlap = provenContributionPageOverlap(
+          previousPageLogs,
+          logs,
+          previousTotalCount,
+          totalCount
+        );
+        canonicalLogs.push(...forgeHammerPage.slice(overlap));
+        boundaryDuplicatesRemoved += overlap;
+        previousPageLogs = logs;
+        previousTotalCount = totalCount;
 
         const firstRowTimestamp = contributionTimestamp(logs[0].createdAt);
         const nextOffset = (page + 1) * contributionPageSize;
@@ -1017,7 +1095,7 @@
           page += 1;
           observer.expectOffset(page * contributionPageSize);
           setStatus(
-            `Loading contribution page ${page + 1}; ${accumulatedRows} rows captured…`
+            `Loading contribution page ${page + 1}; ${canonicalLogs.length} rows captured…`
           );
           // Match the cadence of the captured manual next-page flow instead of
           // issuing pages in a tight loop.
@@ -1029,21 +1107,26 @@
       observer.stop();
     }
 
-    if (!Array.isArray(Treasury.Logs) || Treasury.Logs.length !== accumulatedRows) {
+    if (!Array.isArray(Treasury.Logs) || Treasury.Logs.length !== rawAccumulatedRows) {
       throw new Error('Forge Hammer contribution row count changed before export.');
     }
+    Treasury.Logs = canonicalLogs;
     console.info('[GoE data exporter] Contribution pagination complete.', {
       pages: page + 1,
-      rows: accumulatedRows,
+      rawRows: rawAccumulatedRows,
+      rows: canonicalLogs.length,
+      boundaryDuplicatesRemoved,
       cutoff: contributionCutoffText,
       stopReason,
     });
     trace('contribution-pagination-complete', {
       pages: page + 1,
-      rows: accumulatedRows,
+      rawRows: rawAccumulatedRows,
+      rows: canonicalLogs.length,
+      boundaryDuplicatesRemoved,
       stopReason,
     });
-    trace('contribution-export-invoked', { rows: accumulatedRows });
+    trace('contribution-export-invoked', { rows: canonicalLogs.length });
     Treasury.Export();
   };
 
