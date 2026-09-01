@@ -7,10 +7,12 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCRIPT_DIR = os.path.join(PROJECT_ROOT, "script")
@@ -22,7 +24,8 @@ import building_ranking_model as model  # noqa: E402
 DEFAULT_AGE = "SpaceAgeAsteroidBelt"
 DATA_PREFIX = "window.FOE_BUILDING_RANKING_DATA = "
 # Increment when the serialized website payload shape or semantics change.
-EXPORT_SCHEMA_VERSION = 7
+EXPORT_SCHEMA_VERSION = 8
+BROTLI_QUALITY = 11
 
 
 def file_sha256(path: str) -> str:
@@ -39,7 +42,9 @@ def data_paths() -> Dict[str, str]:
         "directory": data_dir,
         "core": os.path.join(data_dir, "ranking-core.json"),
         "coreCompressed": os.path.join(data_dir, "ranking-core.json.gz"),
+        "coreBrotli": os.path.join(data_dir, "ranking-core.json.br"),
         "ages": os.path.join(data_dir, "ages"),
+        "cityAges": os.path.join(data_dir, "city-ages"),
         "legacyScript": os.path.join(data_dir, "ranking-data.js"),
         "legacyCompressed": os.path.join(data_dir, "ranking-data.json.gz"),
         "state": os.path.join(data_dir, "export-state.json"),
@@ -51,6 +56,16 @@ def age_data_paths(age: str) -> Dict[str, str]:
     return {
         "json": os.path.join(directory, f"{age}.json"),
         "compressed": os.path.join(directory, f"{age}.json.gz"),
+        "brotli": os.path.join(directory, f"{age}.json.br"),
+    }
+
+
+def city_age_data_paths(age: str) -> Dict[str, str]:
+    directory = data_paths()["cityAges"]
+    return {
+        "json": os.path.join(directory, f"{age}.json"),
+        "compressed": os.path.join(directory, f"{age}.json.gz"),
+        "brotli": os.path.join(directory, f"{age}.json.br"),
     }
 
 
@@ -61,9 +76,12 @@ def index_path() -> str:
 def data_version() -> str:
     paths = data_paths()
     digest = hashlib.sha256()
-    digest.update(file_sha256(paths["coreCompressed"]).encode("ascii"))
+    for key in ("coreBrotli", "coreCompressed"):
+        digest.update(file_sha256(paths[key]).encode("ascii"))
     for age in model.AGE_ORDER:
-        digest.update(file_sha256(age_data_paths(age)["compressed"]).encode("ascii"))
+        for age_paths in (age_data_paths(age), city_age_data_paths(age)):
+            for key in ("brotli", "compressed"):
+                digest.update(file_sha256(age_paths[key]).encode("ascii"))
     return digest.hexdigest()[:12]
 
 
@@ -122,7 +140,7 @@ def export_fingerprint(reference_file: str) -> Dict[str, Any]:
 
 def matching_export_state(fingerprint: Dict[str, Any]) -> bool:
     paths = data_paths()
-    if not all(os.path.exists(paths[key]) for key in ("core", "coreCompressed", "state")):
+    if not all(os.path.exists(paths[key]) for key in ("core", "coreCompressed", "coreBrotli", "state")):
         return False
     try:
         with open(paths["state"], "r", encoding="utf-8") as handle:
@@ -135,17 +153,30 @@ def matching_export_state(fingerprint: Dict[str, Any]) -> bool:
         return False
     if state.get("coreCompressedSha256") != file_sha256(paths["coreCompressed"]):
         return False
+    if state.get("coreBrotliSha256") != file_sha256(paths["coreBrotli"]):
+        return False
     age_assets = state.get("ageAssets")
-    if not isinstance(age_assets, dict) or set(age_assets) != set(model.AGE_ORDER):
+    city_age_assets = state.get("cityAgeAssets")
+    if (
+        not isinstance(age_assets, dict)
+        or set(age_assets) != set(model.AGE_ORDER)
+        or not isinstance(city_age_assets, dict)
+        or set(city_age_assets) != set(model.AGE_ORDER)
+    ):
         return False
     for age in model.AGE_ORDER:
-        age_paths = age_data_paths(age)
-        if not all(os.path.exists(age_paths[key]) for key in ("json", "compressed")):
-            return False
-        if age_assets[age].get("sha256") != file_sha256(age_paths["json"]):
-            return False
-        if age_assets[age].get("compressedSha256") != file_sha256(age_paths["compressed"]):
-            return False
+        for age_paths, saved_assets in (
+            (age_data_paths(age), age_assets[age]),
+            (city_age_data_paths(age), city_age_assets[age]),
+        ):
+            if not all(os.path.exists(age_paths[key]) for key in ("json", "compressed", "brotli")):
+                return False
+            if saved_assets.get("sha256") != file_sha256(age_paths["json"]):
+                return False
+            if saved_assets.get("compressedSha256") != file_sha256(age_paths["compressed"]):
+                return False
+            if saved_assets.get("brotliSha256") != file_sha256(age_paths["brotli"]):
+                return False
     current_version = data_version()
     if state.get("dataVersion") != current_version:
         return False
@@ -159,17 +190,24 @@ def write_export_state(fingerprint: Dict[str, Any]) -> None:
     version = data_version()
     update_index_data_version(version)
     age_assets = {}
+    city_age_assets = {}
     for age in model.AGE_ORDER:
-        age_paths = age_data_paths(age)
-        age_assets[age] = {
-            "sha256": file_sha256(age_paths["json"]),
-            "compressedSha256": file_sha256(age_paths["compressed"]),
-        }
+        for age_paths, output in (
+            (age_data_paths(age), age_assets),
+            (city_age_data_paths(age), city_age_assets),
+        ):
+            output[age] = {
+                "sha256": file_sha256(age_paths["json"]),
+                "compressedSha256": file_sha256(age_paths["compressed"]),
+                "brotliSha256": file_sha256(age_paths["brotli"]),
+            }
     state = {
         **fingerprint,
         "coreSha256": file_sha256(paths["core"]),
         "coreCompressedSha256": file_sha256(paths["coreCompressed"]),
+        "coreBrotliSha256": file_sha256(paths["coreBrotli"]),
         "ageAssets": age_assets,
+        "cityAgeAssets": city_age_assets,
         "dataVersion": version,
     }
     atomic_write(paths["state"], json.dumps(state, indent=2, sort_keys=True) + "\n")
@@ -282,50 +320,100 @@ def attr_metadata(attr_keys: List[str]) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def split_data(data: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, List[Dict[str, Any]]]]:
+def split_data(
+    data: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
     records_by_age = data.get("recordsByAge")
     if not isinstance(records_by_age, dict) or not records_by_age:
         raise ValueError("recordsByAge is missing from the ranking payload")
-    core = {key: value for key, value in data.items() if key != "recordsByAge"}
-    return core, records_by_age
+    city_records_by_age = data.get("cityRecordsByAge")
+    if not isinstance(city_records_by_age, dict) or not city_records_by_age:
+        raise ValueError("cityRecordsByAge is missing from the ranking payload")
+    core = {
+        key: value
+        for key, value in data.items()
+        if key not in {"recordsByAge", "cityRecordsByAge"}
+    }
+    return core, records_by_age, city_records_by_age
 
 
-def compressed_json(data: Any) -> tuple[str, bytes]:
+def brotli_compress(content: bytes) -> bytes:
+    executable = shutil.which("brotli")
+    if executable is None:
+        raise RuntimeError(
+            "The brotli executable is required to export dashboard data. "
+            "Install Brotli and rerun the exporter."
+        )
+    result = subprocess.run(
+        [executable, "-q", str(BROTLI_QUALITY), "-c"],
+        input=content,
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    return result.stdout
+
+
+def compressed_json(data: Any) -> tuple[str, bytes, bytes]:
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    return text, gzip.compress(text.encode("utf-8"), compresslevel=9, mtime=0)
+    content = text.encode("utf-8")
+    return (
+        text,
+        gzip.compress(content, compresslevel=9, mtime=0),
+        brotli_compress(content),
+    )
+
+
+def write_age_files(
+    records_by_age: Dict[str, List[Dict[str, Any]]],
+    *,
+    path_factory: Callable[[str], Dict[str, str]],
+) -> tuple[int, int, int]:
+    expected_files = set()
+    total_json = 0
+    total_gzip = 0
+    total_brotli = 0
+    for age, records in records_by_age.items():
+        if age not in model.AGE_ORDER:
+            continue
+        output_paths = path_factory(age)
+        age_payload = {"age": age, "records": records}
+        age_text, age_gzip, age_brotli = compressed_json(age_payload)
+        atomic_write(output_paths["json"], age_text + "\n")
+        atomic_write(output_paths["compressed"], age_gzip, binary=True)
+        atomic_write(output_paths["brotli"], age_brotli, binary=True)
+        expected_files.update(output_paths.values())
+        total_json += len(age_text.encode("utf-8")) + 1
+        total_gzip += len(age_gzip)
+        total_brotli += len(age_brotli)
+
+    first_age = next(iter(model.AGE_ORDER))
+    directory = os.path.dirname(path_factory(first_age)["json"])
+    if os.path.isdir(directory):
+        for filename in os.listdir(directory):
+            candidate = os.path.join(directory, filename)
+            if os.path.isfile(candidate) and candidate not in expected_files:
+                os.remove(candidate)
+    return total_json, total_gzip, total_brotli
 
 
 def write_data_files(data: Dict[str, Any]) -> None:
     paths = data_paths()
-    core, records_by_age = split_data(data)
-    if set(records_by_age) != set(model.AGE_ORDER):
-        missing = sorted(set(model.AGE_ORDER) - set(records_by_age))
-        extra = sorted(set(records_by_age) - set(model.AGE_ORDER))
-        raise ValueError(f"Age payload mismatch; missing={missing}, extra={extra}")
-    core_text, core_compressed = compressed_json(core)
+    core, records_by_age, city_records_by_age = split_data(data)
+    for label, age_records in (
+        ("ranking", records_by_age),
+        ("city", city_records_by_age),
+    ):
+        if set(age_records) != set(model.AGE_ORDER):
+            missing = sorted(set(model.AGE_ORDER) - set(age_records))
+            extra = sorted(set(age_records) - set(model.AGE_ORDER))
+            raise ValueError(f"{label.title()} age payload mismatch; missing={missing}, extra={extra}")
+    core_text, core_gzip, core_brotli = compressed_json(core)
     atomic_write(paths["core"], core_text + "\n")
-    atomic_write(paths["coreCompressed"], core_compressed, binary=True)
+    atomic_write(paths["coreCompressed"], core_gzip, binary=True)
+    atomic_write(paths["coreBrotli"], core_brotli, binary=True)
 
-    expected_age_files = set()
-    total_age_json = 0
-    total_age_compressed = 0
-    for age, records in records_by_age.items():
-        if age not in model.AGE_ORDER:
-            continue
-        age_paths = age_data_paths(age)
-        age_payload = {"age": age, "records": records}
-        age_text, age_compressed = compressed_json(age_payload)
-        atomic_write(age_paths["json"], age_text + "\n")
-        atomic_write(age_paths["compressed"], age_compressed, binary=True)
-        expected_age_files.update(age_paths.values())
-        total_age_json += len(age_text.encode("utf-8")) + 1
-        total_age_compressed += len(age_compressed)
-
-    if os.path.isdir(paths["ages"]):
-        for filename in os.listdir(paths["ages"]):
-            candidate = os.path.join(paths["ages"], filename)
-            if os.path.isfile(candidate) and candidate not in expected_age_files:
-                os.remove(candidate)
+    ranking_totals = write_age_files(records_by_age, path_factory=age_data_paths)
+    city_totals = write_age_files(city_records_by_age, path_factory=city_age_data_paths)
 
     for legacy_key in ("legacyScript", "legacyCompressed"):
         if os.path.exists(paths[legacy_key]):
@@ -333,8 +421,11 @@ def write_data_files(data: Dict[str, Any]) -> None:
 
     print(
         "Wrote split ranking data: "
-        f"core {len(core_text.encode('utf-8')) + 1:,} bytes JSON / {len(core_compressed):,} bytes gzip; "
-        f"ages {total_age_json:,} bytes JSON / {total_age_compressed:,} bytes gzip."
+        f"core {len(core_text.encode('utf-8')) + 1:,} bytes JSON / "
+        f"{len(core_gzip):,} bytes gzip / {len(core_brotli):,} bytes Brotli; "
+        f"ranking ages {ranking_totals[0]:,} JSON / {ranking_totals[1]:,} gzip / "
+        f"{ranking_totals[2]:,} Brotli; city ages {city_totals[0]:,} JSON / "
+        f"{city_totals[1]:,} gzip / {city_totals[2]:,} Brotli."
     )
 
 
@@ -348,16 +439,24 @@ def compress_existing_data() -> None:
 
     with open(paths["core"], "r", encoding="utf-8") as handle:
         core = json.load(handle)
-    _, core_compressed = compressed_json(core)
-    atomic_write(paths["coreCompressed"], core_compressed, binary=True)
-    for age in model.AGE_ORDER:
-        age_paths = age_data_paths(age)
-        with open(age_paths["json"], "r", encoding="utf-8") as handle:
-            age_payload = json.load(handle)
-        _, age_compressed = compressed_json(age_payload)
-        atomic_write(age_paths["compressed"], age_compressed, binary=True)
+    _, core_gzip, core_brotli = compressed_json(core)
+    atomic_write(paths["coreCompressed"], core_gzip, binary=True)
+    atomic_write(paths["coreBrotli"], core_brotli, binary=True)
+    for path_factory in (age_data_paths, city_age_data_paths):
+        for age in model.AGE_ORDER:
+            output_paths = path_factory(age)
+            if not os.path.exists(output_paths["json"]):
+                raise SystemExit(
+                    "All-level city JSON assets are missing. Run export_data.py without "
+                    "--compress-existing to rebuild the complete dataset."
+                )
+            with open(output_paths["json"], "r", encoding="utf-8") as handle:
+                age_payload = json.load(handle)
+            _, age_gzip, age_brotli = compressed_json(age_payload)
+            atomic_write(output_paths["compressed"], age_gzip, binary=True)
+            atomic_write(output_paths["brotli"], age_brotli, binary=True)
     write_export_state(export_fingerprint(os.path.abspath(model.DEFAULT_REFERENCE)))
-    print("Rebuilt compressed core and age assets from the existing JSON files.")
+    print("Rebuilt Brotli and gzip core, ranking-age, and city-age assets from JSON.")
 
 
 def main() -> None:
@@ -372,10 +471,21 @@ def main() -> None:
         raise SystemExit(f"CityEntities not found in {reference_file}")
     model.validate_building_category_corrections(entities)
 
-    records_by_age, attr_keys = model.build_age_records(entities, list(model.AGE_ORDER), False)
+    records_by_age, _benchmark_attr_keys = model.build_age_records(
+        entities,
+        list(model.AGE_ORDER),
+        False,
+        highest_levels_only=True,
+    )
+    city_records_by_age, attr_keys = model.build_age_records(
+        entities,
+        list(model.AGE_ORDER),
+        False,
+        highest_levels_only=False,
+    )
     category_records = []
     seen_entity_ids = set()
-    for age_records in records_by_age.values():
+    for age_records in city_records_by_age.values():
         for record in age_records:
             entity_id = str(record["entity_id"])
             if entity_id not in seen_entity_ids:
@@ -398,9 +508,9 @@ def main() -> None:
             {"key": key, **definition}
             for key, definition in model.KIT_FAMILY_DEFINITIONS.items()
         ],
-        "kitProductionByEntity": kit_production_index(records_by_age),
-        "unitProductionByEntity": unit_production_index(records_by_age),
-        "fragmentRewardsByEntity": fragment_reward_index(records_by_age),
+        "kitProductionByEntity": kit_production_index(city_records_by_age),
+        "unitProductionByEntity": unit_production_index(city_records_by_age),
+        "fragmentRewardsByEntity": fragment_reward_index(city_records_by_age),
         "attrKeys": attr_keys,
         "attrs": attr_metadata(attr_keys),
         "constants": {
@@ -441,6 +551,10 @@ def main() -> None:
         "recordsByAge": {
             age: [record_payload(record) for record in records]
             for age, records in records_by_age.items()
+        },
+        "cityRecordsByAge": {
+            age: [record_payload(record) for record in records]
+            for age, records in city_records_by_age.items()
         },
     }
 

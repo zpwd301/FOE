@@ -133,27 +133,40 @@
     return groups;
   }
 
-  function resolvePlacementRecords(summary, ages, benchmarkRecords, recordsByAge = {}) {
+  function resolvePlacementRecords(
+    summary,
+    ages,
+    benchmarkRecords,
+    recordsByAge = {},
+    cityRecordsByAge = recordsByAge
+  ) {
     if (!Array.isArray(benchmarkRecords)) return [];
     const benchmarkById = new Map(benchmarkRecords.map((record) => [record.entityId, record]));
-    const recordsByAgeAndId = new Map();
-    const recordsForAge = (age) => {
-      if (!recordsByAgeAndId.has(age)) {
-        recordsByAgeAndId.set(
+    const ageRecordMaps = new Map();
+    const cityAgeRecordMaps = new Map();
+    const recordsForAge = (age, source, cache) => {
+      if (!cache.has(age)) {
+        cache.set(
           age,
-          new Map((recordsByAge[age] || []).map((record) => [record.entityId, record]))
+          new Map((source[age] || []).map((record) => [record.entityId, record]))
         );
       }
-      return recordsByAgeAndId.get(age);
+      return cache.get(age);
     };
-    return placementAgeGroups(summary, ages, new Set(benchmarkById.keys())).map((group) => {
-      const placedRecord = group.age ? recordsForAge(group.age).get(group.entityId) : null;
-      return {
+    return placementAgeGroups(summary, ages).map((group) => {
+      const cityRecord = group.age
+        ? recordsForAge(group.age, cityRecordsByAge, cityAgeRecordMaps).get(group.entityId)
+        : null;
+      const placedBenchmarkRecord = group.age
+        ? recordsForAge(group.age, recordsByAge, ageRecordMaps).get(group.entityId)
+        : null;
+      const record = cityRecord || placedBenchmarkRecord || benchmarkById.get(group.entityId);
+      return record ? {
         ...group,
-        record: placedRecord || benchmarkById.get(group.entityId),
-        usedBenchmarkFallback: !placedRecord,
-      };
-    });
+        record,
+        usedBenchmarkFallback: !cityRecord,
+      } : null;
+    }).filter(Boolean);
   }
 
   return {

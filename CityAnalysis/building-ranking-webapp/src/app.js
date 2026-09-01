@@ -451,7 +451,11 @@ function rowSelectionLabel(row) {
 
 function cityMapMatchStats() {
   if (!state.cityMap) return null;
-  const rankableIds = new Set(state.selectedAgeRows.map((record) => record.entityId));
+  const rankableIds = new Set(
+    Object.values(DATA.cityRecordsByAge || {})
+      .flat()
+      .map((record) => record.entityId)
+  );
   const groups = placementAgeGroups(rankableIds);
   let matchedTypes = 0;
   let matchedCopies = 0;
@@ -468,7 +472,7 @@ function cityMapMatchStats() {
       .filter((group) => !group.age)
       .reduce((sum, group) => sum + group.count, 0),
     missingPlacedAgeValueCopies: groups
-      .filter((group) => group.age && !(DATA.recordsByAge[group.age] || [])
+      .filter((group) => group.age && !(DATA.cityRecordsByAge[group.age] || [])
         .some((record) => record.entityId === group.entityId))
       .reduce((sum, group) => sum + group.count, 0),
     unmatchedEntries: Math.max(0, state.cityMap.totalEntries - matchedCopies),
@@ -540,7 +544,9 @@ async function loadCityMapFile(file) {
         .map((group) => group.age)
         .filter(Boolean)
     )];
-    await Promise.all(placementAges.map((age) => window.FOE_LOAD_BUILDING_RANKING_AGE?.(age)));
+    await Promise.all(
+      placementAges.map((age) => window.FOE_LOAD_BUILDING_RANKING_CITY_AGE?.(age))
+    );
     state.cityMap = {
       ...summary,
       fileName: (file.name || "City map").slice(0, 120),
@@ -551,6 +557,7 @@ async function loadCityMapFile(file) {
     announce(`City map loaded. Showing ${stats.matchedAgeGroups} building and placed-age groups from ${stats.matchedCopies} copies.`);
   } catch (_error) {
     state.cityMap = null;
+    DATA.cityRecordsByAge = {};
     el.cityScopeSelect.value = "all";
     el.cityScopeSelect.disabled = true;
     el.applyCityAgeButton.hidden = true;
@@ -570,6 +577,7 @@ async function loadCityMapFile(file) {
 
 function clearCityMap() {
   state.cityMap = null;
+  DATA.cityRecordsByAge = {};
   el.cityMapFile.value = "";
   el.cityScopeSelect.value = "all";
   renderImmediately();
@@ -1299,7 +1307,13 @@ function buildRows() {
 
   let rows = benchmarkRows;
   if (c.cityOnly) {
-    rows = cityMapApi.resolvePlacementRecords(state.cityMap, DATA.ages, records, DATA.recordsByAge)
+    rows = cityMapApi.resolvePlacementRecords(
+      state.cityMap,
+      DATA.ages,
+      records,
+      DATA.recordsByAge,
+      DATA.cityRecordsByAge
+    )
       .map((group) => scoredRow(group.record, stats, weights, c, config, {
         key: `${group.entityId}|${group.level ?? "unknown"}`,
         placedAge: group.age,

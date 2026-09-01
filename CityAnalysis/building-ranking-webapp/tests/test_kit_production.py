@@ -244,26 +244,43 @@ class SplitExportTests(unittest.TestCase):
             "recordsByAge": {
                 "VirtualFuture": [{"entityId": "building"}],
             },
+            "cityRecordsByAge": {
+                "VirtualFuture": [
+                    {"entityId": "building"},
+                    {"entityId": "building-level-1"},
+                ],
+            },
         }
 
-        core, records_by_age = export_data.split_data(payload)
+        core, records_by_age, city_records_by_age = export_data.split_data(payload)
 
         self.assertNotIn("recordsByAge", core)
+        self.assertNotIn("cityRecordsByAge", core)
         self.assertEqual(core["metadata"]["defaultAge"], "VirtualFuture")
         self.assertEqual(records_by_age["VirtualFuture"], [{"entityId": "building"}])
+        self.assertEqual(len(city_records_by_age["VirtualFuture"]), 2)
 
     def test_compressed_json_is_deterministic_and_round_trips(self) -> None:
         import gzip
         import json
+        import subprocess
 
         payload = {"age": "VirtualFuture", "records": [{"name": "Building"}]}
 
-        text, first = export_data.compressed_json(payload)
-        _, second = export_data.compressed_json(payload)
+        text, first_gzip, first_brotli = export_data.compressed_json(payload)
+        _, second_gzip, second_brotli = export_data.compressed_json(payload)
 
-        self.assertEqual(first, second)
+        self.assertEqual(first_gzip, second_gzip)
+        self.assertEqual(first_brotli, second_brotli)
         self.assertEqual(json.loads(text), payload)
-        self.assertEqual(json.loads(gzip.decompress(first)), payload)
+        self.assertEqual(json.loads(gzip.decompress(first_gzip)), payload)
+        decompressed_brotli = subprocess.run(
+            ["brotli", "-d", "-c"],
+            input=first_brotli,
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        self.assertEqual(json.loads(decompressed_brotli), payload)
 
 
 if __name__ == "__main__":

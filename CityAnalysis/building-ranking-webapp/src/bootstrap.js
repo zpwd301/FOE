@@ -3,6 +3,7 @@
   const appVersion = script?.dataset.appVersion || "1";
   const loadStatus = document.getElementById("loadStatus");
   const ageLoads = new Map();
+  const cityAgeLoads = new Map();
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -20,33 +21,48 @@
     return response.json();
   }
 
-  async function fetchCompressedJson(src) {
-    if (!("DecompressionStream" in window)) {
-      throw new Error("This browser does not support streamed gzip decompression.");
+  function supportsDecompression(format) {
+    if (!("DecompressionStream" in window)) return false;
+    try {
+      new DecompressionStream(format);
+      return true;
+    } catch (_error) {
+      return false;
     }
+  }
+
+  async function fetchCompressedJson(src, format) {
     const response = await fetch(src, { cache: "force-cache" });
     if (!response.ok || !response.body) {
       throw new Error(`${src} returned ${response.status}.`);
     }
     const contentEncoding = response.headers.get("content-encoding");
-    const jsonResponse = contentEncoding
-      ? response
-      : new Response(response.body.pipeThrough(new DecompressionStream("gzip")));
+    if (contentEncoding) return response.json();
+    if (!supportsDecompression(format)) {
+      throw new Error(`This browser cannot decompress raw ${format} responses.`);
+    }
+    const jsonResponse = new Response(response.body.pipeThrough(new DecompressionStream(format)));
     return jsonResponse.json();
   }
 
-  async function loadJsonAsset(compressedPath, fallbackPath, label) {
+  async function loadJsonAsset(brotliPath, gzipPath, fallbackPath, label) {
     const version = encodeURIComponent(dataVersion);
-    try {
-      return await fetchCompressedJson(`${compressedPath}?v=${version}`);
-    } catch (compressedError) {
-      console.warn(`Compressed ${label} unavailable; loading the JSON fallback.`, compressedError);
-      return fetchJson(`${fallbackPath}?v=${version}`);
+    for (const candidate of [
+      { path: brotliPath, format: "brotli", name: "Brotli" },
+      { path: gzipPath, format: "gzip", name: "gzip" },
+    ]) {
+      try {
+        return await fetchCompressedJson(`${candidate.path}?v=${version}`, candidate.format);
+      } catch (compressedError) {
+        console.warn(`${candidate.name} ${label} unavailable; trying the next fallback.`, compressedError);
+      }
     }
+    return fetchJson(`${fallbackPath}?v=${version}`);
   }
 
   async function loadCoreData() {
     const data = await loadJsonAsset(
+      "data/ranking-core.json.br",
       "data/ranking-core.json.gz",
       "data/ranking-core.json",
       "ranking core"
@@ -55,34 +71,54 @@
       throw new Error("Ranking core data did not initialize.");
     }
     data.recordsByAge = {};
+    data.cityRecordsByAge = {};
     window.FOE_BUILDING_RANKING_DATA = data;
   }
 
-  async function loadAgeData(age) {
+  async function loadAgeAsset(age, { directory, recordKey, loads, label }) {
     const data = window.FOE_BUILDING_RANKING_DATA;
     if (!data?.ages?.some((item) => item.key === age)) throw new Error(`Unknown city age: ${age}`);
-    if (Array.isArray(data.recordsByAge?.[age])) return data.recordsByAge[age];
-    if (ageLoads.has(age)) return ageLoads.get(age);
+    if (Array.isArray(data[recordKey]?.[age])) return data[recordKey][age];
+    if (loads.has(age)) return loads.get(age);
 
     const load = (async () => {
       const encodedAge = encodeURIComponent(age);
       const payload = await loadJsonAsset(
-        `data/ages/${encodedAge}.json.gz`,
-        `data/ages/${encodedAge}.json`,
-        `${age} ranking data`
+        `data/${directory}/${encodedAge}.json.br`,
+        `data/${directory}/${encodedAge}.json.gz`,
+        `data/${directory}/${encodedAge}.json`,
+        `${age} ${label}`
       );
       if (payload?.age !== age || !Array.isArray(payload.records)) {
-        throw new Error(`Ranking data for ${age} is invalid.`);
+        throw new Error(`${label} for ${age} is invalid.`);
       }
-      data.recordsByAge[age] = payload.records;
+      data[recordKey][age] = payload.records;
       return payload.records;
     })();
-    ageLoads.set(age, load);
+    loads.set(age, load);
     try {
       return await load;
     } finally {
-      ageLoads.delete(age);
+      loads.delete(age);
     }
+  }
+
+  function loadAgeData(age) {
+    return loadAgeAsset(age, {
+      directory: "ages",
+      recordKey: "recordsByAge",
+      loads: ageLoads,
+      label: "ranking data",
+    });
+  }
+
+  function loadCityAgeData(age) {
+    return loadAgeAsset(age, {
+      directory: "city-ages",
+      recordKey: "cityRecordsByAge",
+      loads: cityAgeLoads,
+      label: "all-level city data",
+    });
   }
 
   function browserStorage() {
@@ -115,6 +151,7 @@
       loadCoreData(),
     ]);
     window.FOE_LOAD_BUILDING_RANKING_AGE = loadAgeData;
+    window.FOE_LOAD_BUILDING_RANKING_CITY_AGE = loadCityAgeData;
     await loadAgeData(initialAge());
     await loadScript(`src/app.js?v=${encodeURIComponent(appVersion)}`);
     document.body.classList.remove("is-loading");

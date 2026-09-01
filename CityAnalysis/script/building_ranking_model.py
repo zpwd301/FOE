@@ -3203,7 +3203,13 @@ def highest_level_records(records: Sequence[Dict[str, Any]]) -> List[Dict[str, A
     return out
 
 
-def collect_records(entities: Dict[str, Any], era: str, available_only: bool) -> Tuple[List[Dict[str, Any]], List[str]]:
+def collect_records(
+    entities: Dict[str, Any],
+    era: str,
+    available_only: bool,
+    *,
+    highest_levels_only: bool = True,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
     records: List[Dict[str, Any]] = []
 
     for entity_id, entity in entities.items():
@@ -3268,7 +3274,10 @@ def collect_records(entities: Dict[str, Any], era: str, available_only: bool) ->
             }
         )
 
-    records = highest_level_records(records)
+    if highest_levels_only:
+        records = highest_level_records(records)
+    else:
+        records.sort(key=lambda record: str(record["name"]))
     all_attrs: set[str] = {key for record in records for key in record["attrs"]}
     single_building_attrs = {
         key
@@ -3487,11 +3496,18 @@ def build_age_records(
     entities: Dict[str, Any],
     ages: Sequence[str],
     available_only: bool,
+    *,
+    highest_levels_only: bool = True,
 ) -> Tuple[Dict[str, List[Dict[str, Any]]], List[str]]:
     records_by_age: Dict[str, List[Dict[str, Any]]] = {}
     all_attrs: set[str] = set()
     for age in ages:
-        records, attr_keys = collect_records(entities, age, available_only)
+        records, attr_keys = collect_records(
+            entities,
+            age,
+            available_only,
+            highest_levels_only=highest_levels_only,
+        )
         records_by_age[age] = records
         all_attrs.update(attr_keys)
     attr_keys = sorted(all_attrs, key=lambda key: (0 if has_any_default_weight(key) else 1, attr_label(key), key))

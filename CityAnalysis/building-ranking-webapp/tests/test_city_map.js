@@ -132,13 +132,27 @@ test("uses each placement age's record and falls back only when necessary", () =
     { entityId: "B", attrs: { goods: 50 } },
     { entityId: "C", attrs: { goods: 60 } },
   ];
-  const resolved = resolvePlacementRecords(summary, ages, benchmarkRecords, {
+  const recordsByAge = {
     Age2: [
       { entityId: "A", attrs: { goods: 20 } },
       { entityId: "B", attrs: { goods: 25 } },
     ],
     Age3: [{ entityId: "A", attrs: { goods: 30 } }],
-  });
+  };
+  const cityRecordsByAge = {
+    Age2: [
+      ...recordsByAge.Age2,
+      { entityId: "D", attrs: { goods: 15 } },
+    ],
+    Age3: recordsByAge.Age3,
+  };
+  const resolved = resolvePlacementRecords(
+    summary,
+    ages,
+    benchmarkRecords,
+    recordsByAge,
+    cityRecordsByAge
+  );
 
   assert.deepEqual(
     resolved.map((group) => ({
@@ -152,6 +166,7 @@ test("uses each placement age's record and falls back only when necessary", () =
       { entityId: "A", age: "Age3", goods: 30, fallback: false },
       { entityId: "B", age: "Age2", goods: 25, fallback: false },
       { entityId: "C", age: "Age2", goods: 60, fallback: true },
+      { entityId: "D", age: "Age2", goods: 15, fallback: false },
     ]
   );
 });
