@@ -205,6 +205,7 @@ const el = {
   weightModeSelect: document.getElementById("weightModeSelect"),
   customWeights: document.getElementById("customWeights"),
   resetWeightsButton: document.getElementById("resetWeightsButton"),
+  clearWeightsButton: document.getElementById("clearWeightsButton"),
   tableWrap: document.querySelector(".table-wrap"),
   rankingBody: document.getElementById("rankingBody"),
   strengthLegend: document.getElementById("strengthLegend"),
@@ -2753,6 +2754,17 @@ function init() {
     state.customWeights[activeWeightProfile()] = {};
     renderImmediately();
     announce("Weights for the active profile restored.");
+  });
+  el.clearWeightsButton.addEventListener("click", () => {
+    const profile = activeWeightProfile();
+    state.customWeights[profile] = Object.fromEntries(
+      DATA.attrKeys
+        .filter((key) => isCustomizableWeight(profile, key))
+        .map((key) => [key, 0])
+    );
+    el.weightModeSelect.value = "custom";
+    renderImmediately();
+    announce("All weights for the active profile set to zero.");
   });
   el.customWeights.addEventListener("input", (event) => {
     const input = event.target.closest("input[data-weight-key]");

@@ -6,7 +6,7 @@
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
     <script src="src/theme.js?v=20260721-3"></script>
-    <link rel="stylesheet" href="src/styles.css?v=20260802-1">
+    <link rel="stylesheet" href="src/styles.css?v=20260903-1">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -256,11 +256,14 @@
                 <li>A higher number gives that benefit more influence; zero ignores it.</li>
                 <li>Weights cannot be negative. Kit profiles use whole numbers from zero to ten.</li>
                 <li>Changing one weight shifts the balance between benefits. It does not simply add points to every score.</li>
-                <li>Each profile keeps its own custom values. <strong>Reset profile weights</strong> restores the active profile; <strong>Reset defaults</strong> restores every profile.</li>
+                <li>Each profile keeps its own custom values. <strong>Set All to 0</strong> ignores every benefit in the active profile; <strong>Reset profile weights</strong> restores the active profile; <strong>Reset defaults</strong> restores every profile.</li>
               </ul>
             </div>
             <div id="customWeights" class="custom-weights"></div>
-            <button id="resetWeightsButton" type="button" class="secondary-button">Reset profile weights</button>
+            <div class="weight-actions">
+              <button id="resetWeightsButton" type="button" class="secondary-button">Reset profile weights</button>
+              <button id="clearWeightsButton" type="button" class="secondary-button">Set All to 0</button>
+            </div>
           </div>
         </details>
             <button id="viewRankingsButton" type="button" class="secondary-button mobile-view-rankings">View rankings</button>
@@ -387,9 +390,9 @@
     </aside>
 
     <script
-      src="src/bootstrap.js?v=20260831-1"
+      src="src/bootstrap.js?v=20260903-1"
       data-data-version="97d22735e058"
-      data-app-version="20260831-1"
+      data-app-version="20260903-1"
     ></script>
   </body>
 </html>
