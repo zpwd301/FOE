@@ -574,14 +574,6 @@ a:focus-visible {
   text-align: right;
 }
 
-.boosted-production-row-special {
-  background: var(--teal-soft);
-}
-
-.boosted-production-row-special strong {
-  color: var(--teal);
-}
-
 .boosted-production-breakdown {
   color: var(--muted);
   background: var(--surface-subtle);

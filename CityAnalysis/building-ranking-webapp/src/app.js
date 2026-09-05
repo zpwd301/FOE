@@ -779,7 +779,7 @@ async function loadCityMapFile(file) {
       fileName: (file.name || "City map").slice(0, 120),
     };
     const production = populateBaseProductionFromCityMap();
-    state.productionView = "boosted";
+    state.productionView = "base";
     el.cityScopeSelect.value = "city";
     renderImmediately();
     const stats = cityMapMatchStats();
