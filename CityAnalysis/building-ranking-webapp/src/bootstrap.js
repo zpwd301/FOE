@@ -148,6 +148,7 @@
       loadScript(`src/unit-production.js?v=${encodeURIComponent(appVersion)}`),
       loadScript(`src/production-search.js?v=${encodeURIComponent(appVersion)}`),
       loadScript(`src/city-map.js?v=${encodeURIComponent(appVersion)}`),
+      loadScript(`src/ranking.js?v=${encodeURIComponent(appVersion)}`),
       loadCoreData(),
     ]);
     window.FOE_LOAD_BUILDING_RANKING_AGE = loadAgeData;

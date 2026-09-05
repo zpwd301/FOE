@@ -8,6 +8,7 @@ const SEARCH_MODE_PRODUCTION = "production";
 const PROD_SPECIAL_GOODS_ATTR = "prod_resource_special_goods_up_to_age";
 const { recordProducesSpecialGoods } = window.FOE_BUILDING_RANKING_STRENGTHS;
 const cityMapApi = window.FOE_BUILDING_RANKING_CITY_MAP;
+const rankingApi = window.FOE_BUILDING_RANKING_RANKING;
 const unitProductionApi = window.FOE_BUILDING_RANKING_UNIT_PRODUCTION;
 const productionSearchApi = window.FOE_BUILDING_RANKING_PRODUCTION_SEARCH;
 
@@ -1504,17 +1505,6 @@ function scoredRow(record, stats, weights, c, config, extras = {}) {
   };
 }
 
-function rankingOrder(left, right) {
-  return right.rankValue - left.rankValue || left.record.name.localeCompare(right.record.name);
-}
-
-function benchmarkRankFor(row, benchmarkRows) {
-  return 1 + benchmarkRows.filter((candidate) => (
-    candidate.rankValue > row.rankValue
-    || (candidate.rankValue === row.rankValue && candidate.record.name.localeCompare(row.record.name) < 0)
-  )).length;
-}
-
 function buildRows() {
   const c = controls();
   const config = PROFILE_CONFIG[state.profile];
@@ -1524,8 +1514,7 @@ function buildRows() {
   const weights = customizedWeightMap(config.weightProfile, c);
   let benchmarkRows = records.map((record) => scoredRow(record, stats, weights, c, config));
   if (isKitProfile()) benchmarkRows = benchmarkRows.filter((row) => recordHasKitProduction(row.record));
-  benchmarkRows.sort(rankingOrder);
-  benchmarkRows.forEach((row, idx) => { row.rank = idx + 1; });
+  rankingApi.rankRows(benchmarkRows);
 
   let rows = benchmarkRows;
   if (c.cityOnly) {
@@ -1543,8 +1532,7 @@ function buildRows() {
         usedBenchmarkFallback: group.usedBenchmarkFallback,
       }));
     if (isKitProfile()) rows = rows.filter((row) => recordHasKitProduction(row.record));
-    rows.forEach((row) => { row.rank = benchmarkRankFor(row, benchmarkRows); });
-    rows.sort(rankingOrder);
+    rankingApi.rankRowsAgainstBenchmark(rows, benchmarkRows);
   }
   state.rows = rows;
   return rows;
