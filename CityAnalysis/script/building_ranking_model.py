@@ -48,6 +48,16 @@ AGE_BY_LEVEL = {
     23: "StellarAgeDiscovery",
 }
 AGE_ORDER = {age: idx for idx, age in AGE_BY_LEVEL.items()}
+SPECIAL_GOODS_UNLOCK_AGES = (
+    "ArcticFuture",
+    "OceanicFuture",
+    "SpaceAgeMars",
+    "SpaceAgeAsteroidBelt",
+    "SpaceAgeVenus",
+    "SpaceAgeJupiterMoon",
+    "SpaceAgeTitan",
+    "SpaceAgeSpaceHub",
+)
 
 WEIGHT_HEADER_ROW = 8
 WEIGHT_START_ROW = WEIGHT_HEADER_ROW + 1
@@ -82,7 +92,7 @@ XLSX_MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 XLSX_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 # Increment this version before each pushed code change to this workbook generator.
-WORKBOOK_VERSION = "1.0.53"
+WORKBOOK_VERSION = "1.0.54"
 DEFAULT_ESTIMATED_FP_PRODUCTION = 30000.0
 DEFAULT_ESTIMATED_GOODS_PRODUCTION = 20000.0
 DEFAULT_ESTIMATED_SPECIAL_GOODS_PRODUCTION = 120.0
@@ -872,7 +882,7 @@ def attr_description(key: str) -> str:
         "prod_resource_all_goods_of_age": "Daily-equivalent current-age regular goods bundle. Already rolls into Goods Total.",
         "prod_resource_all_goods_of_next_age": "Daily-equivalent next-age regular goods bundle. Already rolls into Goods Total.",
         "prod_resource_all_goods_of_previous_age": "Daily-equivalent previous-age regular goods bundle. Already rolls into Goods Total.",
-        "prod_resource_special_goods_up_to_age": "Daily-equivalent special goods up to the selected age. Already rolls into Goods Total.",
+        "prod_resource_special_goods_up_to_age": "Daily-equivalent special goods up to the selected age. Rewards for each eligible special-good era are multiplied by the number of unlocked special goods. Already rolls into Goods Total.",
         PROD_BLUEPRINT_ATTR: "Daily-equivalent blueprint reward count across all supported blueprint reward types.",
         PROD_BLUEPRINT_CURRENT_OR_HIGHER_ATTR: "Daily-equivalent blueprints from Current or Higher Age blueprint chests.",
         PROD_BLUEPRINT_RANDOM_ATTR: "Daily-equivalent random blueprints for a Great Building from the current age or earlier.",
@@ -1671,27 +1681,52 @@ def add_attr(attrs: Dict[str, float], key: str, value: Any, factor: float = 1.0)
     attrs[key] = attrs.get(key, 0.0) + numeric * factor
 
 
-def collect_resources(attrs: Dict[str, float], prefix: str, container: Any, factor: float = 1.0) -> None:
+def special_goods_count_for_age(era: Optional[str]) -> int:
+    selected_level = AGE_ORDER.get(str(era), -1)
+    return sum(AGE_ORDER[age] <= selected_level for age in SPECIAL_GOODS_UNLOCK_AGES)
+
+
+def production_resource_factor(name: str, era: Optional[str]) -> int:
+    if resource_key(name) == "each_special_goods_up_to_age":
+        return special_goods_count_for_age(era)
+    return 1
+
+
+def collect_resources(
+    attrs: Dict[str, float],
+    prefix: str,
+    container: Any,
+    factor: float = 1.0,
+    era: Optional[str] = None,
+) -> None:
     if isinstance(container, dict):
         resources = container.get("resources")
         if isinstance(resources, dict):
             if any(isinstance(value, (dict, list)) for value in resources.values()):
-                collect_resources(attrs, prefix, resources, factor)
+                collect_resources(attrs, prefix, resources, factor, era)
                 return
             for name, value in resources.items():
                 key = resource_attr_key(str(name))
-                add_attr(attrs, f"{prefix}_{key}", value, factor)
+                resource_factor = factor * (
+                    production_resource_factor(str(name), era) if prefix == "prod_resource" else 1
+                )
+                add_attr(attrs, f"{prefix}_{key}", value, resource_factor)
                 if is_goods_resource_key(key):
-                    add_attr(attrs, f"{prefix}_goods_total", value, factor)
+                    add_attr(attrs, f"{prefix}_goods_total", value, resource_factor)
         elif isinstance(resources, list):
             for item in resources:
-                collect_resources(attrs, prefix, item, factor)
+                collect_resources(attrs, prefix, item, factor, era)
         elif container.get("type") and ("amount" in container or "value" in container):
             key = resource_attr_key(str(container.get("type")))
             amount = container.get("amount", container.get("value"))
-            add_attr(attrs, f"{prefix}_{key}", amount, factor)
+            resource_factor = factor * (
+                production_resource_factor(str(container.get("type")), era)
+                if prefix == "prod_resource"
+                else 1
+            )
+            add_attr(attrs, f"{prefix}_{key}", amount, resource_factor)
             if is_goods_resource_key(key):
-                add_attr(attrs, f"{prefix}_goods_total", amount, factor)
+                add_attr(attrs, f"{prefix}_goods_total", amount, resource_factor)
 
 
 def collect_guild_goods(attrs: Dict[str, float], container: Any, factor: float = 1.0) -> None:
@@ -1887,6 +1922,7 @@ def collect_reward(
     reward: Dict[str, Any],
     factor: float,
     reward_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+    era: Optional[str] = None,
 ) -> None:
     reward = resolved_reward(reward, reward_lookup)
     reward_type = resource_key(str(reward.get("type", "")))
@@ -1907,6 +1943,7 @@ def collect_reward(
                         nested_reward,
                         factor * probability_factor(item),
                         reward_lookup,
+                        era,
                     )
             if current_or_higher:
                 for key, value in collected_attrs.items():
@@ -1925,15 +1962,17 @@ def collect_reward(
         add_attr(attrs, "prod_resource_strategy_points", package_fps, factor)
         return
     if reward_type == "resource":
-        subtype = resource_attr_key(str(reward.get("subType", "")))
+        raw_subtype = str(reward.get("subType", ""))
+        subtype = resource_attr_key(raw_subtype)
         amount = reward.get("amount", reward.get("value"))
         if subtype and amount is not None:
-            add_attr(attrs, f"prod_resource_{subtype}", amount, factor)
+            resource_factor = factor * production_resource_factor(raw_subtype, era)
+            add_attr(attrs, f"prod_resource_{subtype}", amount, resource_factor)
             if is_goods_resource_key(subtype):
-                add_attr(attrs, PROD_GOODS_ATTR, amount, factor)
+                add_attr(attrs, PROD_GOODS_ATTR, amount, resource_factor)
         return
 
-    collect_resources(attrs, "prod_resource", reward, factor)
+    collect_resources(attrs, "prod_resource", reward, factor, era)
     subtype = resource_key(str(reward.get("subType", reward.get("type", ""))))
     amount = reward.get("amount", reward.get("value", 1))
     if reward_type in {"blueprint", "blueprints"} and (
@@ -1957,6 +1996,7 @@ def collect_product(
     product: Any,
     factor: float,
     reward_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+    era: Optional[str] = None,
 ) -> None:
     if not isinstance(product, dict):
         return
@@ -1965,22 +2005,22 @@ def collect_product(
         add_unit_production(attrs, product, factor)
         return
 
-    collect_resources(attrs, "prod_resource", product, factor)
+    collect_resources(attrs, "prod_resource", product, factor, era)
     player_resources = product.get("playerResources")
     if isinstance(player_resources, dict):
-        collect_resources(attrs, "prod_resource", player_resources, factor)
+        collect_resources(attrs, "prod_resource", player_resources, factor, era)
     guild_resources = product.get("guildResources")
     if isinstance(guild_resources, dict):
         collect_guild_goods(attrs, guild_resources, factor)
 
     reward = product.get("reward")
     if isinstance(reward, dict):
-        collect_reward(attrs, reward, factor, reward_lookup)
+        collect_reward(attrs, reward, factor, reward_lookup, era)
 
     for key in ("product", "assembledReward"):
         nested = product.get(key)
         if isinstance(nested, dict):
-            collect_product(attrs, nested, factor, reward_lookup)
+            collect_product(attrs, nested, factor, reward_lookup, era)
 
     for key in ("products", "possible_rewards", "possibleRewards"):
         values = product.get(key)
@@ -1991,7 +2031,7 @@ def collect_product(
                 continue
             nested_factor = factor * probability_factor(item)
             nested = item.get("product") or item.get("reward") or item
-            collect_product(attrs, nested, nested_factor, reward_lookup)
+            collect_product(attrs, nested, nested_factor, reward_lookup, era)
 
 
 def resolved_reward(
@@ -3010,9 +3050,9 @@ def collect_production(attrs: Dict[str, float], entity: Dict[str, Any], era: str
                 value = option.get(key)
                 if isinstance(value, list):
                     for item in value:
-                        collect_product(option_attrs, item, factor, reward_lookup)
+                        collect_product(option_attrs, item, factor, reward_lookup, era)
                 elif isinstance(value, dict):
-                    collect_product(option_attrs, value, factor, reward_lookup)
+                    collect_product(option_attrs, value, factor, reward_lookup, era)
             merge_best(best, option_attrs)
 
     for key, value in best.items():
@@ -3022,7 +3062,7 @@ def collect_production(attrs: Dict[str, float], entity: Dict[str, Any], era: str
         if not isinstance(products, list):
             continue
         for product in products:
-            collect_product(attrs, product, 1.0, reward_lookup)
+            collect_product(attrs, product, 1.0, reward_lookup, era)
 
 
 def add_boost_attr(attrs: Dict[str, float], boost: Dict[str, Any]) -> None:

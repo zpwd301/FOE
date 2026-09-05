@@ -5,6 +5,7 @@ const MAX_STRENGTH_BADGES = 6;
 const SEARCH_MODE_BUILDING = "building";
 const SEARCH_MODE_FRAGMENT = "fragment";
 const SEARCH_MODE_PRODUCTION = "production";
+const PROD_SPECIAL_GOODS_ATTR = "prod_resource_special_goods_up_to_age";
 const { recordProducesSpecialGoods } = window.FOE_BUILDING_RANKING_STRENGTHS;
 const cityMapApi = window.FOE_BUILDING_RANKING_CITY_MAP;
 const unitProductionApi = window.FOE_BUILDING_RANKING_UNIT_PRODUCTION;
@@ -116,6 +117,7 @@ const state = {
   suppressUrlUpdate: false,
   loadedAge: null,
   cityMap: null,
+  productionView: "base",
   customWeights: {
     overall: {},
     fighting: {},
@@ -178,6 +180,24 @@ const el = {
   shareButton: document.getElementById("shareButton"),
   settingsSummaryText: document.getElementById("settingsSummaryText"),
   baseProductionControls: document.getElementById("baseProductionControls"),
+  productionViewSwitch: document.getElementById("productionViewSwitch"),
+  baseProductionViewButton: document.getElementById("baseProductionViewButton"),
+  boostedProductionViewButton: document.getElementById("boostedProductionViewButton"),
+  totalProductionViewButton: document.getElementById("totalProductionViewButton"),
+  baseProductionView: document.getElementById("baseProductionView"),
+  boostedProductionView: document.getElementById("boostedProductionView"),
+  boostedFpValue: document.getElementById("boostedFpValue"),
+  boostedFpMeta: document.getElementById("boostedFpMeta"),
+  boostedGoodsValue: document.getElementById("boostedGoodsValue"),
+  boostedGoodsMeta: document.getElementById("boostedGoodsMeta"),
+  boostedGuildGoodsValue: document.getElementById("boostedGuildGoodsValue"),
+  boostedGuildGoodsMeta: document.getElementById("boostedGuildGoodsMeta"),
+  boostedMedalsValue: document.getElementById("boostedMedalsValue"),
+  boostedMedalsMeta: document.getElementById("boostedMedalsMeta"),
+  boostedSpecialGoodsValue: document.getElementById("boostedSpecialGoodsValue"),
+  boostedSpecialGoodsMeta: document.getElementById("boostedSpecialGoodsMeta"),
+  productionBreakdownSummary: document.getElementById("productionBreakdownSummary"),
+  boostedProductionBreakdown: document.getElementById("boostedProductionBreakdown"),
   focusControls: document.getElementById("focusControls"),
   qiRoleSelect: document.getElementById("qiRoleSelect"),
   gbgGeFocus: document.getElementById("gbgGeFocus"),
@@ -458,26 +478,197 @@ function cityMapMatchStats() {
       .map((record) => record.entityId)
   );
   const groups = placementAgeGroups(rankableIds);
-  let matchedTypes = 0;
-  let matchedCopies = 0;
-  for (const [entityId, count] of state.cityMap.counts) {
-    if (!rankableIds.has(entityId)) continue;
-    matchedTypes += 1;
-    matchedCopies += count;
-  }
+  const resolvedGroups = cityMapApi.resolvePlacementRecords(
+    state.cityMap,
+    DATA.ages,
+    DATA.recordsByAge[controls().age] || [],
+    DATA.recordsByAge,
+    DATA.cityRecordsByAge
+  );
+  const matchedCopies = resolvedGroups.reduce((sum, group) => sum + group.count, 0);
+  const rankableCopies = groups.reduce((sum, group) => sum + group.count, 0);
+  const hasPlacedAgeRecord = (group) => (
+    (DATA.cityRecordsByAge[group.age] || []).some((record) => record.entityId === group.entityId)
+    || (DATA.recordsByAge[group.age] || []).some((record) => record.entityId === group.entityId)
+  );
   return {
-    matchedTypes,
+    matchedTypes: new Set(resolvedGroups.map((group) => group.entityId)).size,
     matchedCopies,
-    matchedAgeGroups: groups.length,
+    matchedAgeGroups: resolvedGroups.length,
     unknownAgeCopies: groups
       .filter((group) => !group.age)
       .reduce((sum, group) => sum + group.count, 0),
     missingPlacedAgeValueCopies: groups
-      .filter((group) => group.age && !(DATA.cityRecordsByAge[group.age] || [])
-        .some((record) => record.entityId === group.entityId))
+      .filter((group) => group.age && !hasPlacedAgeRecord(group))
       .reduce((sum, group) => sum + group.count, 0),
-    unmatchedEntries: Math.max(0, state.cityMap.totalEntries - matchedCopies),
+    unmatchedEntries: Math.max(0, state.cityMap.totalEntries - rankableCopies),
   };
+}
+
+function calculatedProductionInputValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "0";
+  return String(Math.round(numeric * 100) / 100);
+}
+
+function productionAttributeKeys() {
+  return {
+    fp: DATA.constants.prodFpAttr,
+    goods: DATA.constants.prodGoodsAttr,
+    guildGoods: DATA.constants.prodGuildGoodsAttr,
+    medals: DATA.constants.prodMedalsAttr,
+    specialGoods: PROD_SPECIAL_GOODS_ATTR,
+    boostFp: DATA.constants.boostFpAttr,
+    boostGoods: DATA.constants.boostGoodsAttr,
+    boostGuildGoods: DATA.constants.boostGuildGoodsAttr,
+    boostMedals: DATA.constants.boostMedalsAttr,
+    boostSpecialGoods: DATA.constants.boostSpecialGoodsAttr,
+  };
+}
+
+function cityProductionCalculation(baseOverrides = null) {
+  if (!state.cityMap || !cityMapApi?.calculateBoostedProduction) return null;
+  return cityMapApi.calculateBoostedProduction(
+    state.cityMap,
+    DATA.ages,
+    DATA.recordsByAge[controls().age] || [],
+    DATA.recordsByAge,
+    DATA.cityRecordsByAge,
+    productionAttributeKeys(),
+    baseOverrides
+  );
+}
+
+function populateBaseProductionFromCityMap() {
+  const production = cityProductionCalculation();
+  el.fpEstimate.value = calculatedProductionInputValue(production.base.fp);
+  el.goodsEstimate.value = calculatedProductionInputValue(production.base.goods);
+  el.guildGoodsEstimate.value = calculatedProductionInputValue(production.base.guildGoods);
+  el.medalEstimate.value = calculatedProductionInputValue(production.base.medals);
+  el.specialGoodsEstimate.value = calculatedProductionInputValue(production.base.specialGoods);
+  return production;
+}
+
+function currentBaseProduction() {
+  return {
+    fp: numberValue(el.fpEstimate.value),
+    goods: numberValue(el.goodsEstimate.value),
+    guildGoods: numberValue(el.guildGoodsEstimate.value),
+    medals: numberValue(el.medalEstimate.value),
+    specialGoods: numberValue(el.specialGoodsEstimate.value),
+  };
+}
+
+function productionBoostText(value) {
+  const numeric = Number(value);
+  return `+${fmtCompact(Number.isFinite(numeric) ? numeric : 0)}%`;
+}
+
+function productionMultiplierText(value) {
+  const numeric = Number(value);
+  return `×${fmtCompact(1 + (Number.isFinite(numeric) ? numeric : 0) / 100)}`;
+}
+
+function productionOutputText(value) {
+  const numeric = Number(value);
+  return fmtCompact(Math.round(Number.isFinite(numeric) ? numeric : 0), 0);
+}
+
+function syncProductionResultRow(valueElement, metaElement, calculation, key, showTotal) {
+  valueElement.textContent = productionOutputText(showTotal ? calculation.total[key] : calculation.boosted[key]);
+  metaElement.textContent = showTotal
+    ? `Boosted ${productionOutputText(calculation.boosted[key])} · GB +${productionOutputText(calculation.nonBoostableProduction[key])}`
+    : `Base ${productionOutputText(calculation.base[key])} · ${productionBoostText(calculation.effectiveBoostPercentages[key])}`;
+}
+
+function placedBoostBreakdown(calculation) {
+  const labels = {
+    fp: "FP",
+    goods: "regular goods",
+    guildGoods: "guild goods",
+    medals: "medals",
+    specialGoods: "special goods",
+  };
+  const parts = Object.entries(labels)
+    .filter(([key]) => calculation.placedBoostPercentages[key] > 0)
+    .map(([key, label]) => `${label} ${productionBoostText(calculation.placedBoostPercentages[key])}`);
+  return parts.length ? parts.join(", ") : "none found";
+}
+
+function greatBuildingBoostBreakdown(calculation) {
+  if (!calculation.greatBuildingBoosts.length) {
+    return "No eligible Great Building percentage boost was found.";
+  }
+  return calculation.greatBuildingBoosts.map((boost) => {
+    const level = Number.isInteger(boost.level) ? ` level ${boost.level}` : "";
+    const collectionText = boost.appliedCollections === boost.eligibleCollections
+      ? `all ${boost.eligibleCollections.toLocaleString()} eligible collections`
+      : `${boost.appliedCollections.toLocaleString()} of ${boost.eligibleCollections.toLocaleString()} eligible collections`;
+    return `${boost.label}${level}: ${productionMultiplierText(boost.value)} after building boosts on ${collectionText} (${boost.charges.toLocaleString()} charges available).`;
+  }).join(" ");
+}
+
+function flatGreatBuildingProductionBreakdown(calculation) {
+  const labels = {
+    fp: "FP",
+    goods: "regular goods",
+    guildGoods: "guild goods",
+    medals: "medals",
+    specialGoods: "special goods",
+  };
+  const parts = Object.entries(labels)
+    .filter(([key]) => calculation.nonBoostableProduction[key] > 0)
+    .map(([key, label]) => `${label} +${productionOutputText(calculation.nonBoostableProduction[key])}`);
+  return parts.length ? parts.join(", ") : "none found";
+}
+
+function syncProductionPresentation() {
+  const hasCityMap = Boolean(state.cityMap);
+  if (!hasCityMap) state.productionView = "base";
+  const showBoosted = hasCityMap && state.productionView === "boosted";
+  const showTotal = hasCityMap && state.productionView === "total";
+  const showCalculated = showBoosted || showTotal;
+  el.productionViewSwitch.hidden = !hasCityMap;
+  el.baseProductionViewButton.setAttribute("aria-pressed", showCalculated ? "false" : "true");
+  el.boostedProductionViewButton.setAttribute("aria-pressed", showBoosted ? "true" : "false");
+  el.totalProductionViewButton.setAttribute("aria-pressed", showTotal ? "true" : "false");
+  el.baseProductionView.hidden = showCalculated;
+  el.boostedProductionView.hidden = !showCalculated;
+  if (!hasCityMap) return;
+
+  const calculation = cityProductionCalculation(currentBaseProduction());
+  syncProductionResultRow(el.boostedFpValue, el.boostedFpMeta, calculation, "fp", showTotal);
+  syncProductionResultRow(el.boostedGoodsValue, el.boostedGoodsMeta, calculation, "goods", showTotal);
+  syncProductionResultRow(el.boostedGuildGoodsValue, el.boostedGuildGoodsMeta, calculation, "guildGoods", showTotal);
+  syncProductionResultRow(el.boostedMedalsValue, el.boostedMedalsMeta, calculation, "medals", showTotal);
+  syncProductionResultRow(el.boostedSpecialGoodsValue, el.boostedSpecialGoodsMeta, calculation, "specialGoods", showTotal);
+  const externalExclusions = calculation.excludedDoubleCollectionCount
+    ? "Town Hall emissaries, guild boosts, Castle System boosts, and Blue Galaxy double collection."
+    : "Town Hall emissaries, guild boosts, Castle System boosts, and double collection.";
+  el.productionBreakdownSummary.textContent = showTotal
+    ? "How total production was calculated"
+    : "How boosts were applied";
+  el.boostedProductionBreakdown.innerHTML = showTotal
+    ? `
+      <p><strong>Boosts:</strong> ${escapeHtml(placedBoostBreakdown(calculation))}. ${escapeHtml(greatBuildingBoostBreakdown(calculation))}</p>
+      <p><strong>Flat GB:</strong> ${escapeHtml(flatGreatBuildingProductionBreakdown(calculation))}.</p>
+      <p><strong>Not included:</strong> ${escapeHtml(externalExclusions)}</p>
+    `
+    : `
+      <p><strong>Building boosts:</strong> ${escapeHtml(placedBoostBreakdown(calculation))}.</p>
+      <p><strong>GB boosts:</strong> ${escapeHtml(greatBuildingBoostBreakdown(calculation))}</p>
+      <p><strong>Not included:</strong> Flat GB output, ${escapeHtml(externalExclusions)}</p>
+    `;
+}
+
+function setProductionView(view) {
+  if (view !== "base" && !state.cityMap) return;
+  state.productionView = ["boosted", "total"].includes(view) ? view : "base";
+  syncProductionPresentation();
+  const label = state.productionView === "total"
+    ? "Total"
+    : state.productionView === "boosted" ? "Boosted" : "Base";
+  announce(`${label} production shown.`);
 }
 
 function syncCityMapPresentation() {
@@ -496,10 +687,10 @@ function syncCityMapPresentation() {
     ? ` ${stats.unmatchedEntries.toLocaleString()} map entries are outside this dashboard.`
     : "";
   const unknownAgeText = stats.unknownAgeCopies
-    ? ` ${stats.unknownAgeCopies.toLocaleString()} copies have no placement age and use the selected benchmark age.`
+    ? ` ${stats.unknownAgeCopies.toLocaleString()} copies have no placement age and are excluded.`
     : "";
   const missingValueText = stats.missingPlacedAgeValueCopies
-    ? ` ${stats.missingPlacedAgeValueCopies.toLocaleString()} copies have no matching age-specific ranking record and use benchmark values.`
+    ? ` ${stats.missingPlacedAgeValueCopies.toLocaleString()} copies have no matching placed-age ranking record and are excluded.`
     : "";
   el.cityMapStatus.dataset.status = stats.matchedTypes
     && !stats.unknownAgeCopies
@@ -517,6 +708,20 @@ function syncCityMapPresentation() {
   if (offerDetectedAge) {
     el.applyCityAgeButton.textContent = `Use town hall as benchmark: ${ageLabel(detectedAge)}`;
   }
+}
+
+function rejectCityMapFile(statusMessage, announcement) {
+  state.cityMap = null;
+  state.productionView = "base";
+  DATA.cityRecordsByAge = {};
+  el.cityMapFile.value = "";
+  el.cityMapFile.disabled = false;
+  el.cityMapFile.removeAttribute("aria-busy");
+  el.cityScopeSelect.value = "all";
+  renderImmediately();
+  el.cityMapStatus.dataset.status = "error";
+  el.cityMapStatus.textContent = statusMessage;
+  announce(announcement);
 }
 
 async function loadCityMapFile(file) {
@@ -537,39 +742,54 @@ async function loadCityMapFile(file) {
   el.cityMapFile.setAttribute("aria-busy", "true");
   el.cityMapStatus.dataset.status = "loading";
   el.cityMapStatus.textContent = "Reading the city map in this browser…";
+  let summary;
   try {
     const payload = JSON.parse(await file.text());
-    const summary = cityMapApi.summarizeCityMap(payload);
-    const placementAges = [...new Set(
-      cityMapApi.placementAgeGroups(summary, DATA.ages)
-        .map((group) => group.age)
-        .filter(Boolean)
-    )];
+    summary = cityMapApi.summarizeCityMap(payload);
+  } catch (error) {
+    console.error("The selected file could not be parsed as a city map.", error);
+    rejectCityMapFile(
+      "This file is not a supported city-map JSON export.",
+      "The selected file could not be loaded as a city map."
+    );
+    return;
+  }
+
+  const placementAges = [...new Set(
+    cityMapApi.placementAgeGroups(summary, DATA.ages)
+      .map((group) => group.age)
+      .filter(Boolean)
+  )];
+  try {
     await Promise.all(
       placementAges.map((age) => window.FOE_LOAD_BUILDING_RANKING_CITY_AGE?.(age))
     );
+  } catch (error) {
+    console.error("The city map was valid, but its placed-age data could not be loaded.", error);
+    rejectCityMapFile(
+      "The city map is valid, but its building data could not be loaded. Check the site connection and try again.",
+      "The city map is valid, but its building data could not be loaded."
+    );
+    return;
+  }
+
+  try {
     state.cityMap = {
       ...summary,
       fileName: (file.name || "City map").slice(0, 120),
     };
+    const production = populateBaseProductionFromCityMap();
+    state.productionView = "boosted";
     el.cityScopeSelect.value = "city";
     renderImmediately();
     const stats = cityMapMatchStats();
-    announce(`City map loaded. Showing ${stats.matchedAgeGroups} building and placed-age groups from ${stats.matchedCopies} copies.`);
-  } catch (_error) {
-    state.cityMap = null;
-    DATA.cityRecordsByAge = {};
-    el.cityScopeSelect.value = "all";
-    el.cityScopeSelect.disabled = true;
-    el.applyCityAgeButton.hidden = true;
-    el.clearCityMapButton.hidden = true;
-    el.cityMapStatus.dataset.status = "error";
-    el.cityMapStatus.textContent = "This file is not a supported city-map JSON export.";
-    el.cityMapFile.value = "";
-    renderImmediately();
-    el.cityMapStatus.dataset.status = "error";
-    el.cityMapStatus.textContent = "This file is not a supported city-map JSON export.";
-    announce("The selected file could not be loaded as a city map.");
+    announce(`City map loaded. Base production calculated from ${production.matchedCopies} matched copies.`);
+  } catch (error) {
+    console.error("The city map loaded, but base production could not be calculated.", error);
+    rejectCityMapFile(
+      "The city map loaded, but base production could not be calculated. Refresh the page and try again.",
+      "The city map loaded, but base production could not be calculated."
+    );
   } finally {
     el.cityMapFile.disabled = false;
     el.cityMapFile.removeAttribute("aria-busy");
@@ -578,6 +798,7 @@ async function loadCityMapFile(file) {
 
 function clearCityMap() {
   state.cityMap = null;
+  state.productionView = "base";
   DATA.cityRecordsByAge = {};
   el.cityMapFile.value = "";
   el.cityScopeSelect.value = "all";
@@ -1558,6 +1779,7 @@ function renderControlState(rows, visibleRows) {
   syncLongValuePresentation();
   syncSearchModePresentation();
   syncCityMapPresentation();
+  syncProductionPresentation();
 
   el.baseProductionControls.hidden = !usesBaseProduction;
   el.focusControls.hidden = kitProfile;
@@ -2667,6 +2889,9 @@ function init() {
   });
   el.applyCityAgeButton.addEventListener("click", applyDetectedCityAge);
   el.clearCityMapButton.addEventListener("click", clearCityMap);
+  el.baseProductionViewButton.addEventListener("click", () => setProductionView("base"));
+  el.boostedProductionViewButton.addEventListener("click", () => setProductionView("boosted"));
+  el.totalProductionViewButton.addEventListener("click", () => setProductionView("total"));
 
   el.searchInput.addEventListener("input", () => scheduleRender(160));
 

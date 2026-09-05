@@ -6,7 +6,7 @@
     <title>FOE Building Rankings</title>
     <link rel="icon" href="favicon.png?v=20260711-1" type="image/png" sizes="64x64">
     <script src="src/theme.js?v=20260721-3"></script>
-    <link rel="stylesheet" href="src/styles.css?v=20260903-1">
+    <link rel="stylesheet" href="src/styles.css?v=20260903-3">
   </head>
   <body class="is-loading">
     <a class="skip-link" href="#rankingTitle">Skip to rankings</a>
@@ -114,19 +114,43 @@
             </div>
           </div>
           <div class="base-production-controls compact" id="baseProductionControls">
-            <div class="info-heading">
-              <h3>Base Production</h3>
-              <button class="info-button" type="button" aria-expanded="false" aria-controls="baseProductionInfo" aria-label="Show Base Production information" data-info-label="Base Production">i</button>
+            <div class="production-heading-row">
+              <div class="info-heading">
+                <h3>Production Summary</h3>
+                <button class="info-button" type="button" aria-expanded="false" aria-controls="baseProductionInfo" aria-label="Show Production Summary information" data-info-label="Production Summary">i</button>
+              </div>
+              <div id="productionViewSwitch" class="production-view-switch" role="group" aria-label="Production view" hidden>
+                <button id="baseProductionViewButton" type="button" aria-pressed="true">Base</button>
+                <button id="boostedProductionViewButton" type="button" aria-pressed="false">Boosted</button>
+                <button id="totalProductionViewButton" type="button" aria-pressed="false">Total</button>
+              </div>
             </div>
             <div id="baseProductionInfo" class="section-note info-text" hidden>
-              <p>Enter rough totals for what your city produces before percentage bonuses. These estimates help the dashboard value buildings that add, for example, “+10% Forge Points.”</p>
-              <p>A higher estimate makes the matching percentage bonus more valuable. If you are unsure, the defaults are a good starting point. Regular, special, and guild goods are kept separate.</p>
+              <p><strong>Base:</strong> Recognized placed-building production before boosts. Motivated production is included.</p>
+              <p><strong>Boosted:</strong> Base plus eligible percentage boosts. <strong>Total:</strong> Boosted plus flat Great Building output.</p>
+              <p><strong>Not included:</strong> Town Hall emissaries, guild boosts, Castle System boosts, double collection, and unmatched buildings.</p>
             </div>
-            <label>FP <input id="fpEstimate" type="number" min="0" step="100"></label>
-            <label>Regular goods <input id="goodsEstimate" type="number" min="0" step="100"></label>
-            <label>Guild goods <input id="guildGoodsEstimate" type="number" min="0" step="100"></label>
-            <label>Medals <input id="medalEstimate" type="number" min="0" step="1000"></label>
-            <label>Special goods <input id="specialGoodsEstimate" type="number" min="0" step="1"></label>
+            <div id="baseProductionView">
+              <label>FP <input id="fpEstimate" type="number" min="0" step="100"></label>
+              <label>Regular goods <input id="goodsEstimate" type="number" min="0" step="100"></label>
+              <label>Guild goods <input id="guildGoodsEstimate" type="number" min="0" step="100"></label>
+              <label>Medals <input id="medalEstimate" type="number" min="0" step="1000"></label>
+              <label>Special goods <input id="specialGoodsEstimate" type="number" min="0" step="1"></label>
+            </div>
+            <div id="boostedProductionView" class="boosted-production-view" aria-live="polite" hidden>
+              <div class="boosted-production-list">
+                <div class="boosted-production-row"><span>FP</span><span><strong><output id="boostedFpValue"></output></strong><small id="boostedFpMeta"></small></span></div>
+                <div class="boosted-production-row"><span>Regular goods</span><span><strong><output id="boostedGoodsValue"></output></strong><small id="boostedGoodsMeta"></small></span></div>
+                <div class="boosted-production-row"><span>Guild goods</span><span><strong><output id="boostedGuildGoodsValue"></output></strong><small id="boostedGuildGoodsMeta"></small></span></div>
+                <div class="boosted-production-row"><span>Medals</span><span><strong><output id="boostedMedalsValue"></output></strong><small id="boostedMedalsMeta"></small></span></div>
+                <div class="boosted-production-row boosted-production-row-special"><span>Special goods</span><span><strong><output id="boostedSpecialGoodsValue"></output></strong><small id="boostedSpecialGoodsMeta"></small></span></div>
+              </div>
+              <details class="boosted-production-breakdown">
+                <summary id="productionBreakdownSummary">How boosts were applied</summary>
+                <div id="boostedProductionBreakdown" class="boosted-production-breakdown-content"></div>
+              </details>
+              <small class="boosted-production-note">Ranking calculations continue to use the editable Base values.</small>
+            </div>
           </div>
           <div class="share-settings-row">
             <button id="shareButton" type="button" class="secondary-button">Copy share link</button>
@@ -390,9 +414,9 @@
     </aside>
 
     <script
-      src="src/bootstrap.js?v=20260903-1"
-      data-data-version="97d22735e058"
-      data-app-version="20260903-1"
+      src="src/bootstrap.js?v=20260904-3"
+      data-data-version="36aee02b9177"
+      data-app-version="20260904-3"
     ></script>
   </body>
 </html>

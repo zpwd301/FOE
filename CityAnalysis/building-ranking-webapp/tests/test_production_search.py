@@ -86,5 +86,118 @@ class BlueprintProductionClassificationTests(unittest.TestCase):
         self.assertEqual(model.default_weight_for_attr(model.PROD_BLUEPRINT_RANDOM_ATTR), 0.0)
 
 
+class MotivatedProductionTests(unittest.TestCase):
+    def test_motivation_only_resources_are_included_in_daily_production(self) -> None:
+        entity = {
+            "components": {
+                "AllAge": {
+                    "production": {
+                        "options": [
+                            {
+                                "time": 43200,
+                                "products": [
+                                    {
+                                        "type": "resources",
+                                        "onlyWhenMotivated": True,
+                                        "playerResources": {
+                                            "resources": {
+                                                "strategy_points": 10,
+                                                "medals": 20,
+                                                "all_goods_of_age": 30,
+                                                "special_goods_up_to_age": 4,
+                                            },
+                                        },
+                                        "guildResources": {
+                                            "resources": {"iron": 5},
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+        attrs = model.extract_attributes(entity, "VirtualFuture", None)
+
+        self.assertEqual(attrs[model.PROD_FP_ATTR], 20)
+        self.assertEqual(attrs[model.PROD_MEDALS_ATTR], 40)
+        self.assertEqual(attrs[model.PROD_GOODS_ATTR], 68)
+        self.assertEqual(attrs["prod_resource_special_goods_up_to_age"], 8)
+        self.assertEqual(attrs[model.PROD_GUILD_GOODS_ATTR], 10)
+
+
+class SpecialGoodsProductionTests(unittest.TestCase):
+    def test_each_special_good_is_multiplied_by_unlocked_special_good_eras(self) -> None:
+        entity = {
+            "components": {
+                "AllAge": {
+                    "production": {
+                        "options": [
+                            {
+                                "time": 86400,
+                                "product": {
+                                    "resources": {"each_special_goods_up_to_age": 90},
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+        expected_by_age = {
+            "FutureEra": 0,
+            "ArcticFuture": 90,
+            "VirtualFuture": 180,
+            "SpaceAgeAsteroidBelt": 360,
+            "SpaceAgeSpaceHub": 720,
+            "StellarAgeDiscovery": 720,
+        }
+        for age, expected in expected_by_age.items():
+            with self.subTest(age=age):
+                attrs = model.extract_attributes(entity, age, None)
+                self.assertEqual(attrs["prod_resource_special_goods_up_to_age"], expected)
+                self.assertEqual(attrs[model.PROD_GOODS_ATTR], expected)
+
+    def test_random_special_good_remains_one_reward(self) -> None:
+        entity = {
+            "components": {
+                "AllAge": {
+                    "production": {
+                        "options": [
+                            {
+                                "time": 86400,
+                                "product": {
+                                    "resources": {"random_special_good_up_to_age": 90},
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+        attrs = model.extract_attributes(entity, "SpaceAgeAsteroidBelt", None)
+
+        self.assertEqual(attrs["prod_resource_special_goods_up_to_age"], 90)
+        self.assertEqual(attrs[model.PROD_GOODS_ATTR], 90)
+
+    def test_each_special_good_reward_uses_the_same_age_multiplier(self) -> None:
+        entity = entity_with_reward(
+            {
+                "type": "resource",
+                "subType": "each_special_goods_up_to_age",
+                "amount": 90,
+            }
+        )
+
+        attrs = model.extract_attributes(entity, "SpaceAgeAsteroidBelt", None)
+
+        self.assertEqual(attrs["prod_resource_special_goods_up_to_age"], 360)
+        self.assertEqual(attrs[model.PROD_GOODS_ATTR], 360)
+
+
 if __name__ == "__main__":
     unittest.main()
