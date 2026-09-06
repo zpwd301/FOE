@@ -1,11 +1,33 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
+
+function dashboardVersion(projectRoot) {
+  try {
+    const commitCount = Number.parseInt(
+      execFileSync("git", ["rev-list", "--count", "HEAD", "--", "."], {
+        cwd: projectRoot,
+        encoding: "utf8",
+      }).trim(),
+      10,
+    );
+    const hasPendingDashboardCommit = Boolean(
+      execFileSync("git", ["status", "--porcelain", "--", ".", ":(exclude)dist"], {
+        cwd: projectRoot,
+        encoding: "utf8",
+      }).trim(),
+    );
+    return `1.0.${commitCount + (hasPendingDashboardCommit ? 1 : 0)}`;
+  } catch {
+    return "1.0.0";
+  }
+}
 
 function fingerprint(contents) {
   return createHash("sha256").update(contents).digest("hex").slice(0, 12);
@@ -68,11 +90,19 @@ export async function buildStatic({ projectRoot = PROJECT_ROOT, outputRoot } = {
     `src="assets/${appName}"`,
     "index.html",
   );
+  const version = dashboardVersion(projectRoot);
+  builtIndex = replaceExactlyOnce(
+    builtIndex,
+    "Dashboard v0.0.0-dev",
+    `Dashboard v${version}`,
+    "index.html",
+  );
 
   const manifest = {
     schemaVersion: 1,
     algorithm: "sha256",
     hashLength: 12,
+    version,
     assets: {
       "assets/styles.css": `assets/${stylesName}`,
       "src/app.js": `assets/${appName}`,

@@ -19,6 +19,7 @@ test("static build fingerprints every cacheable resource and rewrites dependenci
 
   assert.equal(manifest.algorithm, "sha256");
   assert.equal(manifest.hashLength, 12);
+  assert.match(manifest.version, /^1\.0\.\d+$/);
   assert.equal(Object.keys(manifest.assets).length, 4);
   assert.equal(assetNames.length, 4);
   assert.doesNotMatch(index, /(?:href|src)="(?:assets\/styles\.css|src\/app\.js)"/);
@@ -27,9 +28,17 @@ test("static build fingerprints every cacheable resource and rewrites dependenci
   assert.match(index, /id="rage-target-level"[^>]+value="101"/);
   assert.match(index, /id="level-input"[^>]+max="301"/);
   assert.match(index, /id="rage-target-level"[^>]+max="301"/);
-  assert.match(index, /id="rage-arc-p1"[^>]+max="100"[^>]+value="100"/);
-  assert.match(index, /id="rage-arc-p5"[^>]+max="100"[^>]+value="90"/);
+  assert.match(index, /Dashboard v1\.0\.\d+/);
+  assert.doesNotMatch(index, /FoE Helper 4\.8\.1\.0 · exact FP \+ medal data/);
+  assert.match(index, /id="rage-arc-p1"[^>]+max="180"[^>]+value="180"/);
+  assert.match(index, /id="rage-arc-p5"[^>]+max="180"[^>]+value="80"/);
   assert.match(index, /id="rage-unlock-toggle"[^>]+aria-expanded="true"/);
+  assert.match(index, /id="rage-unlock-toggle-label">Hide unlocking costs</);
+  assert.doesNotMatch(index, /(?:metric-grid|metric-level|metric-cumulative|metric-coverage)/);
+  assert.ok(
+    index.indexOf('id="curve-preview"') < index.indexOf('class="analysis-grid"'),
+    "Curve preview replaces the former summary-card position",
+  );
 
   for (const outputPath of Object.values(manifest.assets)) {
     const expectedHash = outputPath.match(/\.([0-9a-f]{12})\.[^.]+$/)?.[1];

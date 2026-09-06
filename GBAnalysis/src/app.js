@@ -1,4 +1,6 @@
 import {
+  arcBonusForLevel,
+  arcLevelForBonus,
   buildBaseRewardSeries,
   buildLevelRows,
   buildRageAnalysis,
@@ -8,7 +10,7 @@ import {
 const formatter = new Intl.NumberFormat("en-US");
 const INPUT_STATE_ENDPOINT = "api/user-input";
 const INPUT_STATE_STORAGE_KEY = "gb-analysis-input-state-v1";
-const DEFAULT_RAGE_ARC_BONUSES = [100, 100, 100, 90, 90];
+const DEFAULT_RAGE_ARC_LEVELS = [180, 180, 180, 80, 80];
 const elements = Object.fromEntries(
   [
     "source-version",
@@ -22,11 +24,6 @@ const elements = Object.fromEntries(
     "building-era",
     "building-name",
     "building-size",
-    "metric-level",
-    "metric-cost",
-    "metric-cumulative",
-    "metric-coverage",
-    "metric-coverage-detail",
     "reward-multiplier",
     "reward-body",
     "reward-table-wrap",
@@ -57,8 +54,14 @@ const elements = Object.fromEntries(
     "rage-arc-p3",
     "rage-arc-p4",
     "rage-arc-p5",
+    "rage-arc-p1-bonus",
+    "rage-arc-p2-bonus",
+    "rage-arc-p3-bonus",
+    "rage-arc-p4-bonus",
+    "rage-arc-p5-bonus",
     "rage-coverage-warning",
     "rage-unlock-toggle",
+    "rage-unlock-toggle-label",
     "rage-table",
     "rage-table-head",
     "rage-table-wrap",
@@ -175,17 +178,20 @@ function applyInputState(state) {
   elements["rage-start-level"].value = rageBeginningLevel;
   elements["rage-target-level"].value = rageTargetLevel;
 
-  const savedBonuses = Array.isArray(state.rageArcBonuses)
-    ? state.rageArcBonuses
-    : DEFAULT_RAGE_ARC_BONUSES;
-  DEFAULT_RAGE_ARC_BONUSES.forEach((fallback, position) => {
+  const savedLevels = Array.isArray(state.rageArcLevels)
+    ? state.rageArcLevels
+    : Array.isArray(state.rageArcBonuses)
+      ? state.rageArcBonuses.map(arcLevelForBonus)
+      : DEFAULT_RAGE_ARC_LEVELS;
+  DEFAULT_RAGE_ARC_LEVELS.forEach((fallback, position) => {
     elements[`rage-arc-p${position + 1}`].value = clampNumber(
-      savedBonuses[position],
+      savedLevels[position],
       0,
-      100,
+      180,
       fallback,
     );
   });
+  renderRageArcBonusValues();
 
   if (typeof state.costChartResource === "string") {
     selectedCostSeriesId = state.costChartResource;
@@ -201,13 +207,13 @@ function applyInputState(state) {
 
 function collectInputState() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     buildingId: elements["building-select"].value,
     targetLevel: selectedLevel(),
     arcBonus: selectedArcBonus(),
     rageBeginningLevel: selectedRageBeginningLevel(),
     rageTargetLevel: selectedRageTargetLevel(),
-    rageArcBonuses: selectedRageArcBonuses(),
+    rageArcLevels: selectedRageArcLevels(),
     costChartResource: selectedCostSeriesId,
     rewardChartResource: selectedRewardResource,
     rageUnlockCostsExpanded,
@@ -309,22 +315,10 @@ function populateBuildingSelect() {
   }
 }
 
-function renderMetrics(building, selectedRow, rewardCoverage) {
+function renderBuildingHeading(building) {
   elements["building-era"].textContent = dataset.eraNames[String(building.eraId)];
   elements["building-name"].textContent = building.name;
   elements["building-size"].textContent = `${building.width} × ${building.length} tiles`;
-  elements["metric-level"].textContent = selectedRow.targetLevel;
-  elements["metric-cost"].textContent = formatNumber(selectedRow.cost);
-  elements["metric-cumulative"].textContent = formatNumber(selectedRow.cumulativeCost);
-  const coveredLevels = Math.min(rewardCoverage, dataset.maxLevel);
-  const exactCoverage = dataset.coverage.exactContributorRewardsThroughLevel ?? rewardCoverage;
-  const exactFpThrough = exactFpCoverageThrough(building.eraId);
-  const exactMedalsThrough = exactMedalCoverageThrough(building.eraId);
-  elements["metric-coverage"].textContent = `${coveredLevels} / ${dataset.maxLevel} levels`;
-  elements["metric-coverage-detail"].textContent =
-    rewardCoverage >= dataset.maxLevel
-      ? `FP exact through ${exactFpThrough} · medals exact through ${exactMedalsThrough} · blueprints exact through ${exactCoverage}`
-      : `FP, medals, and blueprints sourced through level ${rewardCoverage}`;
 }
 
 function isDirectCapturedRewardLevel(eraId, targetLevel) {
@@ -341,18 +335,6 @@ function isExactMedalRewardLevel(eraId, targetLevel) {
 function isExactFpRewardLevel(eraId, targetLevel) {
   const ranges = dataset.coverage.exactFpTargetLevelRangesByEra?.[String(eraId)] ?? [];
   return ranges.some(([first, last]) => targetLevel >= first && targetLevel <= last);
-}
-
-function exactFpCoverageThrough(eraId) {
-  const ranges = dataset.coverage.exactFpTargetLevelRangesByEra?.[String(eraId)] ?? [];
-  const firstRange = ranges.find(([first]) => first === 1);
-  return firstRange?.[1] ?? 0;
-}
-
-function exactMedalCoverageThrough(eraId) {
-  const ranges = dataset.coverage.exactMedalTargetLevelRangesByEra?.[String(eraId)] ?? [];
-  const firstRange = ranges.find(([first]) => first === 1);
-  return firstRange?.[1] ?? 0;
 }
 
 function renderRewards(building, selectedRow, arcBonus) {
@@ -870,26 +852,50 @@ function selectedRageTargetLevel() {
   );
 }
 
-function selectedRageArcBonuses() {
+function selectedRageArcLevels() {
   return Array.from({ length: 5 }, (_, position) =>
-    clampNumber(
-      elements[`rage-arc-p${position + 1}`].value,
-      0,
-      100,
-      DEFAULT_RAGE_ARC_BONUSES[position],
+    Math.round(
+      clampNumber(
+        elements[`rage-arc-p${position + 1}`].value,
+        0,
+        180,
+        DEFAULT_RAGE_ARC_LEVELS[position],
+      ),
     ),
   );
+}
+
+function selectedRageArcBonuses() {
+  return selectedRageArcLevels().map(arcBonusForLevel);
+}
+
+function formatArcBonus(bonus) {
+  return Number.isInteger(bonus) ? String(bonus) : bonus.toFixed(1);
+}
+
+function formatArcMultiplier(bonus) {
+  return (1 + bonus / 100).toFixed(Number.isInteger(bonus) ? 2 : 3);
+}
+
+function renderRageArcBonusValues() {
+  selectedRageArcLevels().forEach((level, position) => {
+    const bonus = arcBonusForLevel(level);
+    elements[`rage-arc-p${position + 1}-bonus`].textContent =
+      `${formatArcBonus(bonus)}% bonus · ${formatArcMultiplier(bonus)}×`;
+  });
 }
 
 function renderRageTable(selectedTargetLevel, rewardCoverage) {
   const beginningLevel = selectedRageBeginningLevel();
   const targetLevel = selectedRageTargetLevel();
+  const arcLevels = selectedRageArcLevels();
   const arcBonuses = selectedRageArcBonuses();
   elements["rage-start-level"].value = beginningLevel;
   elements["rage-target-level"].value = targetLevel;
-  arcBonuses.forEach((bonus, position) => {
-    elements[`rage-arc-p${position + 1}`].value = bonus;
+  arcLevels.forEach((level, position) => {
+    elements[`rage-arc-p${position + 1}`].value = level;
   });
+  renderRageArcBonusValues();
 
   currentRageAnalysis = buildRageAnalysis(
     currentRows,
@@ -946,7 +952,7 @@ function renderRageTable(selectedTargetLevel, rewardCoverage) {
       label: "Contributor FP",
       columns: arcBonuses.map((bonus, position) => ({
         key: `position${position + 1}`,
-        label: `P${position + 1} @ ${(1 + bonus / 100).toFixed(2)}×`,
+        label: `P${position + 1} @ ${formatArcMultiplier(bonus)}×`,
         className: "contribution-cell",
         value: (row) => row.contributions[position],
         total: currentRageAnalysis.totals.contributions[position],
@@ -981,6 +987,9 @@ function renderRageTable(selectedTargetLevel, rewardCoverage) {
     "aria-expanded",
     String(hasUnlockingCosts && rageUnlockCostsExpanded),
   );
+  elements["rage-unlock-toggle-label"].textContent = hasUnlockingCosts
+    ? `${rageUnlockCostsExpanded ? "Hide" : "Show"} unlocking costs`
+    : "No unlocking costs";
   elements["rage-unlock-toggle"].title = hasUnlockingCosts
     ? `${rageUnlockCostsExpanded ? "Hide" : "Show"} unlocking cost columns`
     : "No unlocking costs in this level range";
@@ -1108,7 +1117,7 @@ function render() {
   };
   currentRows = buildLevelRows(building, rewardTables, arcBonus, dataset.maxLevel);
   const selectedRow = currentRows[targetLevel - 1];
-  renderMetrics(building, selectedRow, p1ByLevel.length);
+  renderBuildingHeading(building);
   renderRewards(building, selectedRow, arcBonus);
   renderUnlockCosts(selectedRow);
   renderGoods(building);
@@ -1126,6 +1135,7 @@ function downloadRageCsv() {
   const building = selectedBuilding();
   const beginningLevel = selectedRageBeginningLevel();
   const targetLevel = selectedRageTargetLevel();
+  const arcLevels = selectedRageArcLevels();
   const arcBonuses = selectedRageArcBonuses();
   const specialResourceKeys = [
     ...new Set(
@@ -1147,12 +1157,17 @@ function downloadRageCsv() {
   header.push(...specialResourceKeys.map((resource) => `unlock_${resource}`));
   header.push("owner_fp");
   for (let position = 1; position <= 5; position += 1) {
-    header.push(`p${position}_arc_bonus_percent`, `p${position}_contribution_fp`);
+    header.push(
+      `p${position}_arc_level`,
+      `p${position}_arc_bonus_percent`,
+      `p${position}_contribution_fp`,
+    );
   }
   header.push("total_fp_cost");
   const lines = [header.join(",")];
   for (const row of currentRageAnalysis.rows) {
     const positions = row.contributions.flatMap((amount, position) => [
+      arcLevels[position] === 180 ? "180+" : arcLevels[position],
       arcBonuses[position],
       Number.isFinite(amount) ? amount : "",
     ]);
@@ -1178,6 +1193,7 @@ function downloadRageCsv() {
     );
   }
   const totalPositions = currentRageAnalysis.totals.contributions.flatMap((amount, position) => [
+    arcLevels[position] === 180 ? "180+" : arcLevels[position],
     arcBonuses[position],
     amount,
   ]);
@@ -1236,8 +1252,6 @@ async function initialize() {
   const response = await fetch("data/gb-analysis.json");
   if (!response.ok) throw new Error(`Dataset request failed: ${response.status}`);
   dataset = await response.json();
-  elements["source-version"].textContent =
-    `FoE Helper ${dataset.sources.forgeHammer.version} · exact FP + medal data`;
   populateBuildingSelect();
   applyInputState(await loadInputState());
 
@@ -1272,6 +1286,9 @@ async function initialize() {
     updateRageLevels("target"),
   );
   for (let position = 1; position <= 5; position += 1) {
+    elements[`rage-arc-p${position}`].addEventListener("input", () => {
+      renderRageArcBonusValues();
+    });
     elements[`rage-arc-p${position}`].addEventListener("change", () => {
       renderRageTable(selectedLevel(), currentRewardCoverage);
       scheduleInputStateSave();

@@ -40,9 +40,10 @@ class StaticServerCacheTests(unittest.TestCase):
             state_file = Path(directory) / "dashboard-input.json"
             self.assertEqual(load_user_input(state_file), {})
             expected = {
+                "schemaVersion": 2,
                 "buildingId": "AllAge",
                 "rageTargetLevel": 101,
-                "rageArcBonuses": [100, 100, 100, 90, 90],
+                "rageArcLevels": [180, 180, 180, 80, 80],
             }
             save_user_input(state_file, expected)
             self.assertEqual(load_user_input(state_file), expected)

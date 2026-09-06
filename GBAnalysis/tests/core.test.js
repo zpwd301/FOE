@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 import {
   applyArcBonus,
+  arcBonusForLevel,
+  arcLevelForBonus,
   buildBaseRewardSeries,
   baseMedalRewards,
   basePositionRewards,
@@ -65,6 +67,20 @@ test("Arc bonus uses Forge Hammer integer rounding", () => {
     applyArcBonus([1375, 690, 230, 60, 10], 90),
     [2613, 1311, 437, 114, 19],
   );
+});
+
+test("Arc levels map to the displayed contribution bonus", () => {
+  assert.equal(arcBonusForLevel(0), 0);
+  assert.equal(arcBonusForLevel(1), 10);
+  assert.equal(arcBonusForLevel(10), 31);
+  assert.equal(arcBonusForLevel(58), 79);
+  assert.equal(arcBonusForLevel(59), 79.5);
+  assert.equal(arcBonusForLevel(80), 90);
+  assert.equal(arcBonusForLevel(101), 92.1);
+  assert.equal(arcBonusForLevel(180), 100);
+  assert.equal(arcLevelForBonus(90), 80);
+  assert.equal(arcLevelForBonus(100), 180);
+  assert.throws(() => arcBonusForLevel(181), /0 to 180\+/);
 });
 
 test("medal positions use the live game's P1 fractions and whole-unit rounding", () => {

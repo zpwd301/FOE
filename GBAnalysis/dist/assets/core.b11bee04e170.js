@@ -1,4 +1,5 @@
 const MAX_LEVEL = 301;
+const ARC_FIRST_TEN_BONUSES = [10, 12, 14, 17, 19, 22, 24, 26, 29, 31];
 
 export function assertTargetLevel(targetLevel, maxLevel = MAX_LEVEL) {
   if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > maxLevel) {
@@ -9,6 +10,32 @@ export function assertTargetLevel(targetLevel, maxLevel = MAX_LEVEL) {
 export function forgeHammerRound(value) {
   const epsilon = 0.000001;
   return Math.round(value + (value >= 0 ? epsilon : -epsilon));
+}
+
+export function arcBonusForLevel(arcLevel) {
+  if (!Number.isInteger(arcLevel) || arcLevel < 0 || arcLevel > 180) {
+    throw new RangeError("Arc level must be an integer from 0 to 180+");
+  }
+  if (arcLevel === 0) return 0;
+  if (arcLevel <= 10) return ARC_FIRST_TEN_BONUSES[arcLevel - 1];
+  if (arcLevel <= 58) return arcLevel + 21;
+  if (arcLevel <= 80) return 79 + (arcLevel - 58) * 0.5;
+  return Math.round((90 + (arcLevel - 80) * 0.1) * 10) / 10;
+}
+
+export function arcLevelForBonus(arcBonus) {
+  const bonus = Number(arcBonus);
+  if (!Number.isFinite(bonus)) return 0;
+  let closestLevel = 0;
+  let closestDifference = Math.abs(bonus);
+  for (let level = 1; level <= 180; level += 1) {
+    const difference = Math.abs(arcBonusForLevel(level) - bonus);
+    if (difference <= closestDifference) {
+      closestLevel = level;
+      closestDifference = difference;
+    }
+  }
+  return closestLevel;
 }
 
 export function upgradeCost(firstTenLevelCosts, targetLevel) {

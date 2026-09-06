@@ -32,7 +32,7 @@
       <div class="header-actions">
         <div class="source-mark">
           <span class="source-dot" aria-hidden="true"></span>
-          <span id="source-version">Loading source…</span>
+          <span id="source-version">Dashboard v0.0.0-dev</span>
         </div>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch color mode">
           <span id="theme-toggle-icon" class="theme-toggle-icon" aria-hidden="true">☾</span>
@@ -88,22 +88,35 @@
         <div id="building-size" class="size-chip"></div>
       </section>
 
-      <section class="metric-grid" aria-label="Selected level summary">
-        <article class="metric metric-primary">
-          <p>Upgrade to level <span id="metric-level">—</span></p>
-          <strong id="metric-cost">—</strong>
-          <span>Forge Points</span>
-        </article>
-        <article class="metric">
-          <p>Cumulative through level</p>
-          <strong id="metric-cumulative">—</strong>
-          <span>Forge Points</span>
-        </article>
-        <article class="metric">
-          <p>Reward coverage</p>
-          <strong id="metric-coverage">—</strong>
-          <span id="metric-coverage-detail">FoE Helper table</span>
-        </article>
+      <section id="curve-preview" class="panel curve-panel curve-panel-primary">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Levels 1–301</p>
+            <h3>Curve preview</h3>
+          </div>
+          <span class="curve-key">Per-level costs · base rewards</span>
+        </div>
+        <div class="chart-grid">
+          <article class="chart-view">
+            <div class="chart-label"><span id="cost-chart-label">Upgrade cost</span><strong id="chart-cost-max"></strong></div>
+            <div id="cost-chart-controls" class="chart-tabs" aria-label="Upgrade cost resource"></div>
+            <div class="chart-plot">
+              <svg id="cost-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="Upgrade cost by level"></svg>
+              <div id="cost-chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
+            </div>
+            <p id="cost-chart-note" class="chart-note"></p>
+          </article>
+          <article class="chart-view">
+            <div class="chart-label"><span id="reward-chart-label">Base rewards</span><strong id="chart-reward-max"></strong></div>
+            <div id="reward-chart-controls" class="chart-tabs" aria-label="Base reward resource"></div>
+            <div class="chart-plot">
+              <svg id="reward-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="P1 through P5 base rewards by level"></svg>
+              <div id="reward-chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
+            </div>
+            <div id="reward-chart-legend" class="chart-series-legend" aria-label="Selected-level position values"></div>
+            <p id="reward-chart-note" class="chart-note"></p>
+          </article>
+        </div>
       </section>
 
       <section class="analysis-grid">
@@ -174,37 +187,6 @@
         </div>
       </section>
 
-      <section id="curve-preview" class="panel curve-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Levels 1–301</p>
-            <h3>Curve preview</h3>
-          </div>
-          <span class="curve-key">Per-level costs · base rewards</span>
-        </div>
-        <div class="chart-grid">
-          <article class="chart-view">
-            <div class="chart-label"><span id="cost-chart-label">Upgrade cost</span><strong id="chart-cost-max"></strong></div>
-            <div id="cost-chart-controls" class="chart-tabs" aria-label="Upgrade cost resource"></div>
-            <div class="chart-plot">
-              <svg id="cost-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="Upgrade cost by level"></svg>
-              <div id="cost-chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
-            </div>
-            <p id="cost-chart-note" class="chart-note"></p>
-          </article>
-          <article class="chart-view">
-            <div class="chart-label"><span id="reward-chart-label">Base rewards</span><strong id="chart-reward-max"></strong></div>
-            <div id="reward-chart-controls" class="chart-tabs" aria-label="Base reward resource"></div>
-            <div class="chart-plot">
-              <svg id="reward-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="P1 through P5 base rewards by level"></svg>
-              <div id="reward-chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
-            </div>
-            <div id="reward-chart-legend" class="chart-series-legend" aria-label="Selected-level position values"></div>
-            <p id="reward-chart-note" class="chart-note"></p>
-          </article>
-        </div>
-      </section>
-
       <section id="pre-rage-analysis" class="panel level-panel rage-panel">
         <div class="panel-heading level-heading rage-heading">
           <div>
@@ -224,30 +206,38 @@
             <span>Target level</span>
             <input id="rage-target-level" type="number" min="1" max="301" value="101" />
           </label>
-          <span class="rage-control-group-label rage-arc-group-label">Arc bonus by contribution position</span>
+          <span class="rage-control-group-label rage-arc-group-label">
+            Arc levels by contribution position
+            <small>0–180+ · level 180 represents 180 and above</small>
+          </span>
           <label class="rage-control rage-arc-control rage-p1-control">
             <span>P1</span>
-            <span class="rage-input-suffix"><input id="rage-arc-p1" type="number" min="0" max="100" step="0.1" value="100" /><span>%</span></span>
+            <input id="rage-arc-p1" type="number" min="0" max="180" step="1" value="180" aria-describedby="rage-arc-p1-bonus" />
+            <output id="rage-arc-p1-bonus" for="rage-arc-p1" class="rage-arc-bonus" aria-live="polite">100% bonus · 2.00×</output>
           </label>
           <label class="rage-control rage-arc-control rage-p2-control">
             <span>P2</span>
-            <span class="rage-input-suffix"><input id="rage-arc-p2" type="number" min="0" max="100" step="0.1" value="100" /><span>%</span></span>
+            <input id="rage-arc-p2" type="number" min="0" max="180" step="1" value="180" aria-describedby="rage-arc-p2-bonus" />
+            <output id="rage-arc-p2-bonus" for="rage-arc-p2" class="rage-arc-bonus" aria-live="polite">100% bonus · 2.00×</output>
           </label>
           <label class="rage-control rage-arc-control rage-p3-control">
             <span>P3</span>
-            <span class="rage-input-suffix"><input id="rage-arc-p3" type="number" min="0" max="100" step="0.1" value="100" /><span>%</span></span>
+            <input id="rage-arc-p3" type="number" min="0" max="180" step="1" value="180" aria-describedby="rage-arc-p3-bonus" />
+            <output id="rage-arc-p3-bonus" for="rage-arc-p3" class="rage-arc-bonus" aria-live="polite">100% bonus · 2.00×</output>
           </label>
           <label class="rage-control rage-arc-control rage-p4-control">
             <span>P4</span>
-            <span class="rage-input-suffix"><input id="rage-arc-p4" type="number" min="0" max="100" step="0.1" value="90" /><span>%</span></span>
+            <input id="rage-arc-p4" type="number" min="0" max="180" step="1" value="80" aria-describedby="rage-arc-p4-bonus" />
+            <output id="rage-arc-p4-bonus" for="rage-arc-p4" class="rage-arc-bonus" aria-live="polite">90% bonus · 1.90×</output>
           </label>
           <label class="rage-control rage-arc-control rage-p5-control">
             <span>P5</span>
-            <span class="rage-input-suffix"><input id="rage-arc-p5" type="number" min="0" max="100" step="0.1" value="90" /><span>%</span></span>
+            <input id="rage-arc-p5" type="number" min="0" max="180" step="1" value="80" aria-describedby="rage-arc-p5-bonus" />
+            <output id="rage-arc-p5-bonus" for="rage-arc-p5" class="rage-arc-bonus" aria-live="polite">90% bonus · 1.90×</output>
           </label>
         </div>
         <p class="rage-assumption">
-          Rage owner FP assumes all five positions are funded at the entered Arc bonuses.
+          Rage owner FP assumes all five positions are funded at the entered Arc levels.
           Resource totals include level-unlock payments only. Goods/type is the amount for
           one goods type; Goods total combines all five types. Special resources, such as
           Dark Matter, appear separately.
@@ -262,7 +252,7 @@
             aria-expanded="true"
           >
             <span class="rage-toggle-chevron" aria-hidden="true">⌄</span>
-            <span>Unlocking costs</span>
+            <span id="rage-unlock-toggle-label">Hide unlocking costs</span>
           </button>
         </div>
         <div

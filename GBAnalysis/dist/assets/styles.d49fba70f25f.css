@@ -327,55 +327,6 @@ footer {
   font-weight: 720;
 }
 
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-}
-
-.metric {
-  min-width: 0;
-  min-height: 166px;
-  padding: 27px 30px;
-  border-left: 1px solid var(--line);
-}
-
-.metric:first-child {
-  border-left: 0;
-}
-
-.metric p,
-.metric span {
-  display: block;
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.metric strong {
-  display: block;
-  margin: 13px 0 5px;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(32px, 3.4vw, 44px);
-  font-weight: 400;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  overflow-wrap: anywhere;
-}
-
-.metric-primary {
-  color: white;
-  background: var(--coral);
-}
-
-.metric-primary p,
-.metric-primary span {
-  color: rgba(255, 255, 255, 0.75);
-}
-
 .analysis-grid {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
@@ -592,6 +543,10 @@ td {
 .curve-panel,
 .level-panel {
   margin-top: 20px;
+}
+
+.curve-panel-primary {
+  margin-top: 0;
 }
 
 .curve-key {
@@ -883,9 +838,14 @@ td {
 .rage-analysis-controls {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-  padding: 0 27px 18px;
-  align-items: end;
+  gap: 10px;
+  margin: 0 27px 18px;
+  padding: 18px;
+  align-items: start;
+  background: color-mix(in srgb, var(--green-soft) 42%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line));
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, transparent);
 }
 
 .rage-control-group-label,
@@ -900,6 +860,16 @@ td {
 .rage-control-group-label {
   align-self: end;
   line-height: 1.35;
+}
+
+.rage-control-group-label small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .rage-level-group-label {
@@ -953,50 +923,71 @@ td {
   min-width: 0;
 }
 
+.rage-control > span:first-child {
+  min-height: 15px;
+}
+
 .rage-control input {
   width: 100%;
-  height: 44px;
+  height: 48px;
   padding: 0 12px;
   color: var(--ink);
-  background: var(--subtle);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--surface);
+  border: 2px solid color-mix(in srgb, var(--green) 48%, var(--line));
+  border-radius: 9px;
   outline: none;
-  font-size: 15px;
-  font-weight: 700;
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--ink) 7%, transparent);
+  font-size: 16px;
+  font-weight: 760;
   font-variant-numeric: tabular-nums;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.rage-control input:hover {
+  border-color: var(--green);
 }
 
 .rage-control input:focus {
   border-color: var(--green);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, transparent);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--green) 19%, transparent),
+    0 3px 9px color-mix(in srgb, var(--ink) 9%, transparent);
 }
 
-.rage-input-suffix {
-  position: relative;
+.rage-start-control > span:first-child,
+.rage-target-control > span:first-child {
+  color: var(--warning-ink);
+}
+
+.rage-start-control input,
+.rage-target-control input {
+  background: color-mix(in srgb, var(--gold-soft) 58%, var(--surface));
+  border-color: color-mix(in srgb, var(--gold) 72%, var(--line));
+}
+
+.rage-start-control input:hover,
+.rage-target-control input:hover {
+  border-color: var(--gold);
+}
+
+.rage-start-control input:focus,
+.rage-target-control input:focus {
+  background: color-mix(in srgb, var(--gold-soft) 70%, var(--surface));
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--gold) 20%, transparent),
+    0 3px 9px color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.rage-arc-bonus {
   display: block;
-}
-
-.rage-input-suffix input {
-  padding-right: 38px;
-  appearance: textfield;
-  -moz-appearance: textfield;
-}
-
-.rage-input-suffix input::-webkit-inner-spin-button,
-.rage-input-suffix input::-webkit-outer-spin-button {
-  margin: 0;
-  -webkit-appearance: none;
-}
-
-.rage-input-suffix > span {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  color: var(--muted);
-  font-size: 12px;
-  transform: translateY(-50%);
-  pointer-events: none;
+  min-height: 29px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .rage-assumption {
@@ -1246,7 +1237,6 @@ a:focus-visible {
     grid-column: 1 / -1;
   }
 
-  .metric-grid,
   .analysis-grid,
   .chart-grid {
     grid-template-columns: 1fr;
@@ -1301,16 +1291,6 @@ a:focus-visible {
   .rage-p5-control {
     grid-column: 1;
     grid-row: 6;
-  }
-
-  .metric {
-    min-height: 134px;
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-
-  .metric:first-child {
-    border-top: 0;
   }
 
   .building-heading {
@@ -1405,7 +1385,8 @@ a:focus-visible {
   }
 
   .rage-analysis-controls {
-    padding-inline: 18px;
+    margin-inline: 18px;
+    padding: 14px;
   }
 
   .rage-assumption,
