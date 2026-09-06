@@ -1,0 +1,3 @@
+# Direct game captures can contain player identifiers. Keep only sanitized
+# reward facts in generated data and tests.
+input/

@@ -1,6 +1,6 @@
 # GB Analysis
 
-GB Analysis is a dependency-free local web module for exploring Forge of Empires Great Building upgrade, unlock cost, and contributor reward curves through target level 301. Contributor rewards are sourced through level 201 and modeled from level 202 through 301.
+GB Analysis is a dependency-free local web module for exploring Forge of Empires Great Building upgrade, unlock cost, and contributor rewards through target level 301. Contributor rewards are sourced through level 201; above that, exact medal observations are used wherever available and clearly identified fallback curves fill the remaining gaps.
 
 The first feature answers four questions:
 
@@ -57,7 +57,7 @@ The implementation was derived from the locally installed FoE Helper 4.8.1.0 ext
 
 The current dataset contains 49 Great Buildings, including the Stellar Age: Discovery building **Shattered Horizon Siphon**. Its 4×4 footprint, five lots of 5,200 foundation goods, and first-ten upgrade costs come from current game metadata. Its contributor FP table comes from FoE Helper 4.8.1.0; its level 1–201 medal data was imported from FoE Helper's public Legendary Building API. The API response was also used to validate every reported FP, medal, and blueprint position against the module's normalized tables.
 
-FoE Helper does not bundle offline medal or blueprint reward tables, so the base tables for earlier eras are normalized from the unboosted public tables at [foe.kwister.net](https://foe.kwister.net/GB_list/) and checked against a local game-response capture. Upgrade and level-unlock costs cover target levels 1–301 for every building. Contributor FP, medal, and blueprint estimates for levels 202–301 are generated from power curves fitted only to the sourced 1–201 data; the dashboard labels that range as modeled.
+FoE Helper does not bundle offline medal or blueprint reward tables, so the base tables for earlier eras are normalized from the unboosted public tables at [foe.kwister.net](https://foe.kwister.net/GB_list/) and checked against local game-response captures. Upgrade and level-unlock costs cover target levels 1–301 for every building. Contributor FP and blueprint estimates for levels 202–301 use curves fitted to the sourced 1–201 data. Medal rewards use 1,965 exact later-level observations from FoE Helper's public Legendary Building API, giving complete exact medal coverage through level 301 for 17 era tables, including Oceanic Future and The Kraken. A fitted fallback is used only for API gaps, and the dashboard identifies those cells as modeled.
 
 See [the Forge Hammer findings](docs/forge-hammer-findings.md) for the audited formulas and worked example, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source details.
 
@@ -74,6 +74,14 @@ Then import a saved FoE Helper `LegendaryBuilding/bulk` response for `X_StellarA
 ```bash
 python3 scripts/import_foe_helper_siphon.py \
   --response /path/to/siphon-levels-1-201.json
+```
+
+To refresh the exact medal observations above level 201, pass the saved bulk
+responses for the available Great Buildings, then rebuild the generated tables:
+
+```bash
+python3 scripts/import_foe_helper_medal_observations.py /path/to/gb-api-*.json
+python3 scripts/derive_contributor_rewards.py
 ```
 
 Derive the level 202–301 reward rows and update the checked-in application dataset:

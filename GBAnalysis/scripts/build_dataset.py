@@ -72,13 +72,79 @@ MAX_LEVEL = 301
 EXACT_REWARD_MAX_LEVEL = 201
 REWARD_MAX_LEVEL = MAX_LEVEL
 FP_REWARD_EXPONENT = 1.2
-MEDAL_REWARD_EXPONENT = 1.2011
+# This is only the fallback for later levels absent from the exact FoE Helper
+# observation table.  It minimizes absolute P1 error across all 1,965 available
+# API observations above level 201; observed values always take precedence.
+MEDAL_REWARD_EXPONENT = 1.200964
 BLUEPRINT_REWARD_EXPONENT = 0.8
+MEDAL_OBSERVATIONS_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "contributor-medal-observations.json"
+)
 
 # The public table has an isolated blank Future Era medal cell at target level
 # 196.  FoE Helper's LegendaryBuilding API reports the value below, between
 # 102,262 at level 195 and 103,510 at level 197.
 MEDAL_SOURCE_CORRECTIONS = {("14", 196): 102_874}
+
+# Sanitized reward-only facts from direct GreatBuildingsService.getConstruction
+# responses.  The raw captures contain player data and intentionally remain
+# outside the generated dataset and version control.
+DIRECT_REWARD_CAPTURES = (
+    {
+        "buildingId": "X_ProgressiveEra_Landmark2",
+        "eraId": 9,
+        "targetLevel": 248,
+        "forgePoints": [4_195, 2_100, 700, 175, 35],
+        "medals": [36_124, 18_062, 9_031, 3_612, 1_806],
+        "blueprints": [38, 27, 21, 17, 15],
+    },
+    {
+        "buildingId": "X_FutureEra_Landmark1",
+        "eraId": 14,
+        "targetLevel": 214,
+        "forgePoints": [4_490, 2_245, 750, 190, 40],
+        "medals": [114_335, 57_168, 28_584, 11_434, 5_717],
+        "blueprints": [34, 24, 19, 15, 13],
+    },
+    {
+        "buildingId": "X_OceanicFuture_Landmark2",
+        "eraId": 16,
+        "targetLevel": 234,
+        "medals": [192_368, 96_184],
+    },
+    {
+        "buildingId": "X_OceanicFuture_Landmark2",
+        "eraId": 16,
+        "targetLevel": 235,
+        "medals": [193_360, 96_680],
+    },
+    {
+        "buildingId": "X_OceanicFuture_Landmark2",
+        "eraId": 16,
+        "targetLevel": 236,
+        "medals": [194_387, 97_194],
+    },
+    {
+        "buildingId": "X_OceanicFuture_Landmark2",
+        "eraId": 16,
+        "targetLevel": 237,
+        "medals": [195_343, 97_672],
+    },
+    {
+        "buildingId": "X_OceanicFuture_Landmark2",
+        "eraId": 16,
+        "targetLevel": 238,
+        "medals": [196_334, 98_167],
+    },
+    {
+        "buildingId": "X_OceanicFuture_Landmark2",
+        "eraId": 16,
+        "targetLevel": 239,
+        "forgePoints": [5_575, 2_790, 930, 235, 45],
+        "medals": [197_325, 98_663, 49_331, 19_733, 9_866],
+        "blueprints": [37, 26, 20, 17, 14],
+    },
+)
 
 
 # A full blueprint set unlocks every target level from 11 onward. These formulas
@@ -182,6 +248,48 @@ def fp_reward_estimate(era_id: int, target_level: int) -> int:
     era_factor = 14 if era_id == 0 else era_id + 9
     raw = era_factor * (target_level**FP_REWARD_EXPONENT - 1) / 3.2
     return game_round(raw / 5) * 5
+
+
+def fp_position_rewards(p1_reward: int) -> list[int]:
+    rewards = [p1_reward]
+    for position in range(2, 6):
+        rewards.append(game_round(rewards[-1] / position / 5) * 5)
+    return rewards
+
+
+def medal_position_rewards(p1_reward: int) -> list[int]:
+    return [
+        p1_reward,
+        game_round(p1_reward / 2),
+        game_round(p1_reward / 4),
+        game_round(p1_reward / 10),
+        game_round(p1_reward / 20),
+    ]
+
+
+def compress_level_ranges(levels: set[int]) -> list[list[int]]:
+    """Return sorted integer levels as compact inclusive ranges."""
+
+    if not levels:
+        return []
+    ordered = sorted(levels)
+    ranges: list[list[int]] = []
+    start = previous = ordered[0]
+    for level in ordered[1:]:
+        if level == previous + 1:
+            previous = level
+            continue
+        ranges.append([start, previous])
+        start = previous = level
+    ranges.append([start, previous])
+    return ranges
+
+
+def load_medal_observations(path: Path = MEDAL_OBSERVATIONS_PATH) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload.get("medalP1ByEra"), dict):
+        raise ValueError("Medal observation source is missing medalP1ByEra")
+    return payload
 
 
 def least_squares_scale(
@@ -312,6 +420,56 @@ def expand_contributor_rewards(
         )
         full_medals[era_id] = values
 
+    # The medal curve contains discrete game-table steps that a smooth power
+    # function cannot reproduce exactly (Kraken level 236 is one example).
+    # Overlay every later-level value available from FoE Helper's public API
+    # and retain the fitted curve only for genuinely unobserved cells.
+    observation_source = load_medal_observations()
+    observed_medals: dict[str, dict[int, int]] = {}
+    fallback_observation_errors: list[int] = []
+    for era_id, level_values in observation_source["medalP1ByEra"].items():
+        if era_id not in full_medals:
+            raise ValueError(f"Medal observations reference unavailable era {era_id}")
+        if not isinstance(level_values, dict):
+            raise ValueError(f"Invalid medal observation table for era {era_id}")
+        observed_medals[era_id] = {}
+        for level_text, value in level_values.items():
+            try:
+                target_level = int(level_text)
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"Invalid medal observation level {level_text!r} for era {era_id}"
+                ) from error
+            if (
+                target_level <= exact_level
+                or target_level > max_level
+                or not isinstance(value, int)
+                or value < 0
+            ):
+                raise ValueError(
+                    f"Invalid medal observation for era {era_id}, "
+                    f"target level {target_level}: {value!r}"
+                )
+            index = target_level - 1
+            fallback_observation_errors.append(full_medals[era_id][index] - value)
+            full_medals[era_id][index] = value
+            observed_medals[era_id][target_level] = value
+
+    exact_medal_levels: dict[str, set[int]] = {
+        era_id: set(range(1, exact_level + 1)) | set(observed_medals.get(era_id, {}))
+        for era_id in full_medals
+    }
+    exact_medal_ranges = {
+        era_id: compress_level_ranges(levels)
+        for era_id, levels in exact_medal_levels.items()
+    }
+    exact_medal_max: dict[str, int] = {}
+    for era_id, levels in exact_medal_levels.items():
+        contiguous_max = 0
+        while contiguous_max + 1 in levels:
+            contiguous_max += 1
+        exact_medal_max[era_id] = contiguous_max
+
     blueprint_scales = []
     for position in range(5):
         position_values = [row[position] for row in exact_blueprints]
@@ -331,6 +489,58 @@ def expand_contributor_rewards(
             ]
         )
 
+    direct_capture_errors = []
+    applied_captures = []
+    for capture in DIRECT_REWARD_CAPTURES:
+        target_level = capture["targetLevel"]
+        if target_level > max_level:
+            continue
+        era_id = str(capture["eraId"])
+        index = target_level - 1
+        if era_id not in full_fp or era_id not in full_medals:
+            raise ValueError(f"Direct capture references unavailable reward era {era_id}")
+        if "forgePoints" in capture and fp_position_rewards(
+            full_fp[era_id][index]
+        ) != capture["forgePoints"]:
+            raise ValueError(
+                f"FP formula does not match direct capture for era {era_id}, "
+                f"target level {target_level}"
+            )
+        captured_medals = capture["medals"]
+        if (
+            medal_position_rewards(captured_medals[0])[: len(captured_medals)]
+            != captured_medals
+        ):
+            raise ValueError(
+                f"Medal fractions do not match direct capture for era {era_id}, "
+                f"target level {target_level}"
+            )
+
+        modeled_medal = game_round(
+            medal_scales[era_id]
+            * (target_level**MEDAL_REWARD_EXPONENT - 1)
+        )
+        direct_capture_errors.append(modeled_medal - captured_medals[0])
+
+        if (
+            target_level in exact_medal_levels[era_id]
+            and full_medals[era_id][index] != captured_medals[0]
+        ):
+            raise ValueError(
+                f"Exact medal sources disagree for era {era_id}, "
+                f"target level {target_level}"
+            )
+
+        # Direct game values take precedence over a curve estimate at captured
+        # levels.  Where FP and blueprints are present they are assigned too, so
+        # these sparse exact rows remain explicit and regression-tested.
+        if "forgePoints" in capture:
+            full_fp[era_id][index] = capture["forgePoints"][0]
+        full_medals[era_id][index] = captured_medals[0]
+        if "blueprints" in capture:
+            full_blueprints[index] = list(capture["blueprints"])
+        applied_captures.append(copy.deepcopy(capture))
+
     fp_errors = []
     for era_id, values in fp_source_by_era.items():
         for target_level in range(11, exact_level + 1):
@@ -347,15 +557,8 @@ def expand_contributor_rewards(
             "throughTargetLevel": max_level,
             "exactThroughTargetLevel": exact_level,
             "estimatedFromTargetLevel": exact_level + 1,
-            "medalExactMaxTargetLevelByEra": copy.deepcopy(
-                expanded.get(
-                    "medalExactMaxTargetLevelByEra",
-                    expanded.get(
-                        "medalMaxTargetLevelByEra",
-                        {era_id: exact_level for era_id in full_medals},
-                    ),
-                )
-            ),
+            "medalExactMaxTargetLevelByEra": exact_medal_max,
+            "medalExactTargetLevelRangesByEra": exact_medal_ranges,
             "medalMaxTargetLevelByEra": {
                 era_id: max_level for era_id in full_medals
             },
@@ -363,7 +566,7 @@ def expand_contributor_rewards(
             "medalP1ByEra": full_medals,
             "blueprintsByLevel": full_blueprints,
             "estimation": {
-                "basis": "Power curves fitted and back-tested only against sourced levels 1-201; sourced rows are preserved unchanged except the documented level-196 correction.",
+                "basis": "Sourced rows through level 201 and all available later FoE Helper API observations are preserved exactly. Curves are used only for reward cells without an observation.",
                 "fpP1": {
                     "formula": "round-to-nearest-5(eraFactor * (level^1.2 - 1) / 3.2), where eraFactor is eraId + 9 and No Age uses 14",
                     "exponent": FP_REWARD_EXPONENT,
@@ -379,7 +582,7 @@ def expand_contributor_rewards(
                     },
                 },
                 "medalP1": {
-                    "formula": "round(eraScale * (level^1.2011 - 1)); eraScale is a least-squares fit to that era's sourced values",
+                    "formula": f"fallback only: round(eraScale * (level^{MEDAL_REWARD_EXPONENT} - 1)); exact table observations take precedence",
                     "exponent": MEDAL_REWARD_EXPONENT,
                     "scaleByEra": {
                         era_id: round(scale, 12) for era_id, scale in medal_scales.items()
@@ -389,6 +592,35 @@ def expand_contributor_rewards(
                         MEDAL_REWARD_EXPONENT,
                         subtract_one=True,
                     ),
+                    "directCaptureValidationBeforeExactOverrides": {
+                        "comparisonCount": len(direct_capture_errors),
+                        "meanAbsoluteError": round(
+                            sum(abs(error) for error in direct_capture_errors)
+                            / len(direct_capture_errors),
+                            6,
+                        ),
+                        "maximumAbsoluteError": max(
+                            abs(error) for error in direct_capture_errors
+                        ),
+                        "signedErrors": direct_capture_errors,
+                    },
+                    "fallbackValidationAgainstLaterObservations": {
+                        "comparisonCount": len(fallback_observation_errors),
+                        "meanAbsoluteError": round(
+                            sum(abs(error) for error in fallback_observation_errors)
+                            / len(fallback_observation_errors),
+                            6,
+                        ),
+                        "maximumAbsoluteError": max(
+                            abs(error) for error in fallback_observation_errors
+                        ),
+                        "exactPercentage": round(
+                            100
+                            * sum(error == 0 for error in fallback_observation_errors)
+                            / len(fallback_observation_errors),
+                            6,
+                        ),
+                    },
                 },
                 "blueprints": {
                     "formula": "round(positionScale * level^0.8); each position scale is a least-squares fit to sourced values",
@@ -400,6 +632,15 @@ def expand_contributor_rewards(
                         subtract_one=False,
                     ),
                 },
+            },
+            "directCapturedRewards": applied_captures,
+            "medalObservations": {
+                "source": observation_source.get("source"),
+                "retrievedOn": observation_source.get("retrievedOn"),
+                "comparisonCount": sum(
+                    len(level_values) for level_values in observed_medals.values()
+                ),
+                "exactTargetLevelRangesByEra": exact_medal_ranges,
             },
             "sourceCorrections": {
                 "medalP1ByEra.14.targetLevel196": {
@@ -510,6 +751,10 @@ def build_dataset(
                 "exactThroughTargetLevel": contributor_rewards["exactThroughTargetLevel"],
                 "estimatedFromTargetLevel": contributor_rewards["estimatedFromTargetLevel"],
                 "estimation": contributor_rewards["estimation"],
+                "medalObservations": contributor_rewards.get("medalObservations", {}),
+                "directCapturedRewards": contributor_rewards.get(
+                    "directCapturedRewards", []
+                ),
             },
             "levelUnlockCosts": {
                 "throughTargetLevel": MAX_LEVEL,
@@ -525,6 +770,9 @@ def build_dataset(
             "exactContributorRewardsThroughLevel": contributor_rewards[
                 "exactThroughTargetLevel"
             ],
+            "exactMedalTargetLevelRangesByEra": contributor_rewards.get(
+                "medalExactTargetLevelRangesByEra", {}
+            ),
             "estimatedContributorRewardsFromLevel": contributor_rewards[
                 "estimatedFromTargetLevel"
             ],

@@ -47,7 +47,21 @@ class DatasetBuilderTests(unittest.TestCase):
         self.assertEqual(dataset["rewardP1ByEra"]["24"][200], 5975)
         self.assertEqual(dataset["medalP1ByEra"]["24"][200], 578833)
         self.assertEqual(dataset["rewardP1ByEra"]["24"][300], 9710)
-        self.assertEqual(dataset["medalP1ByEra"]["24"][300], 940850)
+        self.assertEqual(dataset["medalP1ByEra"]["24"][300], 940762)
+        self.assertEqual(
+            dataset["sources"]["contributorRewards"]["estimation"]["medalP1"][
+                "exponent"
+            ],
+            1.200964,
+        )
+        self.assertEqual(
+            len(dataset["sources"]["contributorRewards"]["directCapturedRewards"]),
+            8,
+        )
+        self.assertEqual(
+            dataset["coverage"]["exactMedalTargetLevelRangesByEra"]["16"],
+            [[1, 301]],
+        )
         self.assertEqual(dataset["blueprintsByLevel"][300], [44, 32, 25, 20, 17])
         self.assertEqual(siphon["levelUnlockFormula"]["goodsPerTypePerStep"], 275)
         self.assertEqual(

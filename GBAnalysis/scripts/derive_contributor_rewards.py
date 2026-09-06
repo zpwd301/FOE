@@ -51,6 +51,8 @@ def main() -> None:
             "exactThroughTargetLevel": expanded["exactThroughTargetLevel"],
             "estimatedFromTargetLevel": expanded["estimatedFromTargetLevel"],
             "estimation": expanded["estimation"],
+            "medalObservations": expanded.get("medalObservations", {}),
+            "directCapturedRewards": expanded["directCapturedRewards"],
         }
     )
     dataset["coverage"].update(
@@ -59,6 +61,9 @@ def main() -> None:
             "blueprintsThroughLevel": MAX_LEVEL,
             "contributorRewardsThroughLevel": MAX_LEVEL,
             "exactContributorRewardsThroughLevel": expanded["exactThroughTargetLevel"],
+            "exactMedalTargetLevelRangesByEra": expanded.get(
+                "medalExactTargetLevelRangesByEra", {}
+            ),
             "estimatedContributorRewardsFromLevel": expanded["estimatedFromTargetLevel"],
         }
     )

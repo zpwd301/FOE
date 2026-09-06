@@ -256,7 +256,7 @@ test("Shattered Horizon Siphon extends calculated costs and modeled rewards to 3
   assert.ok(rows[201].rewards.medals?.base[0] > rows[200].rewards.medals?.base[0]);
   assert.deepEqual(rows[201].rewards.blueprints?.base, [32, 23, 18, 15, 12]);
   assert.deepEqual(rows[300].rewards.forgePoints?.base, [9710, 4855, 1620, 405, 80]);
-  assert.deepEqual(rows[300].rewards.medals?.base, [940850, 470425, 235213, 94085, 47043]);
+  assert.deepEqual(rows[300].rewards.medals?.base, [940762, 470381, 235191, 94076, 47038]);
   assert.deepEqual(rows[300].rewards.blueprints?.base, [44, 32, 25, 20, 17]);
 });
 
