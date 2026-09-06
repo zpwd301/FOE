@@ -1,0 +1,11 @@
+{
+  "name": "foe-gb-analysis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build_static.mjs",
+    "test": "npm run build && node --test tests/*.test.js && python3 -m unittest discover -s tests -p 'test_*.py'",
+    "serve": "npm run build && python3 scripts/serve_static.py --directory dist --port 8000"
+  }
+}

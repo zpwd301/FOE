@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Explore Forge of Empires Great Building costs and contributor rewards through level 301."
+    />
+    <title>GB Analysis</title>
+    <script>
+      (() => {
+        try {
+          const savedTheme = localStorage.getItem("gb-analysis-theme");
+          const theme = savedTheme === "dark" || savedTheme === "light"
+            ? savedTheme
+            : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+        } catch {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="GB Analysis home">
+        <span class="brand-mark" aria-hidden="true">GB</span>
+        <span>Analysis</span>
+      </a>
+      <div class="header-actions">
+        <div class="source-mark">
+          <span class="source-dot" aria-hidden="true"></span>
+          <span id="source-version">Loading source…</span>
+        </div>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch color mode">
+          <span id="theme-toggle-icon" class="theme-toggle-icon" aria-hidden="true">☾</span>
+          <span id="theme-toggle-label">Dark</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <p class="eyebrow">Great Building intelligence</p>
+        <h1>Plan every level,<br /><em>from cost to reward.</em></h1>
+        <p class="hero-copy">
+          Upgrade costs, unlocking requirements, and contributor rewards through level 301,
+          with sourced rewards through 201 and clearly labeled curve estimates above it.
+        </p>
+      </section>
+
+      <section class="control-panel" aria-label="Analysis controls">
+        <label class="field field-building">
+          <span>Great Building</span>
+          <select id="building-select"></select>
+        </label>
+        <label class="field field-level">
+          <span>Target level</span>
+          <input id="level-input" type="number" min="1" max="301" value="80" />
+        </label>
+        <label class="field field-arc">
+          <span>Arc bonus</span>
+          <span class="input-suffix">
+            <input id="arc-input" type="number" min="0" max="500" step="0.1" value="90" />
+            <span>%</span>
+          </span>
+        </label>
+        <div class="range-field">
+          <input
+            id="level-range"
+            type="range"
+            min="1"
+            max="301"
+            value="80"
+            aria-label="Target level"
+          />
+          <div class="range-labels" aria-hidden="true"><span>1</span><span>301</span></div>
+        </div>
+      </section>
+
+      <section class="building-heading" aria-live="polite">
+        <div>
+          <p id="building-era" class="eyebrow"></p>
+          <h2 id="building-name">Loading…</h2>
+        </div>
+        <div id="building-size" class="size-chip"></div>
+      </section>
+
+      <section class="metric-grid" aria-label="Selected level summary">
+        <article class="metric metric-primary">
+          <p>Upgrade to level <span id="metric-level">—</span></p>
+          <strong id="metric-cost">—</strong>
+          <span>Forge Points</span>
+        </article>
+        <article class="metric">
+          <p>Cumulative through level</p>
+          <strong id="metric-cumulative">—</strong>
+          <span>Forge Points</span>
+        </article>
+        <article class="metric">
+          <p>Reward coverage</p>
+          <strong id="metric-coverage">—</strong>
+          <span id="metric-coverage-detail">FoE Helper table</span>
+        </article>
+      </section>
+
+      <section class="analysis-grid">
+        <article class="panel reward-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Selected level</p>
+              <h3>Contributor rewards</h3>
+            </div>
+            <span id="reward-multiplier" class="quiet-chip">—</span>
+          </div>
+          <div
+            id="reward-table-wrap"
+            class="table-wrap compact-table"
+            role="region"
+            aria-label="Contributor rewards table"
+            aria-describedby="reward-table-scroll-hint"
+            tabindex="0"
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th>Position</th>
+                  <th>Base FP</th>
+                  <th>FP + Arc</th>
+                  <th>Base medals</th>
+                  <th>Medals + Arc</th>
+                  <th>Base BP</th>
+                  <th>BP + Arc</th>
+                </tr>
+              </thead>
+              <tbody id="reward-body"></tbody>
+            </table>
+          </div>
+          <p id="reward-table-scroll-hint" class="table-scroll-hint" hidden>
+            Scroll horizontally to compare all reward columns.
+          </p>
+          <p id="reward-note" class="panel-note"></p>
+        </article>
+
+        <div class="analysis-side">
+          <article id="unlock-costs" class="panel unlock-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Selected level</p>
+                <h3>Unlock costs</h3>
+              </div>
+              <span id="unlock-total" class="quiet-chip">—</span>
+            </div>
+            <div id="unlock-list" class="goods-list"></div>
+            <p id="unlock-note" class="panel-note"></p>
+          </article>
+
+          <article class="panel goods-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Construction only</p>
+                <h3>Foundation goods</h3>
+              </div>
+              <span id="goods-total" class="quiet-chip">—</span>
+            </div>
+            <div id="goods-list" class="goods-list"></div>
+            <p class="panel-note">
+              These goods are paid once to place the building and are separate from later
+              level-unlock requirements.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="curve-preview" class="panel curve-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Levels 1–301</p>
+            <h3>Curve preview</h3>
+          </div>
+          <span class="curve-key">Per-level costs · base rewards</span>
+        </div>
+        <div class="chart-grid">
+          <article class="chart-view">
+            <div class="chart-label"><span id="cost-chart-label">Upgrade cost</span><strong id="chart-cost-max"></strong></div>
+            <div id="cost-chart-controls" class="chart-tabs" aria-label="Upgrade cost resource"></div>
+            <div class="chart-plot">
+              <svg id="cost-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="Upgrade cost by level"></svg>
+              <div id="cost-chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
+            </div>
+            <p id="cost-chart-note" class="chart-note"></p>
+          </article>
+          <article class="chart-view">
+            <div class="chart-label"><span id="reward-chart-label">Base rewards</span><strong id="chart-reward-max"></strong></div>
+            <div id="reward-chart-controls" class="chart-tabs" aria-label="Base reward resource"></div>
+            <div class="chart-plot">
+              <svg id="reward-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="P1 through P5 base rewards by level"></svg>
+              <div id="reward-chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
+            </div>
+            <div id="reward-chart-legend" class="chart-series-legend" aria-label="Selected-level position values"></div>
+            <p id="reward-chart-note" class="chart-note"></p>
+          </article>
+        </div>
+      </section>
+
+      <section id="pre-rage-analysis" class="panel level-panel rage-panel">
+        <div class="panel-heading level-heading rage-heading">
+          <div>
+            <p class="eyebrow">Rapid leveling planner</p>
+            <h3>Pre-rage analysis</h3>
+            <span class="ledger-key">One Rage session · zero-only columns hidden automatically</span>
+          </div>
+          <button id="rage-download-button" type="button">Download Rage CSV</button>
+        </div>
+        <div class="rage-analysis-controls" aria-label="Rage session controls">
+          <span class="rage-control-group-label rage-level-group-label">Level range</span>
+          <label class="rage-control rage-start-control">
+            <span>Beginning level</span>
+            <input id="rage-start-level" type="number" min="1" max="301" value="1" />
+          </label>
+          <label class="rage-control rage-target-control">
+            <span>Target level</span>
+            <input id="rage-target-level" type="number" min="1" max="301" value="101" />
+          </label>
+          <span class="rage-control-group-label rage-arc-group-label">Arc bonus by contribution position</span>
+          <label class="rage-control rage-arc-control rage-p1-control">
+            <span>P1</span>
+            <span class="rage-input-suffix"><input id="rage-arc-p1" type="number" min="0" max="100" step="0.1" value="100" /><span>%</span></span>
+          </label>
+          <label class="rage-control rage-arc-control rage-p2-control">
+            <span>P2</span>
+            <span class="rage-input-suffix"><input id="rage-arc-p2" type="number" min="0" max="100" step="0.1" value="100" /><span>%</span></span>
+          </label>
+          <label class="rage-control rage-arc-control rage-p3-control">
+            <span>P3</span>
+            <span class="rage-input-suffix"><input id="rage-arc-p3" type="number" min="0" max="100" step="0.1" value="100" /><span>%</span></span>
+          </label>
+          <label class="rage-control rage-arc-control rage-p4-control">
+            <span>P4</span>
+            <span class="rage-input-suffix"><input id="rage-arc-p4" type="number" min="0" max="100" step="0.1" value="90" /><span>%</span></span>
+          </label>
+          <label class="rage-control rage-arc-control rage-p5-control">
+            <span>P5</span>
+            <span class="rage-input-suffix"><input id="rage-arc-p5" type="number" min="0" max="100" step="0.1" value="90" /><span>%</span></span>
+          </label>
+        </div>
+        <p class="rage-assumption">
+          Rage owner FP assumes all five positions are funded at the entered Arc bonuses.
+          Resource totals include level-unlock payments only. Goods/type is the amount for
+          one goods type; Goods total combines all five types. Special resources, such as
+          Dark Matter, appear separately.
+        </p>
+        <p id="rage-coverage-warning" class="coverage-warning" hidden></p>
+        <div class="rage-table-toolbar">
+          <button
+            id="rage-unlock-toggle"
+            class="rage-column-toggle"
+            type="button"
+            aria-controls="rage-table"
+            aria-expanded="true"
+          >
+            <span class="rage-toggle-chevron" aria-hidden="true">⌄</span>
+            <span>Unlocking costs</span>
+          </button>
+        </div>
+        <div
+          id="rage-table-wrap"
+          class="table-wrap level-table-wrap"
+          role="region"
+          aria-label="Rage session owner investment analysis"
+          aria-describedby="rage-table-scroll-hint"
+          tabindex="0"
+        >
+          <table id="rage-table" class="level-table rage-table">
+            <thead id="rage-table-head"></thead>
+            <tbody id="rage-body"></tbody>
+            <tfoot id="rage-total-foot"></tfoot>
+          </table>
+        </div>
+        <p id="rage-table-scroll-hint" class="table-scroll-hint level-table-scroll-hint" hidden>
+          Scroll horizontally to compare contributions and owner requirements.
+        </p>
+      </section>
+
+      <section class="method-note">
+        <p class="eyebrow">Method</p>
+        <h3>How the numbers are calculated.</h3>
+        <p>
+          Levels 1–10 use captured game metadata. Levels 11–301 apply FoE Helper’s 2.5%
+          exponential FP rule. Levels after 10 require another full blueprint set; six newer
+          Great Buildings also require scaling goods and other resources. Contributor FP reproduces its era table and recursive
+          rounding for P2–P5. Medal and blueprint tables are unboosted source values checked
+          against live game construction responses through level 201. Levels 202–301 use
+          separately fitted FP, medal, and blueprint curves, and the dashboard labels those
+          results as modeled before applying the same FoE Helper Arc rounding.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <span>GB Analysis</span>
+      <span>Great Building planning and analysis</span>
+    </footer>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>

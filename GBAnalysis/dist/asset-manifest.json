@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "sha256",
+  "hashLength": 12,
+  "assets": {
+    "assets/styles.css": "assets/styles.c85c01088c8e.css",
+    "src/app.js": "assets/app.6049e0c7c55b.js",
+    "src/core.js": "assets/core.c40b2045b323.js",
+    "data/gb-analysis.json": "assets/gb-analysis.b27f36c76a38.json"
+  }
+}
