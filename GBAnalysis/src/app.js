@@ -318,11 +318,12 @@ function renderMetrics(building, selectedRow, rewardCoverage) {
   elements["metric-cumulative"].textContent = formatNumber(selectedRow.cumulativeCost);
   const coveredLevels = Math.min(rewardCoverage, dataset.maxLevel);
   const exactCoverage = dataset.coverage.exactContributorRewardsThroughLevel ?? rewardCoverage;
+  const exactFpThrough = exactFpCoverageThrough(building.eraId);
   const exactMedalsThrough = exactMedalCoverageThrough(building.eraId);
   elements["metric-coverage"].textContent = `${coveredLevels} / ${dataset.maxLevel} levels`;
   elements["metric-coverage-detail"].textContent =
     rewardCoverage >= dataset.maxLevel
-      ? `Medals exact through ${exactMedalsThrough} · FP and blueprints exact through ${exactCoverage}`
+      ? `FP exact through ${exactFpThrough} · medals exact through ${exactMedalsThrough} · blueprints exact through ${exactCoverage}`
       : `FP, medals, and blueprints sourced through level ${rewardCoverage}`;
 }
 
@@ -335,6 +336,17 @@ function isDirectCapturedRewardLevel(eraId, targetLevel) {
 function isExactMedalRewardLevel(eraId, targetLevel) {
   const ranges = dataset.coverage.exactMedalTargetLevelRangesByEra?.[String(eraId)] ?? [];
   return ranges.some(([first, last]) => targetLevel >= first && targetLevel <= last);
+}
+
+function isExactFpRewardLevel(eraId, targetLevel) {
+  const ranges = dataset.coverage.exactFpTargetLevelRangesByEra?.[String(eraId)] ?? [];
+  return ranges.some(([first, last]) => targetLevel >= first && targetLevel <= last);
+}
+
+function exactFpCoverageThrough(eraId) {
+  const ranges = dataset.coverage.exactFpTargetLevelRangesByEra?.[String(eraId)] ?? [];
+  const firstRange = ranges.find(([first]) => first === 1);
+  return firstRange?.[1] ?? 0;
 }
 
 function exactMedalCoverageThrough(eraId) {
@@ -385,11 +397,21 @@ function renderRewards(building, selectedRow, arcBonus) {
     building.eraId,
     selectedRow.targetLevel,
   );
+  const hasExactFp = isExactFpRewardLevel(building.eraId, selectedRow.targetLevel);
+  const exactApiRewards = [
+    hasExactFp ? "FP rewards" : null,
+    hasExactMedals ? "medal rewards" : null,
+  ].filter(Boolean);
+  const modeledRewards = [
+    hasExactFp ? null : "FP rewards",
+    hasExactMedals ? null : "medal rewards",
+    "blueprint rewards",
+  ].filter(Boolean);
   const provenance = isDirectCapture
     ? `Level ${selectedRow.targetLevel} base rewards are from a direct game capture. `
     : selectedRow.targetLevel > exactCoverage
-      ? hasExactMedals
-        ? `Level ${selectedRow.targetLevel} medals are an exact API observation; FP and blueprints are modeled. `
+      ? exactApiRewards.length
+        ? `Level ${selectedRow.targetLevel} ${exactApiRewards.join(" and ")} are exact API observations; ${modeledRewards.join(" and ")} are modeled. `
         : `Level ${selectedRow.targetLevel} FP, medals, and blueprints are modeled from sourced curves. `
       : "";
   elements["reward-note"].textContent =
@@ -817,6 +839,9 @@ function renderCharts(rows, selectedIndex) {
     `Base rewards at level ${selectedIndex + 1}, before the Arc bonus.${
       isDirectCapturedRewardLevel(selectedBuilding().eraId, selectedIndex + 1)
         ? " This level uses a direct game capture."
+        : selectedRewardResource === "forgePoints" &&
+            isExactFpRewardLevel(selectedBuilding().eraId, selectedIndex + 1)
+          ? " This FP value is an exact source observation."
         : selectedRewardResource === "medals" &&
             isExactMedalRewardLevel(selectedBuilding().eraId, selectedIndex + 1)
           ? " This medal value is an exact source observation."
@@ -1035,16 +1060,23 @@ function renderRageTable(selectedTargetLevel, rewardCoverage) {
   } else if (targetLevel <= rewardCoverage) {
     const firstLaterLevel = Math.max(beginningLevel, exactCoverage + 1);
     const laterLevelCount = targetLevel - firstLaterLevel + 1;
+    let exactFpCount = 0;
     let exactMedalCount = 0;
     for (let level = firstLaterLevel; level <= targetLevel; level += 1) {
+      if (isExactFpRewardLevel(selectedBuilding().eraId, level)) exactFpCount += 1;
       if (isExactMedalRewardLevel(selectedBuilding().eraId, level)) exactMedalCount += 1;
     }
+    const fpNote = exactFpCount === laterLevelCount
+      ? " FP rewards are exact API observations throughout this range."
+      : exactFpCount > 0
+        ? ` FP rewards are exact at ${exactFpCount} of those ${laterLevelCount} levels; the rest are modeled.`
+        : " FP rewards in this range are modeled.";
     const medalNote = exactMedalCount === laterLevelCount
       ? " Medal rewards are exact source observations throughout this range."
       : exactMedalCount > 0
         ? ` Medal rewards are exact at ${exactMedalCount} of those ${laterLevelCount} levels; the rest are modeled.`
         : " Medal rewards in this range are modeled.";
-    warning.textContent = `FP and blueprint rewards from level ${firstLaterLevel} onward are modeled from sourced curves.${medalNote}`;
+    warning.textContent = `Blueprint rewards from level ${firstLaterLevel} onward are modeled from a sourced curve.${fpNote}${medalNote}`;
   } else {
     warning.textContent = `Contributor FP rewards are unavailable after level ${rewardCoverage}. Owner FP uses the full upgrade cost for unavailable levels.`;
   }
@@ -1205,7 +1237,7 @@ async function initialize() {
   if (!response.ok) throw new Error(`Dataset request failed: ${response.status}`);
   dataset = await response.json();
   elements["source-version"].textContent =
-    `FoE Helper ${dataset.sources.forgeHammer.version} · exact medal data`;
+    `FoE Helper ${dataset.sources.forgeHammer.version} · exact FP + medal data`;
   populateBuildingSelect();
   applyInputState(await loadInputState());
 

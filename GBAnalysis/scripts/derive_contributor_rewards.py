@@ -51,6 +51,7 @@ def main() -> None:
             "exactThroughTargetLevel": expanded["exactThroughTargetLevel"],
             "estimatedFromTargetLevel": expanded["estimatedFromTargetLevel"],
             "estimation": expanded["estimation"],
+            "fpObservations": expanded.get("fpObservations", {}),
             "medalObservations": expanded.get("medalObservations", {}),
             "directCapturedRewards": expanded["directCapturedRewards"],
         }
@@ -63,6 +64,9 @@ def main() -> None:
             "exactContributorRewardsThroughLevel": expanded["exactThroughTargetLevel"],
             "exactMedalTargetLevelRangesByEra": expanded.get(
                 "medalExactTargetLevelRangesByEra", {}
+            ),
+            "exactFpTargetLevelRangesByEra": expanded.get(
+                "fpExactTargetLevelRangesByEra", {}
             ),
             "estimatedContributorRewardsFromLevel": expanded["estimatedFromTargetLevel"],
         }

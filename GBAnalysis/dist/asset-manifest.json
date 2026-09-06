@@ -4,8 +4,8 @@
   "hashLength": 12,
   "assets": {
     "assets/styles.css": "assets/styles.c85c01088c8e.css",
-    "src/app.js": "assets/app.f470e3b39436.js",
+    "src/app.js": "assets/app.864dd5296d53.js",
     "src/core.js": "assets/core.c40b2045b323.js",
-    "data/gb-analysis.json": "assets/gb-analysis.79fd00a4580b.json"
+    "data/gb-analysis.json": "assets/gb-analysis.7f1a171f57e2.json"
   }
 }

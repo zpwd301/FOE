@@ -77,6 +77,9 @@ FP_REWARD_EXPONENT = 1.2
 # API observations above level 201; observed values always take precedence.
 MEDAL_REWARD_EXPONENT = 1.200964
 BLUEPRINT_REWARD_EXPONENT = 0.8
+FP_OBSERVATIONS_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "contributor-fp-observations.json"
+)
 MEDAL_OBSERVATIONS_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "contributor-medal-observations.json"
 )
@@ -285,11 +288,34 @@ def compress_level_ranges(levels: set[int]) -> list[list[int]]:
     return ranges
 
 
+def load_fp_observations(path: Path = FP_OBSERVATIONS_PATH) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload.get("fpP1ByEra"), dict):
+        raise ValueError("FP observation source is missing fpP1ByEra")
+    return payload
+
+
 def load_medal_observations(path: Path = MEDAL_OBSERVATIONS_PATH) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload.get("medalP1ByEra"), dict):
         raise ValueError("Medal observation source is missing medalP1ByEra")
     return payload
+
+
+def exact_coverage_metadata(
+    exact_levels_by_era: dict[str, set[int]],
+) -> tuple[dict[str, list[list[int]]], dict[str, int]]:
+    ranges = {
+        era_id: compress_level_ranges(levels)
+        for era_id, levels in exact_levels_by_era.items()
+    }
+    contiguous_max_by_era: dict[str, int] = {}
+    for era_id, levels in exact_levels_by_era.items():
+        contiguous_max = 0
+        while contiguous_max + 1 in levels:
+            contiguous_max += 1
+        contiguous_max_by_era[era_id] = contiguous_max
+    return ranges, contiguous_max_by_era
 
 
 def least_squares_scale(
@@ -353,7 +379,7 @@ def expand_contributor_rewards(
     fp_source_by_era: dict[int, list[int]],
     max_level: int = MAX_LEVEL,
 ) -> dict[str, Any]:
-    """Preserve sourced rewards through 201 and model target levels 202-301."""
+    """Preserve sourced and observed rewards, modeling only unobserved cells."""
 
     expanded = copy.deepcopy(source)
     exact_level = int(expanded.get("exactThroughTargetLevel", EXACT_REWARD_MAX_LEVEL))
@@ -403,6 +429,46 @@ def expand_contributor_rewards(
             for target_level in range(exact_level + 1, max_level + 1)
         )
         full_fp[str(era_id)] = values
+
+    # The formula is always within 5 FP of the sourced table but does not
+    # reproduce every nearest-5 step. Overlay exact later-level API rows and
+    # retain the formula only for genuinely unobserved cells.
+    fp_observation_source = load_fp_observations()
+    observed_fp: dict[str, dict[int, int]] = {}
+    fallback_fp_observation_errors: list[int] = []
+    for era_id, level_values in fp_observation_source["fpP1ByEra"].items():
+        if era_id not in full_fp:
+            raise ValueError(f"FP observations reference unavailable era {era_id}")
+        if not isinstance(level_values, dict):
+            raise ValueError(f"Invalid FP observation table for era {era_id}")
+        observed_fp[era_id] = {}
+        for level_text, value in level_values.items():
+            try:
+                target_level = int(level_text)
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"Invalid FP observation level {level_text!r} for era {era_id}"
+                ) from error
+            if (
+                target_level <= exact_level
+                or target_level > max_level
+                or not isinstance(value, int)
+                or value < 0
+                or value % 5 != 0
+            ):
+                raise ValueError(
+                    f"Invalid FP observation for era {era_id}, "
+                    f"target level {target_level}: {value!r}"
+                )
+            index = target_level - 1
+            fallback_fp_observation_errors.append(full_fp[era_id][index] - value)
+            full_fp[era_id][index] = value
+            observed_fp[era_id][target_level] = value
+
+    exact_fp_levels: dict[str, set[int]] = {
+        era_id: set(range(1, exact_level + 1)) | set(observed_fp.get(era_id, {}))
+        for era_id in full_fp
+    }
 
     medal_scales: dict[str, float] = {}
     full_medals: dict[str, list[int]] = {}
@@ -459,17 +525,6 @@ def expand_contributor_rewards(
         era_id: set(range(1, exact_level + 1)) | set(observed_medals.get(era_id, {}))
         for era_id in full_medals
     }
-    exact_medal_ranges = {
-        era_id: compress_level_ranges(levels)
-        for era_id, levels in exact_medal_levels.items()
-    }
-    exact_medal_max: dict[str, int] = {}
-    for era_id, levels in exact_medal_levels.items():
-        contiguous_max = 0
-        while contiguous_max + 1 in levels:
-            contiguous_max += 1
-        exact_medal_max[era_id] = contiguous_max
-
     blueprint_scales = []
     for position in range(5):
         position_values = [row[position] for row in exact_blueprints]
@@ -499,13 +554,21 @@ def expand_contributor_rewards(
         index = target_level - 1
         if era_id not in full_fp or era_id not in full_medals:
             raise ValueError(f"Direct capture references unavailable reward era {era_id}")
-        if "forgePoints" in capture and fp_position_rewards(
-            full_fp[era_id][index]
-        ) != capture["forgePoints"]:
-            raise ValueError(
-                f"FP formula does not match direct capture for era {era_id}, "
-                f"target level {target_level}"
-            )
+        if "forgePoints" in capture:
+            captured_fp = capture["forgePoints"]
+            if fp_position_rewards(captured_fp[0]) != captured_fp:
+                raise ValueError(
+                    f"FP positions do not match direct capture for era {era_id}, "
+                    f"target level {target_level}"
+                )
+            if (
+                target_level in exact_fp_levels[era_id]
+                and full_fp[era_id][index] != captured_fp[0]
+            ):
+                raise ValueError(
+                    f"Exact FP sources disagree for era {era_id}, "
+                    f"target level {target_level}"
+                )
         captured_medals = capture["medals"]
         if (
             medal_position_rewards(captured_medals[0])[: len(captured_medals)]
@@ -536,10 +599,15 @@ def expand_contributor_rewards(
         # these sparse exact rows remain explicit and regression-tested.
         if "forgePoints" in capture:
             full_fp[era_id][index] = capture["forgePoints"][0]
+            exact_fp_levels[era_id].add(target_level)
         full_medals[era_id][index] = captured_medals[0]
+        exact_medal_levels[era_id].add(target_level)
         if "blueprints" in capture:
             full_blueprints[index] = list(capture["blueprints"])
         applied_captures.append(copy.deepcopy(capture))
+
+    exact_fp_ranges, exact_fp_max = exact_coverage_metadata(exact_fp_levels)
+    exact_medal_ranges, exact_medal_max = exact_coverage_metadata(exact_medal_levels)
 
     fp_errors = []
     for era_id, values in fp_source_by_era.items():
@@ -557,6 +625,9 @@ def expand_contributor_rewards(
             "throughTargetLevel": max_level,
             "exactThroughTargetLevel": exact_level,
             "estimatedFromTargetLevel": exact_level + 1,
+            "fpExactMaxTargetLevelByEra": exact_fp_max,
+            "fpExactTargetLevelRangesByEra": exact_fp_ranges,
+            "fpMaxTargetLevelByEra": {era_id: max_level for era_id in full_fp},
             "medalExactMaxTargetLevelByEra": exact_medal_max,
             "medalExactTargetLevelRangesByEra": exact_medal_ranges,
             "medalMaxTargetLevelByEra": {
@@ -566,9 +637,9 @@ def expand_contributor_rewards(
             "medalP1ByEra": full_medals,
             "blueprintsByLevel": full_blueprints,
             "estimation": {
-                "basis": "Sourced rows through level 201 and all available later FoE Helper API observations are preserved exactly. Curves are used only for reward cells without an observation.",
+                "basis": "Sourced rows through level 201 and all available later FoE Helper FP and medal API observations are preserved exactly. Curves are used only for reward cells without an observation.",
                 "fpP1": {
-                    "formula": "round-to-nearest-5(eraFactor * (level^1.2 - 1) / 3.2), where eraFactor is eraId + 9 and No Age uses 14",
+                    "formula": "fallback only: round-to-nearest-5(eraFactor * (level^1.2 - 1) / 3.2), where eraFactor is eraId + 9 and No Age uses 14; exact table observations take precedence",
                     "exponent": FP_REWARD_EXPONENT,
                     "backtest": {
                         "comparisonCount": len(fp_errors),
@@ -579,6 +650,23 @@ def expand_contributor_rewards(
                             100 * sum(error <= 5 for error in fp_errors) / len(fp_errors), 6
                         ),
                         "maximumAbsoluteError": max(fp_errors),
+                    },
+                    "fallbackValidationAgainstLaterObservations": {
+                        "comparisonCount": len(fallback_fp_observation_errors),
+                        "meanAbsoluteError": round(
+                            sum(abs(error) for error in fallback_fp_observation_errors)
+                            / len(fallback_fp_observation_errors),
+                            6,
+                        ),
+                        "maximumAbsoluteError": max(
+                            abs(error) for error in fallback_fp_observation_errors
+                        ),
+                        "exactPercentage": round(
+                            100
+                            * sum(error == 0 for error in fallback_fp_observation_errors)
+                            / len(fallback_fp_observation_errors),
+                            6,
+                        ),
                     },
                 },
                 "medalP1": {
@@ -634,6 +722,14 @@ def expand_contributor_rewards(
                 },
             },
             "directCapturedRewards": applied_captures,
+            "fpObservations": {
+                "source": fp_observation_source.get("source"),
+                "retrievedOn": fp_observation_source.get("retrievedOn"),
+                "comparisonCount": sum(
+                    len(level_values) for level_values in observed_fp.values()
+                ),
+                "exactTargetLevelRangesByEra": exact_fp_ranges,
+            },
             "medalObservations": {
                 "source": observation_source.get("source"),
                 "retrievedOn": observation_source.get("retrievedOn"),
@@ -751,6 +847,7 @@ def build_dataset(
                 "exactThroughTargetLevel": contributor_rewards["exactThroughTargetLevel"],
                 "estimatedFromTargetLevel": contributor_rewards["estimatedFromTargetLevel"],
                 "estimation": contributor_rewards["estimation"],
+                "fpObservations": contributor_rewards.get("fpObservations", {}),
                 "medalObservations": contributor_rewards.get("medalObservations", {}),
                 "directCapturedRewards": contributor_rewards.get(
                     "directCapturedRewards", []
@@ -772,6 +869,9 @@ def build_dataset(
             ],
             "exactMedalTargetLevelRangesByEra": contributor_rewards.get(
                 "medalExactTargetLevelRangesByEra", {}
+            ),
+            "exactFpTargetLevelRangesByEra": contributor_rewards.get(
+                "fpExactTargetLevelRangesByEra", {}
             ),
             "estimatedContributorRewardsFromLevel": contributor_rewards[
                 "estimatedFromTargetLevel"

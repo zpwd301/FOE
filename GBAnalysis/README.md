@@ -1,6 +1,6 @@
 # GB Analysis
 
-GB Analysis is a dependency-free local web module for exploring Forge of Empires Great Building upgrade, unlock cost, and contributor rewards through target level 301. Contributor rewards are sourced through level 201; above that, exact medal observations are used wherever available and clearly identified fallback curves fill the remaining gaps.
+GB Analysis is a dependency-free local web module for exploring Forge of Empires Great Building upgrade, unlock cost, and contributor rewards through target level 301. Contributor rewards are sourced through level 201; above that, exact FP and medal observations are used wherever available and clearly identified fallback curves fill the remaining gaps.
 
 The first feature answers four questions:
 
@@ -50,14 +50,14 @@ npm test
 The implementation was derived from the locally installed FoE Helper 4.8.1.0 extension (the current Forge Hammer source lineage):
 
 - Upgrade FP: the first 10 values come from each game's `CityEntity`; later levels use `ceil(level_10_cost × 1.025^(level - 10))`, matching FoE Helper's `GetBruttoCosts`.
-- Contributor FP: FoE Helper stores a P1 table by building era. P2–P5 reproduce its `GetMaezen` rounding sequence. Above level 201, P1 follows the back-tested era curve `round5(eraFactor × (level^1.2 - 1) / 3.2)`.
+- Contributor FP: FoE Helper stores a P1 table by building era. P2–P5 reproduce its `GetMaezen` rounding sequence. Above level 201, exact API observations take precedence; missing P1 cells use the back-tested era curve `round5(eraFactor × (level^1.2 - 1) / 3.2)`.
 - Contributor medals and blueprints: FoE Helper reads these from the live `GreatBuildingsService.getConstruction` response and applies the Arc multiplier to all three reward types. The sourced portion of the checked-in unboosted medal and blueprint tables covers target levels 1–201 and was cross-checked against 5,670 captured reward positions.
 - Foundation goods and the first 10 upgrade costs come from the captured game `CityEntities` dataset.
 - Every level after 10 requires a full blueprint set. The three Saturn VI Gates, Stellar Warship, Cosmic Catalyst, and Shattered Horizon Siphon also have building-specific resource unlock formulas; these are displayed separately from FP costs and contributor rewards.
 
 The current dataset contains 49 Great Buildings, including the Stellar Age: Discovery building **Shattered Horizon Siphon**. Its 4×4 footprint, five lots of 5,200 foundation goods, and first-ten upgrade costs come from current game metadata. Its contributor FP table comes from FoE Helper 4.8.1.0; its level 1–201 medal data was imported from FoE Helper's public Legendary Building API. The API response was also used to validate every reported FP, medal, and blueprint position against the module's normalized tables.
 
-FoE Helper does not bundle offline medal or blueprint reward tables, so the base tables for earlier eras are normalized from the unboosted public tables at [foe.kwister.net](https://foe.kwister.net/GB_list/) and checked against local game-response captures. Upgrade and level-unlock costs cover target levels 1–301 for every building. Contributor FP and blueprint estimates for levels 202–301 use curves fitted to the sourced 1–201 data. Medal rewards use 1,965 exact later-level observations from FoE Helper's public Legendary Building API, giving complete exact medal coverage through level 301 for 17 era tables, including Oceanic Future and The Kraken. A fitted fallback is used only for API gaps, and the dashboard identifies those cells as modeled.
+FoE Helper does not bundle offline medal or blueprint reward tables, so the base tables for earlier eras are normalized from the unboosted public tables at [foe.kwister.net](https://foe.kwister.net/GB_list/) and checked against local game-response captures. Upgrade and level-unlock costs cover target levels 1–301 for every building. FP and medal rewards each use 1,965 exact later-level observations from FoE Helper's public Legendary Building API, giving complete exact coverage through level 301 for 17 era tables, including Oceanic Future and The Kraken. The exact FP rows correct 278 cells where the fallback was off by 5 FP. Fitted fallbacks are used only for the seven API coverage gaps; blueprint rewards above level 201 remain modeled. The dashboard identifies each modeled cell.
 
 See [the Forge Hammer findings](docs/forge-hammer-findings.md) for the audited formulas and worked example, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source details.
 
@@ -76,10 +76,11 @@ python3 scripts/import_foe_helper_siphon.py \
   --response /path/to/siphon-levels-1-201.json
 ```
 
-To refresh the exact medal observations above level 201, pass the saved bulk
-responses for the available Great Buildings, then rebuild the generated tables:
+To refresh the exact FP and medal observations above level 201, pass the saved
+bulk responses for the available Great Buildings, then rebuild the generated tables:
 
 ```bash
+python3 scripts/import_foe_helper_fp_observations.py /path/to/gb-api-*.json
 python3 scripts/import_foe_helper_medal_observations.py /path/to/gb-api-*.json
 python3 scripts/derive_contributor_rewards.py
 ```

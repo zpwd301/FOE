@@ -23,7 +23,7 @@ Those values and the derived medal-position rule were cross-checked against a lo
 
 Eight additional direct-game reward rows provide validation anchors above level 201: Château Frontenac target level 248, The Arc target level 214, and The Kraken target levels 234–239. Only sanitized building, era, target-level, and reward values are retained in the dataset; the raw captures are excluded from version control because they can contain player identifiers.
 
-Stellar Age: Discovery medal values through target level 201 and 1,965 available medal P1 observations above level 201 were imported from FoE Helper's public Legendary Building API at <https://api.foe-helper.com/v1/LegendaryBuilding/>. The later observations provide complete level-301 medal tables for 17 eras, including Oceanic Future, and partial coverage for the other seven. API rows with an invalid duplicated neighbor value were rejected or resolved against a second Great Building from the same era. Reported P2–P5 values were validated against the module's normalized medal-position rule.
+Stellar Age: Discovery reward values through target level 201 and 1,965 available FP and medal P1 observations above level 201 were imported from FoE Helper's public Legendary Building API at <https://api.foe-helper.com/v1/LegendaryBuilding/>. The later observations provide complete level-301 FP and medal tables for 17 eras, including Oceanic Future, and partial coverage for the other seven. API rows with an invalid duplicated neighbor value were rejected or resolved against a second Great Building from the same era. Reported P2–P5 values were validated against the module's recursive FP and normalized medal-position rules.
 
 ## Forge of Empires game metadata
 

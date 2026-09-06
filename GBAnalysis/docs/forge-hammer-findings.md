@@ -98,10 +98,11 @@ The medal rule and blueprint table were checked against 5,670 reward positions f
 
 ## Derived reward coverage through level 301
 
-Levels 1–201 remain the sourced values. Levels 202–301 combine exact medal observations with three fallback reward families:
+Levels 1–201 remain the sourced values. Levels 202–301 combine exact FP and medal observations with three fallback reward families:
 
 ```text
-FP P1 = round-to-nearest-5(era factor × (level^1.2 - 1) / 3.2)
+FP P1 = exact API observation when available
+FP P1 fallback = round-to-nearest-5(era factor × (level^1.2 - 1) / 3.2)
 era factor = era id + 9; No Age uses 14
 
 medal P1 = exact API observation when available
@@ -111,9 +112,9 @@ blueprint P1–P5 = round(position scale × level^0.8)
 
 Each medal era scale and each blueprint position scale is a least-squares fit over the sourced values. The fallback medal exponent minimizes absolute error across all available API observations above level 201. P2–P5 FP and medals continue to use the rules above; they are not fitted independently.
 
-The FP equation was tested against every sourced level 11–201 value: all predictions were within 5 FP. The same rolling test reproduced 94% of blueprint cells exactly and every cell within one blueprint. The UI labels uncaptured levels 202–301 as modeled.
+The FP equation was tested against every sourced level 11–201 value: all predictions were within 5 FP. The 1,965 later-level API observations reveal 278 cells where that fallback differs from the game table by 5 FP. Exact observations now replace those approximations. Across all observed later rows, the FP fallback has a 0.71 FP mean absolute error and a 5 FP maximum error. The same rolling test reproduced 94% of blueprint cells exactly and every cell within one blueprint. The UI labels each uncaptured FP, medal, or blueprint value as modeled.
 
-The direct captures are Château Frontenac target level 248, The Arc target level 214, and The Kraken target levels 234–239. Their available FP and blueprint values exactly match the existing formulas, and every captured P2–P5 medal value exactly matches the rounded P1 fractions.
+The direct captures are Château Frontenac target level 248, The Arc target level 214, and The Kraken target levels 234–239. Their available FP values agree with the exact API table, their blueprint values agree with the existing model, and every captured P2–P5 medal value exactly matches the rounded P1 fractions.
 
 The medal sequence has discrete table steps that a smooth power curve cannot reproduce exactly. Kraken target level 236 demonstrates this: its exact P1 value is 194,387, while the best smooth fallback still misses it by 31 medals. The dashboard therefore uses 1,965 exact later-level FoE Helper API observations instead of treating those steps as curve noise. Seventeen era tables now have exact medal coverage through level 301; seven eras retain explicitly marked gaps. Across the observed later rows, the fallback has 9.35 mean absolute error and a 103-medal maximum error, which is why it is never presented as exact.
 
@@ -133,4 +134,4 @@ medals P1–P5 = [578,833, 289,417, 144,708, 57,883, 28,942]
 blueprints P1–P5 = [32, 23, 18, 15, 12]
 ```
 
-The newer helper also fills the earlier Industrial Age and Space Age Venus FP gaps present in Forge Hammer 1.6.0. The checked-in dataset has sourced FP, medal, and blueprint coverage through target level 201 for all 49 Great Buildings, exact later medal observations where available, and a labeled fallback extension through target level 301.
+The newer helper also fills the earlier Industrial Age and Space Age Venus FP gaps present in Forge Hammer 1.6.0. The checked-in dataset has sourced FP, medal, and blueprint coverage through target level 201 for all 49 Great Buildings, exact later FP and medal observations where available, and a labeled fallback extension through target level 301.

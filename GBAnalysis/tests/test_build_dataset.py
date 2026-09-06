@@ -62,6 +62,12 @@ class DatasetBuilderTests(unittest.TestCase):
             dataset["coverage"]["exactMedalTargetLevelRangesByEra"]["16"],
             [[1, 301]],
         )
+        self.assertEqual(
+            dataset["coverage"]["exactFpTargetLevelRangesByEra"]["16"],
+            [[1, 301]],
+        )
+        self.assertEqual(dataset["rewardP1ByEra"]["16"][232], 5410)
+        self.assertEqual(dataset["rewardP1ByEra"]["24"][203], 6080)
         self.assertEqual(dataset["blueprintsByLevel"][300], [44, 32, 25, 20, 17])
         self.assertEqual(siphon["levelUnlockFormula"]["goodsPerTypePerStep"], 275)
         self.assertEqual(

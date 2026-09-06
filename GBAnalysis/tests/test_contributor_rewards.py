@@ -51,6 +51,8 @@ class ContributorRewardTests(unittest.TestCase):
         )
         self.assertEqual(self.rewards["medalMaxTargetLevelByEra"]["24"], 301)
         self.assertEqual(self.rewards["medalExactMaxTargetLevelByEra"]["24"], 209)
+        self.assertEqual(self.rewards["fpMaxTargetLevelByEra"]["24"], 301)
+        self.assertEqual(self.rewards["fpExactMaxTargetLevelByEra"]["24"], 209)
         self.assertEqual(self.rewards["medalP1ByEra"]["14"][195], 102874)
         self.assertEqual(self.rewards["fpP1ByEra"]["24"][300], 9710)
         self.assertEqual(self.rewards["medalP1ByEra"]["24"][300], 940762)
@@ -58,6 +60,17 @@ class ContributorRewardTests(unittest.TestCase):
         self.assertEqual(
             self.rewards["estimation"]["fpP1"]["backtest"]["maximumAbsoluteError"],
             5,
+        )
+        self.assertEqual(
+            self.rewards["estimation"]["fpP1"][
+                "fallbackValidationAgainstLaterObservations"
+            ],
+            {
+                "comparisonCount": 1965,
+                "meanAbsoluteError": 0.707379,
+                "maximumAbsoluteError": 5,
+                "exactPercentage": 85.852417,
+            },
         )
         self.assertEqual(
             self.rewards["estimation"]["blueprints"]["rollingBacktest"][
@@ -109,6 +122,18 @@ class ContributorRewardTests(unittest.TestCase):
             self.rewards["medalExactTargetLevelRangesByEra"]["16"],
             [[1, 301]],
         )
+        self.assertEqual(
+            self.rewards["fpExactTargetLevelRangesByEra"]["16"],
+            [[1, 301]],
+        )
+        self.assertEqual(
+            self.rewards["fpExactTargetLevelRangesByEra"]["24"],
+            [[1, 209], [211, 215], [217, 241], [244, 251]],
+        )
+        self.assertEqual(self.rewards["fpP1ByEra"]["0"][205], 2615)
+        self.assertEqual(self.rewards["fpP1ByEra"]["16"][232], 5410)
+        self.assertEqual(self.rewards["fpP1ByEra"]["24"][203], 6080)
+        self.assertEqual(self.rewards["fpObservations"]["comparisonCount"], 1965)
         self.assertEqual(
             self.rewards["estimation"]["medalP1"][
                 "fallbackValidationAgainstLaterObservations"
