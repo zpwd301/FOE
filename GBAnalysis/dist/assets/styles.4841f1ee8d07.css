@@ -1,51 +1,63 @@
 :root {
   color-scheme: light;
-  --ink: #18211c;
-  --muted: #667069;
-  --paper: #f5f2e9;
-  --surface: #fffdf7;
-  --line: #dcd7ca;
-  --green: #164d3a;
-  --green-strong: #164d3a;
-  --green-soft: #dfeae2;
-  --subtle: #f2eee4;
-  --table-header: #f7f3e9;
-  --warning-ink: #76561a;
-  --warning-line: #e3c887;
-  --tooltip-title: #f5ead1;
-  --gold: #c39232;
-  --gold-soft: #f5ead1;
-  --coral: #d06048;
-  --violet: #7561a7;
-  --blue: #2d7182;
+  --ink: #203f50;
+  --muted: #5f7380;
+  --paper: #f8fafb;
+  --surface: #ffffff;
+  --line: #d4e2e4;
+  --green: #247c83;
+  --green-strong: #247c83;
+  --green-soft: #e5f2f1;
+  --subtle: #f2f6f7;
+  --table-header: #edf4f5;
+  --warning-ink: #66558d;
+  --warning-line: #d1c7e5;
+  --tooltip-title: #d5efed;
+  --gold: #8270b2;
+  --gold-soft: #eeeaf6;
+  --coral: #c76578;
+  --violet: #6674b8;
+  --blue: #3d8ba3;
   --on-strong: #ffffff;
-  --shadow: 0 20px 60px rgba(30, 42, 35, 0.08);
+  --control-background: linear-gradient(128deg, #247c83 0%, #3f718f 58%, #6674b8 112%);
+  --tooltip-background: rgba(25, 53, 67, 0.97);
+  --page-glow-teal: rgba(143, 202, 200, 0.26);
+  --page-glow-violet: rgba(130, 112, 178, 0.14);
+  --shadow: 0 22px 60px rgba(32, 63, 80, 0.11);
+  --shadow-soft: 0 10px 32px rgba(32, 63, 80, 0.065);
+  --shadow-control: 0 18px 44px rgba(36, 124, 131, 0.2);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #d8ded9;
-  --muted: #99a39d;
-  --paper: #191d1b;
-  --surface: #222724;
-  --line: #3c4540;
-  --green: #78b394;
-  --green-strong: #285b48;
-  --green-soft: #2b3d35;
-  --subtle: #2b302e;
-  --table-header: #2d332f;
-  --warning-ink: #d3b879;
-  --warning-line: #6b5b37;
-  --tooltip-title: #dac89f;
-  --gold: #c69a4b;
-  --gold-soft: #3c3426;
-  --coral: #c97965;
-  --violet: #9b8abd;
-  --blue: #6fa2ab;
-  --on-strong: #e1e8e3;
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  --ink: #e5eef2;
+  --muted: #9fb2bb;
+  --paper: #111c24;
+  --surface: #192832;
+  --line: #304852;
+  --green: #8fcac8;
+  --green-strong: #246b73;
+  --green-soft: #203a42;
+  --subtle: #1e303a;
+  --table-header: #223640;
+  --warning-ink: #cbbfe6;
+  --warning-line: #584f77;
+  --tooltip-title: #d5efed;
+  --gold: #b9a7db;
+  --gold-soft: #312d45;
+  --coral: #df8794;
+  --violet: #9da9e1;
+  --blue: #74bdd0;
+  --on-strong: #f5ffff;
+  --control-background: linear-gradient(128deg, #205e68 0%, #365b78 58%, #585f98 112%);
+  --tooltip-background: rgba(11, 25, 34, 0.98);
+  --page-glow-teal: rgba(76, 153, 157, 0.13);
+  --page-glow-violet: rgba(130, 112, 178, 0.1);
+  --shadow: 0 22px 56px rgba(0, 0, 0, 0.25);
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.17);
+  --shadow-control: 0 20px 50px rgba(3, 12, 17, 0.28);
 }
 
 * {
@@ -61,14 +73,21 @@ body {
   min-width: 320px;
   color: var(--ink);
   background:
-    radial-gradient(circle at 10% 0%, rgba(195, 146, 50, 0.09), transparent 32rem),
+    radial-gradient(circle at 8% 0%, var(--page-glow-teal), transparent 31rem),
+    radial-gradient(circle at 96% 9%, var(--page-glow-violet), transparent 29rem),
     var(--paper);
 }
 
 :root[data-theme="dark"] body {
   background:
-    radial-gradient(circle at 10% 0%, rgba(120, 179, 148, 0.045), transparent 32rem),
+    radial-gradient(circle at 8% 0%, var(--page-glow-teal), transparent 31rem),
+    radial-gradient(circle at 96% 9%, var(--page-glow-violet), transparent 29rem),
     var(--paper);
+}
+
+::selection {
+  color: var(--ink);
+  background: color-mix(in srgb, #8fcac8 62%, transparent);
 }
 
 button,
@@ -89,7 +108,7 @@ footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
 }
 
 .brand {
@@ -108,8 +127,9 @@ footer {
   display: grid;
   place-items: center;
   color: var(--on-strong);
-  background: var(--green-strong);
+  background: linear-gradient(140deg, #247c83 4%, #6674b8 68%, #8270b2 100%);
   border-radius: 50%;
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--violet) 28%, transparent);
   font-family: Georgia, serif;
   font-size: 14px;
 }
@@ -137,10 +157,14 @@ footer {
   cursor: pointer;
   font-size: 13px;
   font-weight: 720;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
 .theme-toggle:hover {
+  color: var(--green);
+  background: var(--green-soft);
   border-color: var(--green);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--green) 12%, transparent);
 }
 
 .theme-toggle-icon {
@@ -171,8 +195,8 @@ footer {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #43a36f;
-  box-shadow: 0 0 0 4px rgba(67, 163, 111, 0.12);
+  background: var(--green);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 14%, transparent);
 }
 
 .hero {
@@ -200,7 +224,15 @@ footer {
 
 .hero h1 em {
   color: var(--green);
+  background: linear-gradient(100deg, #247c83 4%, #6674b8 70%, #8270b2 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   font-weight: 400;
+}
+
+:root[data-theme="dark"] .hero h1 em {
+  background-image: linear-gradient(100deg, #8fcac8 4%, #9da9e1 70%, #b9a7db 100%);
 }
 
 .hero-copy {
@@ -217,9 +249,10 @@ footer {
   grid-template-columns: minmax(240px, 1.8fr) 0.6fr 0.7fr;
   gap: 18px 24px;
   padding: 25px 26px 20px;
-  background: var(--green-strong);
+  background: var(--control-background);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 16px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-control);
 }
 
 .field {
@@ -238,8 +271,8 @@ footer {
   height: 48px;
   padding: 0 14px;
   color: var(--on-strong);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 9px;
   outline: none;
   font-size: 16px;
@@ -250,8 +283,9 @@ footer {
 
 .field select:focus,
 .field input:focus {
-  border-color: rgba(255, 255, 255, 0.75);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.13);
 }
 
 .field select option {
@@ -286,7 +320,7 @@ footer {
   width: 100%;
   height: 24px;
   margin: 0;
-  accent-color: var(--gold);
+  accent-color: #b8dedd;
 }
 
 .range-labels {
@@ -342,6 +376,7 @@ footer {
   padding: 7px 10px;
   color: var(--green);
   background: var(--green-soft);
+  border: 1px solid color-mix(in srgb, var(--green) 18%, transparent);
   border-radius: 999px;
   font-size: 12px;
   font-weight: 720;
@@ -368,9 +403,14 @@ footer {
 }
 
 .panel {
-  background: var(--surface);
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--surface) 97%, var(--green-soft)) 0%,
+    var(--surface) 42%
+  );
   border: 1px solid var(--line);
   border-radius: 14px;
+  box-shadow: var(--shadow-soft);
 }
 
 .panel-heading {
@@ -400,7 +440,7 @@ footer {
   grid-template-columns: repeat(2, minmax(0, 0.8fr)) minmax(220px, 1.4fr);
   margin: 0 27px;
   overflow: hidden;
-  background: var(--subtle);
+  background: color-mix(in srgb, var(--subtle) 76%, var(--green-soft));
   border: 1px solid var(--line);
   border-radius: 10px;
 }
@@ -529,6 +569,7 @@ td {
   margin: 0 27px;
   border: 1px solid var(--line);
   border-radius: 9px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 70%, transparent);
 }
 
 .compact-table table {
@@ -606,7 +647,8 @@ td {
   gap: 12px;
   min-height: 47px;
   padding: 10px 12px;
-  background: var(--subtle);
+  background: color-mix(in srgb, var(--subtle) 82%, var(--green-soft));
+  border: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
   border-radius: 8px;
   font-size: 13px;
 }
@@ -715,7 +757,7 @@ td {
   display: inline-flex;
   min-height: 34px;
   padding: 3px;
-  background: var(--subtle);
+  background: color-mix(in srgb, var(--subtle) 78%, var(--green-soft));
   border: 1px solid var(--line);
   border-radius: 999px;
 }
@@ -737,9 +779,9 @@ td {
 }
 
 .chart-view-toggle button.is-active {
-  color: var(--ink);
+  color: var(--green);
   background: var(--surface);
-  box-shadow: 0 1px 3px rgba(24, 33, 28, 0.12);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 11%, transparent);
 }
 
 .chart-tabs button {
@@ -752,6 +794,7 @@ td {
   cursor: pointer;
   font-size: 11px;
   font-weight: 730;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
 }
 
 .chart-tabs button:hover {
@@ -761,8 +804,8 @@ td {
 
 .chart-tabs button.is-active {
   color: var(--on-strong);
-  background: var(--green-strong);
-  border-color: var(--green-strong);
+  background: linear-gradient(120deg, var(--green-strong), color-mix(in srgb, var(--green-strong) 70%, var(--violet)));
+  border-color: transparent;
 }
 
 .chart-plot {
@@ -790,7 +833,7 @@ td {
 }
 
 .chart-area-cost {
-  fill: rgba(208, 96, 72, 0.1);
+  fill: color-mix(in srgb, var(--coral) 12%, transparent);
 }
 
 .chart-line-cost,
@@ -857,10 +900,10 @@ td {
   max-width: min(230px, calc(100vw - 16px));
   padding: 10px 12px;
   color: var(--on-strong);
-  background: rgba(24, 33, 28, 0.96);
+  background: var(--tooltip-background);
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 9px;
-  box-shadow: 0 10px 30px rgba(24, 33, 28, 0.22);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--ink) 24%, transparent);
   pointer-events: none;
   font-size: 12px;
   line-height: 1.35;
@@ -966,17 +1009,21 @@ td {
   min-height: 42px;
   padding: 10px 15px;
   color: var(--on-strong);
-  background: var(--green-strong);
+  background: linear-gradient(120deg, var(--green-strong), color-mix(in srgb, var(--green-strong) 68%, var(--violet)));
   border: 0;
   border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
   font-weight: 720;
   white-space: nowrap;
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--green) 20%, transparent);
+  transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 
 .level-heading button:hover {
-  filter: brightness(0.9);
+  filter: brightness(1.06);
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--green) 26%, transparent);
+  transform: translateY(-1px);
 }
 
 .ledger-key {
@@ -993,7 +1040,11 @@ td {
   margin: 0 27px 18px;
   padding: 18px;
   align-items: start;
-  background: color-mix(in srgb, var(--green-soft) 42%, var(--surface));
+  background: linear-gradient(
+    128deg,
+    color-mix(in srgb, var(--green-soft) 68%, var(--surface)),
+    color-mix(in srgb, var(--gold-soft) 36%, var(--surface))
+  );
   border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line));
   border-radius: 12px;
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, transparent);
@@ -1084,7 +1135,7 @@ td {
   padding: 0 12px;
   color: var(--ink);
   background: var(--surface);
-  border: 2px solid color-mix(in srgb, var(--green) 48%, var(--line));
+  border: 2px solid color-mix(in srgb, var(--green) 52%, var(--line));
   border-radius: 9px;
   outline: none;
   box-shadow: 0 2px 7px color-mix(in srgb, var(--ink) 7%, transparent);
@@ -1174,16 +1225,18 @@ td {
   gap: 8px;
   padding: 7px 12px;
   color: var(--ink);
-  background: var(--subtle);
+  background: color-mix(in srgb, var(--subtle) 82%, var(--green-soft));
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
   font-weight: 750;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
 }
 
 .rage-column-toggle:hover:not(:disabled) {
   color: var(--green);
+  background: var(--green-soft);
   border-color: var(--green);
 }
 
@@ -1258,7 +1311,7 @@ td {
 }
 
 .level-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--green-soft) 54%, var(--surface));
+  background: color-mix(in srgb, var(--green-soft) 64%, var(--surface));
 }
 
 .level-table tbody tr.is-selected td {
@@ -1268,7 +1321,7 @@ td {
 }
 
 .level-table tbody tr:hover td:first-child {
-  background: color-mix(in srgb, var(--green-soft) 54%, var(--surface));
+  background: color-mix(in srgb, var(--green-soft) 64%, var(--surface));
 }
 
 .level-table tbody tr.is-selected td:first-child {
@@ -1294,7 +1347,7 @@ td {
   bottom: 0;
   z-index: 3;
   color: var(--on-strong);
-  background: var(--green-strong);
+  background: color-mix(in srgb, var(--green-strong) 88%, #203f50);
   border-top: 2px solid var(--green);
   box-shadow: 0 -1px 0 var(--green);
   font-weight: 800;
@@ -1302,7 +1355,7 @@ td {
 
 .rage-total-row th:first-child {
   z-index: 4;
-  background: var(--green-strong);
+  background: color-mix(in srgb, var(--green-strong) 88%, #203f50);
 }
 
 .rage-total-row .owner-cell {
@@ -1326,11 +1379,11 @@ td {
 
 .level-table tbody tr.is-selected .ledger-reward > small,
 .level-table tbody tr.is-selected .ledger-unlock > small {
-  color: rgba(22, 77, 58, 0.75);
+  color: color-mix(in srgb, var(--green) 76%, var(--ink));
 }
 
 .missing-value {
-  color: #a49d90;
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
 }
 
 footer {

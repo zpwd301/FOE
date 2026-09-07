@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "algorithm": "sha256",
   "hashLength": 12,
-  "version": "1.0.6",
+  "version": "1.0.7",
   "assets": {
-    "assets/styles.css": "assets/styles.161c69a92ab2.css",
+    "assets/styles.css": "assets/styles.4841f1ee8d07.css",
     "src/app.js": "assets/app.92acbc7434bf.js",
     "src/core.js": "assets/core.9854b40865d5.js",
     "data/gb-analysis.json": "assets/gb-analysis.7f1a171f57e2.json",
