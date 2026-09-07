@@ -18,6 +18,7 @@
   --coral: #d06048;
   --violet: #7561a7;
   --blue: #2d7182;
+  --on-strong: #ffffff;
   --shadow: 0 20px 60px rgba(30, 42, 35, 0.08);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -25,25 +26,26 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #f2f4f1;
-  --muted: #adb6b0;
-  --paper: #101311;
-  --surface: #1a1e1c;
-  --line: #353c38;
-  --green: #72d2a7;
-  --green-strong: #155c43;
-  --green-soft: #203a30;
-  --subtle: #242927;
-  --table-header: #252b28;
-  --warning-ink: #f0cb76;
-  --warning-line: #675429;
-  --tooltip-title: #f5ead1;
-  --gold: #dfad4c;
-  --gold-soft: #382f20;
-  --coral: #df735b;
-  --violet: #ad98d8;
-  --blue: #68b5c2;
-  --shadow: 0 20px 60px rgba(0, 0, 0, 0.36);
+  --ink: #d8ded9;
+  --muted: #99a39d;
+  --paper: #191d1b;
+  --surface: #222724;
+  --line: #3c4540;
+  --green: #78b394;
+  --green-strong: #285b48;
+  --green-soft: #2b3d35;
+  --subtle: #2b302e;
+  --table-header: #2d332f;
+  --warning-ink: #d3b879;
+  --warning-line: #6b5b37;
+  --tooltip-title: #dac89f;
+  --gold: #c69a4b;
+  --gold-soft: #3c3426;
+  --coral: #c97965;
+  --violet: #9b8abd;
+  --blue: #6fa2ab;
+  --on-strong: #e1e8e3;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
 }
 
 * {
@@ -65,7 +67,7 @@ body {
 
 :root[data-theme="dark"] body {
   background:
-    radial-gradient(circle at 10% 0%, rgba(114, 210, 167, 0.08), transparent 32rem),
+    radial-gradient(circle at 10% 0%, rgba(120, 179, 148, 0.045), transparent 32rem),
     var(--paper);
 }
 
@@ -105,7 +107,7 @@ footer {
   height: 38px;
   display: grid;
   place-items: center;
-  color: white;
+  color: var(--on-strong);
   background: var(--green-strong);
   border-radius: 50%;
   font-family: Georgia, serif;
@@ -235,7 +237,7 @@ footer {
   width: 100%;
   height: 48px;
   padding: 0 14px;
-  color: white;
+  color: var(--on-strong);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 9px;
@@ -609,7 +611,7 @@ td {
 }
 
 .chart-tabs button.is-active {
-  color: white;
+  color: var(--on-strong);
   background: var(--green-strong);
   border-color: var(--green-strong);
 }
@@ -705,7 +707,7 @@ td {
   min-width: 150px;
   max-width: min(230px, calc(100vw - 16px));
   padding: 10px 12px;
-  color: white;
+  color: var(--on-strong);
   background: rgba(24, 33, 28, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 9px;
@@ -814,7 +816,7 @@ td {
 .level-heading button {
   min-height: 42px;
   padding: 10px 15px;
-  color: white;
+  color: var(--on-strong);
   background: var(--green-strong);
   border: 0;
   border-radius: 8px;
@@ -1140,7 +1142,7 @@ td {
   position: sticky;
   bottom: 0;
   z-index: 3;
-  color: white;
+  color: var(--on-strong);
   background: var(--green-strong);
   border-top: 2px solid var(--green);
   box-shadow: 0 -1px 0 var(--green);
@@ -1153,7 +1155,7 @@ td {
 }
 
 .rage-total-row .owner-cell {
-  color: white;
+  color: var(--on-strong);
 }
 
 .ledger-reward > span,
@@ -1210,7 +1212,7 @@ a:focus-visible {
 
 .control-panel button:focus-visible,
 .control-panel a:focus-visible {
-  outline-color: white;
+  outline-color: var(--on-strong);
 }
 
 @media (max-width: 780px) {
