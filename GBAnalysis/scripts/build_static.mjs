@@ -52,17 +52,19 @@ export async function buildStatic({ projectRoot = PROJECT_ROOT, outputRoot } = {
   const destination = outputRoot ?? path.join(projectRoot, "dist");
   const assetsDestination = path.join(destination, "assets");
 
-  const [indexSource, stylesSource, appSource, coreSource, datasetSource] = await Promise.all([
+  const [indexSource, stylesSource, appSource, coreSource, datasetSource, benefitSource] = await Promise.all([
     readFile(path.join(projectRoot, "index.html"), "utf8"),
     readFile(path.join(projectRoot, "assets/styles.css")),
     readFile(path.join(projectRoot, "src/app.js"), "utf8"),
     readFile(path.join(projectRoot, "src/core.js")),
     readFile(path.join(projectRoot, "data/gb-analysis.json")),
+    readFile(path.join(projectRoot, "data/gb-benefits-source.json")),
   ]);
 
   const stylesName = fingerprintedName("styles.css", stylesSource);
   const coreName = fingerprintedName("core.js", coreSource);
   const datasetName = fingerprintedName("gb-analysis.json", datasetSource);
+  const benefitName = fingerprintedName("gb-benefits-source.json", benefitSource);
 
   let builtApp = replaceExactlyOnce(
     appSource,
@@ -74,6 +76,12 @@ export async function buildStatic({ projectRoot = PROJECT_ROOT, outputRoot } = {
     builtApp,
     'fetch("data/gb-analysis.json")',
     `fetch("assets/${datasetName}")`,
+    "src/app.js",
+  );
+  builtApp = replaceExactlyOnce(
+    builtApp,
+    'fetch("data/gb-benefits-source.json")',
+    `fetch("assets/${benefitName}")`,
     "src/app.js",
   );
   const appName = fingerprintedName("app.js", builtApp);
@@ -108,6 +116,7 @@ export async function buildStatic({ projectRoot = PROJECT_ROOT, outputRoot } = {
       "src/app.js": `assets/${appName}`,
       "src/core.js": `assets/${coreName}`,
       "data/gb-analysis.json": `assets/${datasetName}`,
+      "data/gb-benefits-source.json": `assets/${benefitName}`,
     },
   };
 
@@ -120,6 +129,7 @@ export async function buildStatic({ projectRoot = PROJECT_ROOT, outputRoot } = {
     writeFile(path.join(assetsDestination, appName), builtApp),
     writeFile(path.join(assetsDestination, coreName), coreSource),
     writeFile(path.join(assetsDestination, datasetName), datasetSource),
+    writeFile(path.join(assetsDestination, benefitName), benefitSource),
   ]);
 
   return manifest;

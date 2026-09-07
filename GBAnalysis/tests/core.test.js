@@ -6,12 +6,17 @@ import {
   applyArcBonus,
   arcBonusForLevel,
   arcLevelForBonus,
+  benefitDefinition,
+  benefitsForLevel,
+  buildingBenefit,
   buildBaseRewardSeries,
+  buildRewardSeries,
   baseMedalRewards,
   basePositionRewards,
   buildLevelRows,
   buildRageAnalysis,
   buildUpgradeCostSeries,
+  ownerPrimingCost,
   rewardsForLevel,
   unlockCostsForLevel,
   upgradeCost,
@@ -167,6 +172,53 @@ test("base reward curve series include P1 through P5 for each resource", () => {
   assert.throws(() => buildBaseRewardSeries(rows, "diamonds"), RangeError);
 });
 
+test("reward curves can switch to Arc-adjusted values", () => {
+  const rows = [
+    { rewards: { forgePoints: { base: [100, 50, 25, 10, 5], adjusted: [190, 95, 48, 19, 10] } } },
+    { rewards: { forgePoints: { base: [200, 100, 50, 20, 10], adjusted: [380, 190, 95, 38, 19] } } },
+  ];
+  assert.deepEqual(buildRewardSeries(rows, "forgePoints", "adjusted"), [
+    { position: 1, values: [190, 380] },
+    { position: 2, values: [95, 190] },
+    { position: 3, values: [48, 95] },
+    { position: 4, values: [19, 38] },
+    { position: 5, values: [10, 19] },
+  ]);
+  assert.throws(() => buildRewardSeries(rows, "forgePoints", "projected"), RangeError);
+});
+
+test("owner priming cost secures the displayed first-place contribution", () => {
+  assert.equal(ownerPrimingCost(1000, 380), 240);
+  assert.equal(ownerPrimingCost(500, 300), 0);
+  assert.throws(() => ownerPrimingCost(1000, -1), TypeError);
+});
+
+test("every dashboard Great Building has a concise benefit summary", () => {
+  const dataset = JSON.parse(
+    readFileSync(new URL("../data/gb-analysis.json", import.meta.url), "utf8"),
+  );
+  for (const building of dataset.buildings) {
+    assert.notEqual(buildingBenefit(building.id), "Benefit details unavailable", building.name);
+  }
+});
+
+test("per-level benefits retain their display label, unit, and selected value", () => {
+  const building = {
+    benefits: [
+      { key: "advanced_tactics", values: [5, 10] },
+      { key: "supplies", values: [205_000, 217_800] },
+    ],
+  };
+  assert.deepEqual(benefitsForLevel(building, 2), [
+    { key: "advanced_tactics", value: 10 },
+    { key: "supplies", value: 217_800 },
+  ]);
+  assert.deepEqual(benefitDefinition("advanced_tactics"), {
+    label: "All-army attack & defense",
+    unit: "%",
+  });
+});
+
 test("Pre-rage analysis applies position Arc bonuses and totals owner requirements", () => {
   const rows = [
     {
@@ -201,6 +253,7 @@ test("Pre-rage analysis applies position Arc bonuses and totals owner requiremen
     supplies: 50,
     medals: 5,
     specialResources: { dark_matter: 7 },
+    benefits: [],
   });
   assert.deepEqual(analysis.totals, {
     upgradeForgePoints: 2200,

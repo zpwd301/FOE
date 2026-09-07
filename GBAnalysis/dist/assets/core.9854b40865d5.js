@@ -1,5 +1,118 @@
 const MAX_LEVEL = 301;
 const ARC_FIRST_TEN_BONUSES = [10, 12, 14, 17, 19, 22, 24, 26, 29, 31];
+const BUILDING_BENEFITS = Object.freeze({
+  X_AllAge_EasterBonus4: "Guild treasury goods · city-defense army boost",
+  X_AllAge_Oracle: "Supplies · happiness",
+  X_AllAge_Expedition: "Relics from Guild Expedition encounters",
+  X_BronzeAge_Landmark2: "Offensive army boost",
+  X_BronzeAge_Landmark1: "Goods · population",
+  X_IronAge_Landmark1: "Medals · happiness",
+  X_IronAge_Landmark2: "Goods · boosted supply production",
+  X_EarlyMiddleAge_Landmark2: "Coins · offensive army boost",
+  X_EarlyMiddleAge_Landmark3: "Goods · chance to repel plunder",
+  X_EarlyMiddleAge_Landmark1: "Forge Points · happiness",
+  X_HighMiddleAge_Landmark3: "Supplies · happiness",
+  X_HighMiddleAge_Landmark1: "Goods · boosted coin production",
+  X_LateMiddleAge_Landmark3: "Forge Points · offensive army boost",
+  X_LateMiddleAge_Landmark1: "Coins · city-defense army boost",
+  X_ColonialAge_Landmark2: "Medals · city-defense army boost",
+  X_ColonialAge_Landmark1: "Goods · happiness",
+  X_IndustrialAge_Landmark2: "Supplies · population",
+  X_IndustrialAge_Landmark1: "Goods · boosted supply production",
+  X_ProgressiveEra_Landmark1: "Unattached military units · happiness",
+  X_ProgressiveEra_Landmark2: "Coins · boosted quest rewards",
+  X_ModernEra_Landmark2: "Guild treasury goods · happiness",
+  X_ModernEra_Landmark1: "Coins · happiness",
+  X_PostModernEra_Landmark1: "Forge Points",
+  X_PostModernEra_Landmark2: "Coins · population",
+  X_ContemporaryEra_Landmark2: "Forge Points · population",
+  X_ContemporaryEra_Landmark1: "Coins · happiness",
+  X_TomorrowEra_Landmark2: "Supplies · goods when aiding",
+  X_TomorrowEra_Landmark1: "Supplies · goods when plundering",
+  X_FutureEra_Landmark2: "Goods · blueprint chance when aiding",
+  X_FutureEra_Landmark1: "Guild treasury goods · boosted GB contribution rewards",
+  X_ArcticFuture_Landmark2: "Forge Points · critical-hit chance",
+  X_ArcticFuture_Landmark1: "Medals · happiness",
+  X_ArcticFuture_Landmark3: "Supplies · bonus rewards when aiding",
+  X_OceanicFuture_Landmark1: "Goods · chance to double plunder",
+  X_OceanicFuture_Landmark3: "Medals · chance to double building collections",
+  X_OceanicFuture_Landmark2: "Forge Points · chance to defeat an enemy unit before battle",
+  X_VirtualFuture_Landmark2: "Supplies · rewards from won battles",
+  X_VirtualFuture_Landmark1: "All-army attack and defense",
+  X_SpaceAgeMars_Landmark1: "Previous-era goods",
+  X_SpaceAgeMars_Landmark2: "Coins · chance to destroy half an enemy army before battle",
+  X_SpaceAgeAsteroidBelt_Landmark1: "Special goods · rewards from successful negotiations",
+  X_SpaceAgeVenus_Landmark1: "Mysterious Shards for Cultural Settlements",
+  X_SpaceAgeJupiterMoon_Landmark1: "Special-goods production boost · guild treasury goods",
+  X_SpaceAgeTitan_Landmark1: "Previous-era goods · offensive army boost",
+  X_SpaceAgeTitan_Landmark3: "Guild treasury goods · all-army attack and defense",
+  X_SpaceAgeTitan_Landmark2: "Forge Points · city-defense army boost",
+  X_SpaceAgeSpaceHub_Landmark2: "Guild treasury goods · critical-hit chance",
+  X_SpaceAgeSpaceHub_Landmark1: "Unattached military units · all-army attack and defense",
+  X_StellarAgeDiscovery_Landmark1: "Supplies · all-army attack and defense",
+});
+
+const BENEFIT_DETAILS = Object.freeze({
+  advanced_tactics: { label: "All-army attack & defense", unit: "%" },
+  aid_boost: { label: "Blueprint chance when aiding", unit: "%" },
+  aid_goods: { label: "Goods from aiding (total)", unit: "goods" },
+  algorithmic_core: { label: "Special-goods production boost", unit: "%" },
+  clan_goods: { label: "Guild treasury goods (total)", unit: "goods" },
+  contribution_boost: { label: "GB contribution boost", unit: "%" },
+  critical_hit_chance: { label: "Critical-hit chance", unit: "%" },
+  diplomatic_gifts: { label: "Diplomatic Gifts chance", unit: "%" },
+  double_collection: { label: "Double-collection chance", unit: "%" },
+  fierce_resistance: { label: "City-defense attack & defense", unit: "%" },
+  first_strike: { label: "First-strike chance", unit: "%" },
+  happiness: { label: "Happiness", unit: "" },
+  helping_hands: { label: "Helping Hands chance", unit: "%" },
+  medals: { label: "Medals", unit: "medals" },
+  military_boost: { label: "Offensive army boost", unit: "%" },
+  missile_launch: { label: "Missile-launch chance", unit: "%" },
+  money: { label: "Coins", unit: "coins" },
+  money_boost: { label: "Coin production boost", unit: "%" },
+  mysterious_shards: { label: "Mysterious Shard chance", unit: "%" },
+  penal_unit: { label: "Unattached military units", unit: "units" },
+  plunder_and_pillage: { label: "Plunder bonus", unit: "%" },
+  plunder_goods: { label: "Goods from plundering (total)", unit: "goods" },
+  plunder_repel: { label: "Plunder-repel chance", unit: "%" },
+  population: { label: "Population", unit: "" },
+  previous_era_goods: { label: "Previous-era goods (total)", unit: "goods" },
+  quest_boost: { label: "Quest reward boost", unit: "%" },
+  random_goods: { label: "Goods production (through Modern)", unit: "goods" },
+  random_goods_after_modern: { label: "Goods production (Postmodern+)", unit: "goods" },
+  special_goods: { label: "Special goods", unit: "goods" },
+  spoils_of_war: { label: "Spoils of War chance", unit: "%" },
+  strategy_points: { label: "Forge Points", unit: "FP" },
+  supplies: { label: "Supplies", unit: "supplies" },
+  supplies_boost: { label: "Supply production boost", unit: "%" },
+  support_boost: { label: "Guild support pool", unit: "%" },
+  totem_drop: { label: "Relic hunt chance", unit: "%" },
+});
+
+export function buildingBenefit(buildingId) {
+  return BUILDING_BENEFITS[buildingId] ?? "Benefit details unavailable";
+}
+
+export function benefitDefinition(key) {
+  if (BENEFIT_DETAILS[key]) return BENEFIT_DETAILS[key];
+  return {
+    label: String(key)
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase()),
+    unit: "",
+  };
+}
+
+export function benefitsForLevel(building, targetLevel) {
+  assertTargetLevel(targetLevel);
+  return (building.benefits ?? [])
+    .map((benefit) => ({
+      key: benefit.key,
+      value: benefit.values?.[targetLevel - 1],
+    }))
+    .filter((benefit) => Number.isFinite(benefit.value));
+}
 
 export function assertTargetLevel(targetLevel, maxLevel = MAX_LEVEL) {
   if (!Number.isInteger(targetLevel) || targetLevel < 1 || targetLevel > maxLevel) {
@@ -166,6 +279,7 @@ export function buildLevelRows(building, rewardTables, arcBonusPercent, maxLevel
       cumulativeCost,
       unlockCosts,
       cumulativeUnlockCosts: structuredClone(cumulativeUnlockCosts),
+      benefits: benefitsForLevel(building, targetLevel),
       rewards: rewardsForLevel(rewardTables, targetLevel, arcBonusPercent),
     });
   }
@@ -207,14 +321,31 @@ export function buildUpgradeCostSeries(rows) {
   return series;
 }
 
-export function buildBaseRewardSeries(rows, resource) {
+export function buildRewardSeries(rows, resource, view = "base") {
   if (!["forgePoints", "medals", "blueprints"].includes(resource)) {
     throw new RangeError(`Unknown reward resource: ${resource}`);
   }
+  if (!["base", "adjusted"].includes(view)) {
+    throw new RangeError(`Unknown reward view: ${view}`);
+  }
   return Array.from({ length: 5 }, (_, position) => ({
     position: position + 1,
-    values: rows.map((row) => row.rewards[resource]?.base[position] ?? null),
+    values: rows.map((row) => row.rewards[resource]?.[view][position] ?? null),
   }));
+}
+
+export function buildBaseRewardSeries(rows, resource) {
+  return buildRewardSeries(rows, resource, "base");
+}
+
+export function ownerPrimingCost(totalForgePoints, firstPlaceContribution) {
+  if (!Number.isFinite(totalForgePoints) || totalForgePoints < 0) {
+    throw new TypeError("Total Forge Point cost must be a non-negative number");
+  }
+  if (!Number.isFinite(firstPlaceContribution) || firstPlaceContribution < 0) {
+    throw new TypeError("First-place contribution must be a non-negative number");
+  }
+  return Math.max(0, totalForgePoints - firstPlaceContribution * 2);
 }
 
 export function buildRageAnalysis(rows, beginningLevel, targetLevel, positionArcBonuses) {
@@ -283,6 +414,7 @@ export function buildRageAnalysis(rows, beginningLevel, targetLevel, positionArc
         supplies: row.unlockCosts.resources.supplies ?? 0,
         medals: row.unlockCosts.resources.medals ?? 0,
         specialResources,
+        benefits: row.benefits ?? [],
       };
       totals.upgradeForgePoints += analyzed.upgradeForgePoints;
       analyzed.contributions.forEach((amount, position) => {

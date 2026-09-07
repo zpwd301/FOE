@@ -83,7 +83,10 @@
       <section class="building-heading" aria-live="polite">
         <div>
           <p id="building-era" class="eyebrow"></p>
-          <h2 id="building-name">Loading…</h2>
+          <div class="building-title-row">
+            <h2 id="building-name">Loading…</h2>
+            <p id="building-benefit" class="building-benefit"></p>
+          </div>
         </div>
         <div id="building-size" class="size-chip"></div>
       </section>
@@ -94,7 +97,7 @@
             <p class="eyebrow">Levels 1–301</p>
             <h3>Curve preview</h3>
           </div>
-          <span class="curve-key">Per-level costs · base rewards</span>
+          <span class="curve-key">Per-level costs · reward curves</span>
         </div>
         <div class="chart-grid">
           <article class="chart-view">
@@ -108,9 +111,15 @@
           </article>
           <article class="chart-view">
             <div class="chart-label"><span id="reward-chart-label">Base rewards</span><strong id="chart-reward-max"></strong></div>
-            <div id="reward-chart-controls" class="chart-tabs" aria-label="Base reward resource"></div>
+            <div class="chart-control-bar">
+              <div id="reward-chart-view-toggle" class="chart-view-toggle" role="group" aria-label="Reward curve view">
+                <button type="button" data-reward-view="base" aria-pressed="true">Base</button>
+                <button type="button" data-reward-view="boosted" aria-pressed="false">Arc boosted</button>
+              </div>
+              <div id="reward-chart-controls" class="chart-tabs" aria-label="Reward resource"></div>
+            </div>
             <div class="chart-plot">
-              <svg id="reward-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="P1 through P5 base rewards by level"></svg>
+              <svg id="reward-chart" viewBox="0 0 900 130" role="img" tabindex="0" aria-label="P1 through P5 rewards by level"></svg>
               <div id="reward-chart-tooltip" class="chart-tooltip" role="tooltip" hidden></div>
             </div>
             <div id="reward-chart-legend" class="chart-series-legend" aria-label="Selected-level position values"></div>
@@ -128,6 +137,26 @@
             </div>
             <span id="reward-multiplier" class="quiet-chip">—</span>
           </div>
+          <div class="reward-cost-card" aria-label="Selected level costs and benefits">
+            <div class="reward-cost-metric">
+              <span>Owner priming cost</span>
+              <strong id="owner-priming-cost">—</strong>
+              <small>FP before posting P1</small>
+            </div>
+            <div class="reward-cost-metric">
+              <span>Total FP cost</span>
+              <strong id="selected-total-fp-cost">—</strong>
+              <small>FP to complete this level</small>
+            </div>
+            <div class="reward-cost-metric reward-benefit-metric">
+              <span>Level benefits</span>
+              <div id="selected-level-benefits" class="selected-benefit-list"></div>
+              <small>Boost or production at this level</small>
+            </div>
+          </div>
+          <p class="reward-cost-note">
+            Priming assumes an empty level and secures the displayed Arc-boosted P1 contribution.
+          </p>
           <div
             id="reward-table-wrap"
             class="table-wrap compact-table"
@@ -158,18 +187,6 @@
         </article>
 
         <div class="analysis-side">
-          <article id="unlock-costs" class="panel unlock-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Selected level</p>
-                <h3>Unlock costs</h3>
-              </div>
-              <span id="unlock-total" class="quiet-chip">—</span>
-            </div>
-            <div id="unlock-list" class="goods-list"></div>
-            <p id="unlock-note" class="panel-note"></p>
-          </article>
-
           <article class="panel goods-panel">
             <div class="panel-heading">
               <div>
@@ -183,6 +200,18 @@
               These goods are paid once to place the building and are separate from later
               level-unlock requirements.
             </p>
+          </article>
+
+          <article id="unlock-costs" class="panel unlock-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Selected level</p>
+                <h3>Unlock costs</h3>
+              </div>
+              <span id="unlock-total" class="quiet-chip">—</span>
+            </div>
+            <div id="unlock-list" class="goods-list"></div>
+            <p id="unlock-note" class="panel-note"></p>
           </article>
         </div>
       </section>
@@ -245,6 +274,16 @@
         <p id="rage-coverage-warning" class="coverage-warning" hidden></p>
         <div class="rage-table-toolbar">
           <button
+            id="rage-benefit-toggle"
+            class="rage-column-toggle"
+            type="button"
+            aria-controls="rage-table"
+            aria-expanded="true"
+          >
+            <span class="rage-toggle-chevron" aria-hidden="true">⌄</span>
+            <span id="rage-benefit-toggle-label">Hide GB benefits</span>
+          </button>
+          <button
             id="rage-unlock-toggle"
             class="rage-column-toggle"
             type="button"
@@ -274,21 +313,6 @@
         </p>
       </section>
 
-      <section class="method-note">
-        <p class="eyebrow">Method</p>
-        <h3>How the numbers are calculated.</h3>
-        <p>
-          Levels 1–10 use captured game metadata. Levels 11–301 apply FoE Helper’s 2.5%
-          exponential FP rule. Levels after 10 require another full blueprint set; six newer
-          Great Buildings also require scaling goods and other resources. Contributor FP reproduces its era table and recursive
-          rounding for P2–P5. Medal and blueprint tables are unboosted source values checked
-          against live game construction responses through level 201. Above level 201, exact
-          FP and medal observations from FoE Helper’s public Legendary Building API replace
-          curve estimates wherever available—including every Kraken level through 301.
-          Remaining FP and medal gaps, plus all later blueprint rewards, use separately fitted
-          fallback curves and are labeled as modeled before applying the same Arc rounding.
-        </p>
-      </section>
     </main>
 
     <footer>
